@@ -68,3 +68,7 @@ class ErrorView extends StatelessWidget {
     );
   }
 }
+
+/// Typedef matching Section 6.2 specification naming.
+typedef EBICErrorView = ErrorView;
+

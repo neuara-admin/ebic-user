@@ -12,7 +12,7 @@ void main() {
   testWidgets('EBIC App launches and renders root app widget', (WidgetTester tester) async {
     await tester.pumpWidget(const EbicCustomerApp(initialRoute: AppRoutes.welcome));
     expect(find.byType(EbicCustomerApp), findsOneWidget);
-    expect(find.text('Get Started with Phone / OTP'), findsOneWidget);
+    expect(find.text('Sign In with Phone / OTP'), findsOneWidget);
   });
 
   testWidgets('EbicButton renders properly with label and variant', (WidgetTester tester) async {

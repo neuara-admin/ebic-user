@@ -3,6 +3,7 @@ import '../../core/theme/app_colors.dart';
 import 'home_screen.dart';
 import '../chef_booking/booking_type_screen.dart';
 import '../health_pass/health_pass_screen.dart';
+import '../health_pass/data/health_pass_repository.dart';
 import '../orders/orders_list_screen.dart';
 import '../profile/profile_screen.dart';
 
@@ -25,6 +26,9 @@ class _MainNavShellState extends State<MainNavShell> {
   }
 
   void switchTab(int index) {
+    if (index == 2) {
+      HealthPassRepository.notifyPassUpdated();
+    }
     setState(() => _currentIndex = index);
   }
 
@@ -55,7 +59,12 @@ class _MainNavShellState extends State<MainNavShell> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          onTap: (index) {
+            if (index == 2) {
+              HealthPassRepository.notifyPassUpdated();
+            }
+            setState(() => _currentIndex = index);
+          },
           selectedItemColor: AppColors.primary,
           unselectedItemColor: AppColors.slate400,
           selectedFontSize: 12,

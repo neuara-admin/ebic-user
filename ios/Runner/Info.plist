@@ -43,6 +43,12 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>EBIC needs camera access to take a profile photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>EBIC needs photo library access to upload a profile photo.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>EBIC needs your location to pinpoint your kitchen address and find nearby service hubs.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

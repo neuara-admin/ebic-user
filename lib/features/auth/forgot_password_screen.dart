@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/validators.dart';
 import '../../shared/widgets/ebic_button.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -19,8 +20,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Future<void> _handleSubmit() async {
     final email = _emailController.text.trim();
-    if (email.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your account email.');
+    final emailError = Validators.validateEmail(email);
+    if (emailError != null) {
+      setState(() => _errorMessage = emailError);
       return;
     }
 
@@ -39,7 +41,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (res.success) {
       setState(() => _isSent = true);
     } else {
-      setState(() => _errorMessage = res.error?.message ?? 'Failed to send reset link.');
+      setState(() => _errorMessage = res.error?.displayMessage ?? res.error?.message ?? 'Failed to send reset link.');
     }
   }
 
@@ -53,7 +55,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: _isSent ? _buildSuccessView() : _buildFormView(),
         ),

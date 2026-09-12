@@ -81,12 +81,15 @@ class EbicButton extends StatelessWidget {
           Icon(icon, size: 18, color: textColor),
           const SizedBox(width: 8),
         ],
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: textColor,
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
           ),
         ),
       ],
@@ -124,3 +127,7 @@ class EbicButton extends StatelessWidget {
     );
   }
 }
+
+/// Typedef matching Section 6.2 specification naming.
+typedef EBICButton = EbicButton;
+

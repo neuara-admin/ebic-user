@@ -102,3 +102,6 @@ class EmptyStateView extends StatelessWidget {
     );
   }
 }
+
+/// Typedef matching Section 6.2 specification naming.
+typedef EBICEmptyView = EmptyStateView;

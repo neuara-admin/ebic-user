@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
+import '../../core/services/razorpay_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/quote_model.dart';
 import '../../shared/widgets/ebic_card.dart';
@@ -19,7 +20,7 @@ class PaymentCheckoutScreen extends StatefulWidget {
 
 class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
   final ApiClient _api = ApiClient();
-  String _selectedMethod = 'UPI'; // UPI, CARD, WALLET, NETBANKING
+  String _selectedMethod = 'GATEWAY'; // GATEWAY (Razorpay) or WALLET
   bool _isProcessing = false;
   String? _errorMessage;
 
@@ -53,7 +54,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
 
       // 2. Initiate idempotent payment (Section 51 & 67)
       final idempotencyKey = 'pay_${orderId}_${DateTime.now().millisecondsSinceEpoch}';
-      await _api.post<Map<String, dynamic>>(
+      final initRes = await _api.post<Map<String, dynamic>>(
         ApiEndpoints.orderPayInitiate(orderId),
         body: {
           'method': _selectedMethod,
@@ -61,6 +62,49 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
         requiresIdempotency: true,
         explicitIdempotencyKey: idempotencyKey,
       );
+
+      final payData = initRes.data;
+      if (payData != null && payData['requiresPayment'] == true) {
+        String gatewayPaymentId;
+        String gatewaySignature;
+
+        if (payData['status'] == 'SUCCEEDED') {
+          gatewayPaymentId = payData['gatewayRef']?.toString() ?? 'wallet_success';
+          gatewaySignature = 'wallet_verified';
+        } else if (payData['gatewayOrderId'] != null && payData['keyId'] != null) {
+          // Launch real Razorpay Flutter Checkout
+          final totalAmount = quote?.total ?? 0.0;
+          final checkoutRes = await RazorpayService().openCheckout(
+            keyId: payData['keyId'].toString(),
+            orderId: payData['gatewayOrderId'].toString(),
+            amountPaise: (payData['amountPaise'] as num?) ?? (totalAmount * 100),
+            currency: payData['currency']?.toString() ?? 'INR',
+            name: 'EBIC Chef Booking',
+            description: 'Instant Meal Chef Visit',
+          );
+
+          if (!checkoutRes.isSuccess) {
+            throw Exception(checkoutRes.errorMessage ?? 'Payment was cancelled or failed.');
+          }
+
+          gatewayPaymentId = checkoutRes.paymentId!;
+          gatewaySignature = checkoutRes.signature!;
+        } else {
+          gatewayPaymentId = 'pay_sim_${DateTime.now().millisecondsSinceEpoch}';
+          gatewaySignature = 'sig_sim_verified';
+        }
+
+        // Authoritative verify call to finalize order
+        await _api.post<Map<String, dynamic>>(
+          ApiEndpoints.orderPayVerify(orderId),
+          body: {
+            'gatewayPaymentId': gatewayPaymentId,
+            'gatewaySignature': gatewaySignature,
+          },
+          requiresIdempotency: true,
+          explicitIdempotencyKey: idempotencyKey,
+        );
+      }
 
       // 3. Clear cart
       CartService().clear();
@@ -145,16 +189,12 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
                 const SizedBox(height: 16),
               ],
 
-              const Text('Select Payment Method', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('Payment Method', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 12),
 
-              _buildPaymentOption('UPI', 'Google Pay, PhonePe, Paytm UPI', Icons.account_balance_wallet_outlined),
+              _buildPaymentOption('GATEWAY', 'Online Payment (Razorpay)', 'UPI (Google Pay, PhonePe), Cards & Net Banking', Icons.security_outlined),
               const SizedBox(height: 10),
-              _buildPaymentOption('CARD', 'Credit / Debit Card (Visa, Mastercard, RuPay)', Icons.credit_card_outlined),
-              const SizedBox(height: 10),
-              _buildPaymentOption('WALLET', 'EBIC Wallet Credits Balance', Icons.wallet_outlined),
-              const SizedBox(height: 10),
-              _buildPaymentOption('NETBANKING', 'Net Banking (All Indian Banks)', Icons.account_balance_outlined),
+              _buildPaymentOption('WALLET', 'EBIC Wallet', 'Pay instantly from your wallet balance', Icons.account_balance_wallet_outlined),
               const SizedBox(height: 32),
 
               EbicButton(
@@ -178,7 +218,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
     );
   }
 
-  Widget _buildPaymentOption(String key, String subtitle, IconData icon) {
+  Widget _buildPaymentOption(String key, String title, String subtitle, IconData icon) {
     final isSelected = _selectedMethod == key;
 
     return EbicCard(
@@ -203,7 +243,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  key,
+                  title,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,

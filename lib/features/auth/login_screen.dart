@@ -1,102 +1,71 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/validators.dart';
 import '../../shared/widgets/ebic_button.dart';
 
+/// Module 2 Section 16 — Customer Login Screen
+/// Pure phone + OTP customer authentication flow with rate-limiting protection.
 class LoginScreen extends StatefulWidget {
-  final bool initialPasswordMode;
-
-  const LoginScreen({super.key, this.initialPasswordMode = false});
+  const LoginScreen({super.key, bool initialPasswordMode = false});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  late bool _isPasswordMode;
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _referralController = TextEditingController();
-
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
-  void initState() {
-    super.initState();
-    _isPasswordMode = widget.initialPasswordMode;
-  }
-
-  @override
   void dispose() {
     _phoneController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _referralController.dispose();
     super.dispose();
   }
 
   Future<void> _handleOtpRequest() async {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your mobile phone number.');
+    final phoneInput = _phoneController.text.trim();
+    final phoneError = Validators.validatePhone(phoneInput);
+    if (phoneError != null) {
+      setState(() => _errorMessage = phoneError);
       return;
     }
-    // Clean formatted phone if needed
-    final cleanPhone = phone.startsWith('+') ? phone : '+91$phone';
+
+    final cleanPhone = Validators.normalizePhone(phoneInput);
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    final res = await AuthService().requestOtp(cleanPhone);
+    final res = await AuthService().requestOtp(cleanPhone, purpose: 'LOGIN');
     setState(() => _isLoading = false);
 
     if (!mounted) return;
 
     if (res.success) {
+      final devCode = res.data?['devCode'] as String?;
       Navigator.pushNamed(
         context,
         AppRoutes.otp,
         arguments: {
           'phone': cleanPhone,
-          'referralCode': _referralController.text.trim(),
+          'purpose': 'LOGIN',
+          'devCode': devCode,
         },
       );
     } else {
       setState(() {
-        _errorMessage = res.error?.message ?? 'Failed to send OTP. Please check the number.';
-      });
-    }
-  }
-
-  Future<void> _handlePasswordLogin() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
-    if (email.isEmpty || password.isEmpty) {
-      setState(() => _errorMessage = 'Please enter both email and password.');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    final res = await AuthService().loginWithPassword(email: email, password: password);
-    setState(() => _isLoading = false);
-
-    if (!mounted) return;
-
-    if (res.success) {
-      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainShell, (route) => false);
-    } else {
-      setState(() {
-        _errorMessage = res.error?.message ?? 'Invalid credentials.';
+        if (res.error?.code == 'RATE_LIMITED' || res.error?.code == '429') {
+          _errorMessage = 'Too many requests. Please wait a minute before requesting another code.';
+        } else if (res.error?.code == 'ACCOUNT_RESTRICTED') {
+          _errorMessage = 'Your account is currently restricted. Please contact support.';
+        } else {
+          _errorMessage = res.error?.displayMessage ?? res.error?.message ?? 'Failed to send OTP. Please try again.';
+        }
       });
     }
   }
@@ -104,9 +73,12 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.slate900, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -116,16 +88,35 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _isPasswordMode ? 'Welcome Back' : 'Sign In with Phone',
-                style: Theme.of(context).textTheme.displayMedium,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Customer Sign In',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Sign In with Phone',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.slate900,
+                  letterSpacing: -0.5,
+                ),
               ),
               const SizedBox(height: 8),
-              Text(
-                _isPasswordMode
-                  ? 'Enter your account credentials below.'
-                  : 'We will send a 6-digit OTP verification code to your mobile number.',
-                style: Theme.of(context).textTheme.bodyMedium,
+              const Text(
+                'We will send a 6-digit OTP verification code to your mobile number.',
+                style: TextStyle(fontSize: 14, color: AppColors.slate500, height: 1.4),
               ),
               const SizedBox(height: 32),
 
@@ -134,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.danger.withOpacity(0.1),
+                    color: AppColors.dangerLight.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.danger.withOpacity(0.3)),
                   ),
@@ -154,111 +145,95 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 20),
               ],
 
-              if (!_isPasswordMode) ...[
-                // Phone & OTP mode
-                const Text(
-                  'Mobile Number',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    prefixIcon: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                      child: const Text(
-                        '+91',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
+              // Mobile Number
+              const Text(
+                'Mobile Number',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.slate800),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+                decoration: InputDecoration(
+                  prefixIcon: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    child: const Text(
+                      '+91',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate800),
                     ),
-                    hintText: '9876543210',
                   ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Referral / Invite Code (Optional)',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _referralController,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.card_giftcard_outlined),
-                    hintText: 'e.g. WELCOME20',
+                  hintText: '9876543210',
+                  counterText: '',
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.slate200),
                   ),
-                ),
-                const SizedBox(height: 32),
-                EbicButton(
-                  label: 'Send Verification Code',
-                  isLoading: _isLoading,
-                  onPressed: _handleOtpRequest,
-                ),
-              ] else ...[
-                // Email & Password mode
-                const Text(
-                  'Email Address',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.email_outlined),
-                    hintText: 'user@example.com',
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.slate200),
                   ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Password',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.lock_outline),
-                    hintText: '••••••••',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, AppRoutes.forgotPassword);
-                    },
-                    child: const Text('Forgot Password?'),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                EbicButton(
-                  label: 'Sign In',
-                  isLoading: _isLoading,
-                  onPressed: _handlePasswordLogin,
-                ),
-              ],
-
-              const SizedBox(height: 32),
-              // Switch mode button
-              Center(
-                child: TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _isPasswordMode = !_isPasswordMode;
-                      _errorMessage = null;
-                    });
-                  },
-                  child: Text(
-                    _isPasswordMode
-                        ? 'Prefer mobile phone login? Sign in with OTP'
-                        : 'Staff or existing password account? Sign in with Password',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.primary, width: 1.8),
                   ),
                 ),
               ),
+              const SizedBox(height: 32),
+              EbicButton(
+                label: 'Send Verification Code',
+                isLoading: _isLoading,
+                onPressed: _handleOtpRequest,
+              ),
+
+              const SizedBox(height: 24),
+              // Register Link
+              Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.pushReplacementNamed(context, AppRoutes.register),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Don't have an account? ",
+                        style: TextStyle(color: AppColors.slate600, fontSize: 14),
+                      ),
+                      Text(
+                        'Sign Up',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Account Recovery Link (Section 20 & 32)
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.pushNamed(context, AppRoutes.accountRecovery);
+                  },
+                  child: const Text(
+                    "Can't access your account? Account Recovery",
+                    style: TextStyle(
+                      color: AppColors.slate500,
+                      fontSize: 13,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
             ],
           ),
         ),

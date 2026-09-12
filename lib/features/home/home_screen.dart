@@ -10,6 +10,7 @@ import '../../shared/models/consultation_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
+import '../health_pass/data/health_pass_repository.dart';
 
 class HomeScreen extends StatefulWidget {
   final Function(int tabIndex)? onNavigateTab;
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   MyHealthPassModel? _healthPass;
   ConsultationModel? _upcomingConsultation;
+  ConsultationModel? _completedConsultation;
   OrderModel? _activeOrder;
   Map<String, dynamic>? _todayMeal;
 
@@ -33,6 +35,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadHomeData();
+    HealthPassRepository.passUpdateNotifier.addListener(_loadHomeData);
+  }
+
+  @override
+  void dispose() {
+    HealthPassRepository.passUpdateNotifier.removeListener(_loadHomeData);
+    super.dispose();
   }
 
   Future<void> _loadHomeData() async {
@@ -45,14 +54,24 @@ class _HomeScreenState extends State<HomeScreen> {
         _healthPass = MyHealthPassModel.fromJson(hpRes.data!.first as Map<String, dynamic>);
       }
 
-      // 2. Upcoming consultation
-      final consultRes = await _api.get<List<dynamic>>(
-        ApiEndpoints.consultations,
-        queryParameters: {'tab': 'upcoming'},
-      );
+      // 2. Consultations (Active/In-Progress, Scheduled, and Completed)
+      final consultRes = await _api.get<List<dynamic>>(ApiEndpoints.consultations);
       if (consultRes.success && consultRes.data != null && consultRes.data!.isNotEmpty) {
-        _upcomingConsultation =
-            ConsultationModel.fromJson(consultRes.data!.first as Map<String, dynamic>);
+        final list = consultRes.data!
+            .map((json) => ConsultationModel.fromJson(json as Map<String, dynamic>))
+            .toList();
+        list.sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
+
+        final upcomingOrActive = list.where(
+          (c) => c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING',
+        ).toList();
+        _upcomingConsultation = upcomingOrActive.isNotEmpty ? upcomingOrActive.first : null;
+
+        final completed = list.where((c) => c.status == 'COMPLETED').toList();
+        _completedConsultation = completed.isNotEmpty ? completed.first : null;
+      } else {
+        _upcomingConsultation = null;
+        _completedConsultation = null;
       }
 
       // 3. Active order
@@ -64,6 +83,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final items = ordersRes.data!['items'] as List<dynamic>?;
         if (items != null && items.isNotEmpty) {
           _activeOrder = OrderModel.fromJson(items.first as Map<String, dynamic>);
+        } else {
+          _activeOrder = null;
         }
       }
 
@@ -145,9 +166,12 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildNeedChefCard(),
               const SizedBox(height: 16),
 
-              // Upcoming Consultation (Section 7)
+              // Upcoming Consultation or Assigned Dietitian (Module 5: Section 50 & 56)
               if (_upcomingConsultation != null) ...[
                 _buildConsultationCard(_upcomingConsultation!),
+                const SizedBox(height: 16),
+              ] else if (_completedConsultation != null) ...[
+                _buildAssignedDietitianCard(_completedConsultation!),
                 const SizedBox(height: 16),
               ],
 
@@ -302,17 +326,112 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 4),
           Text(
             hasPass
-                ? 'Valid until ${_formatDate(_healthPass!.endDate)} • ${_healthPass!.coveredMembersCount} Covered'
+                ? (_healthPass!.endDate != null
+                    ? 'Valid until ${_formatDate(_healthPass!.endDate!)} • ${_healthPass!.coveredMembersCount} Covered'
+                    : 'Starts upon initial consultation • ${_healthPass!.coveredMembersCount} Covered')
                 : 'Unlock personalized dietitian consultations and home-chef dining benefits.',
             style: const TextStyle(color: AppColors.slate500, fontSize: 13),
           ),
-          const SizedBox(height: 16),
+          if (hasPass) ...[
+            const SizedBox(height: 10),
+            if (_upcomingConsultation != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: _upcomingConsultation!.status == 'IN_PROGRESS'
+                      ? const Color(0xFFFEF3C7)
+                      : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _upcomingConsultation!.status == 'IN_PROGRESS'
+                        ? const Color(0xFFF59E0B).withOpacity(0.4)
+                        : const Color(0xFF93C5FD).withOpacity(0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _upcomingConsultation!.status == 'IN_PROGRESS'
+                          ? Icons.hourglass_top_rounded
+                          : Icons.event_available_rounded,
+                      size: 14,
+                      color: _upcomingConsultation!.status == 'IN_PROGRESS'
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFF1D4ED8),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _upcomingConsultation!.status == 'IN_PROGRESS'
+                            ? 'Consultation in-progress with Dr. ${_upcomingConsultation!.dietitianName}'
+                            : 'Consultation confirmed for ${_formatDateTime(_upcomingConsultation!.scheduledAt)} with Dr. ${_upcomingConsultation!.dietitianName}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _upcomingConsultation!.status == 'IN_PROGRESS'
+                              ? const Color(0xFF92400E)
+                              : const Color(0xFF1E40AF),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (_healthPass!.endDate == null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.video_call_rounded, size: 14, color: Color(0xFFB45309)),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Step 1 Kickoff: Schedule consultation to activate pass countdown',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+          const SizedBox(height: 14),
           EbicButton(
-            label: hasPass ? 'View Health Pass' : 'Explore Health Pass Plans',
-            isOutlined: hasPass,
+            label: hasPass
+                ? (_upcomingConsultation != null
+                    ? (_upcomingConsultation!.status == 'IN_PROGRESS' ? 'Join Video Call' : 'View Consultation')
+                    : (_healthPass!.endDate == null ? 'Schedule Kickoff Call' : 'View Health Pass'))
+                : 'Explore Health Pass Plans',
+            isOutlined: hasPass && _upcomingConsultation == null && _healthPass!.endDate != null,
+            icon: (hasPass && _upcomingConsultation != null)
+                ? Icons.video_call_rounded
+                : (hasPass && _healthPass!.endDate == null ? Icons.calendar_today_rounded : null),
             onPressed: () {
               if (hasPass) {
-                widget.onNavigateTab?.call(2); // Go to Health tab
+                if (_upcomingConsultation != null) {
+                  if (_upcomingConsultation!.status == 'IN_PROGRESS') {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.consultationVideo,
+                      arguments: {'consultation': _upcomingConsultation},
+                    ).then((_) => _loadHomeData());
+                  } else {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.consultationDetail,
+                      arguments: {'consultation': _upcomingConsultation},
+                    ).then((_) => _loadHomeData());
+                  }
+                } else if (_healthPass!.endDate == null) {
+                  Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadHomeData());
+                } else {
+                  widget.onNavigateTab?.call(2); // Go to Health tab
+                }
               } else {
                 Navigator.pushNamed(context, AppRoutes.healthPassPlans);
               }
@@ -438,6 +557,105 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildConsultationCard(ConsultationModel consultation) {
+    final isInProgress = consultation.status == 'IN_PROGRESS';
+
+    return EbicCard(
+      onTap: () {
+        Navigator.pushNamed(
+          context,
+          AppRoutes.consultationDetail,
+          arguments: {'consultation': consultation},
+        ).then((_) => _loadHomeData());
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isInProgress ? Icons.hourglass_top_rounded : Icons.video_camera_front_outlined,
+                    color: isInProgress ? const Color(0xFFD97706) : AppColors.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isInProgress ? 'Consultation In Progress' : 'Upcoming Consultation',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ],
+              ),
+              StatusBadge(
+                label: isInProgress ? 'IN PROGRESS' : 'CONFIRMED',
+                color: isInProgress ? const Color(0xFFF59E0B) : AppColors.info,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'With Dr. ${consultation.dietitianName}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          if (consultation.dietitianQualification != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              consultation.dietitianQualification!,
+              style: const TextStyle(fontSize: 11.5, color: AppColors.primary, fontWeight: FontWeight.w500),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            isInProgress
+                ? 'Video session active • Dietitian is finalizing clinical recommendations'
+                : '${_formatDateTime(consultation.scheduledAt)} • 45-min HD Video Call',
+            style: TextStyle(
+              color: isInProgress ? const Color(0xFFB45309) : AppColors.slate500,
+              fontSize: 12.5,
+              fontWeight: isInProgress ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                flex: 5,
+                child: EbicButton(
+                  label: isInProgress ? 'Re-join Video Call' : 'Join Video Call',
+                  icon: Icons.video_call_rounded,
+                  onPressed: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.consultationVideo,
+                      arguments: {'consultation': consultation},
+                    ).then((_) => _loadHomeData());
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 4,
+                child: EbicButton(
+                  label: 'View Details',
+                  isOutlined: true,
+                  onPressed: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.consultationDetail,
+                      arguments: {'consultation': consultation},
+                    ).then((_) => _loadHomeData());
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignedDietitianCard(ConsultationModel consultation) {
     return EbicCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,38 +665,73 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.video_camera_front_outlined, color: AppColors.info, size: 18),
+                  Icon(Icons.verified_user_rounded, color: AppColors.primary, size: 18),
                   SizedBox(width: 8),
                   Text(
-                    'Upcoming Consultation',
+                    'My Assigned Dietitian',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ],
               ),
-              StatusBadge.info('CONFIRMED'),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySubtle,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text('ASSIGNED', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppColors.primaryDark)),
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            'With ${consultation.dietitianName}',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: AppColors.primary.withOpacity(0.12),
+                backgroundImage: consultation.dietitianPhotoUrl != null ? NetworkImage(consultation.dietitianPhotoUrl!) : null,
+                child: consultation.dietitianPhotoUrl == null
+                    ? const Icon(Icons.person, color: AppColors.primary, size: 22)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dr. ${consultation.dietitianName}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    Text(
+                      consultation.dietitianQualification ?? 'Clinical Nutritionist (RD)',
+                      style: const TextStyle(fontSize: 11.5, color: AppColors.primary, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${_formatDateTime(consultation.scheduledAt)} • Video Call',
-            style: const TextStyle(color: AppColors.slate500, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          EbicButton(
-            label: 'Join Consultation',
-            icon: Icons.video_call_rounded,
-            onPressed: () {
-              Navigator.pushNamed(
-                context,
-                AppRoutes.consultationVideo,
-                arguments: {'consultationId': consultation.id},
-              );
-            },
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: EbicButton(
+                  label: 'View Diet Plan',
+                  icon: Icons.restaurant_menu_rounded,
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.dietPlan),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: EbicButton(
+                  label: 'Book Session',
+                  isOutlined: true,
+                  icon: Icons.video_call_rounded,
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadHomeData()),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -570,7 +823,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  String _formatDate(DateTime dt) {
+  String _formatDate(DateTime? dt) {
+    if (dt == null) return 'Pending';
     return '${dt.day} ${_monthName(dt.month)} ${dt.year}';
   }
 

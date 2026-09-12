@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/api_endpoints.dart';
 import '../../core/auth/auth_service.dart';
+import '../../core/config/app_config.dart';
+import '../../core/context/member_context.dart';
 import '../../core/routing/app_routes.dart';
+import '../../core/storage/token_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../shared/widgets/member_switcher_widget.dart';
+import 'widgets/avatar_picker_sheet.dart';
+import 'widgets/email_otp_sheet.dart';
 
+/// Module 3 — Sections 23 & 24: Customer Profile Screen
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -13,6 +22,41 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _auth = AuthService();
+  final ApiClient _api = ApiClient();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => MemberContext().loadMembers());
+    _refreshProfile();
+  }
+
+  Future<void> _refreshProfile() async {
+    try {
+      final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.me);
+      if (res.success && res.data != null) {
+        final updatedUser = Map<String, dynamic>.from(_auth.user ?? {});
+        updatedUser['name'] = res.data!['name'];
+        updatedUser['email'] = res.data!['email'];
+        updatedUser['phone'] = res.data!['phone'];
+        updatedUser['avatarUrl'] = res.data!['avatarUrl'];
+        updatedUser['emailVerified'] = res.data!['emailVerified'];
+        updatedUser['phoneVerified'] = res.data!['phoneVerified'];
+        _auth.updateCurrentUser(updatedUser);
+        await TokenStorage.saveUser(
+          id: res.data!['id'] ?? '',
+          phone: res.data!['phone'] ?? '',
+          name: res.data!['name'],
+          email: res.data!['email'],
+          avatarUrl: res.data!['avatarUrl'],
+        );
+      }
+      await MemberContext().loadMembers(forceRefresh: true);
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {}
+  }
 
   Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
@@ -31,6 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirmed == true) {
+      MemberContext().clearContext();
       await _auth.logout();
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, AppRoutes.welcome, (r) => false);
@@ -40,166 +85,413 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     final user = _auth.user;
-    final name = user?['name'] ?? 'EBIC Valued Customer';
-    final phone = user?['phoneNumber'] ?? user?['phone'] ?? '+91 98765 43210';
-    final email = user?['email'] ?? 'customer@everybitecounts.com';
+    final rawName = user?['name'] as String?;
+    final hasName = rawName != null && rawName.trim().isNotEmpty;
+    final name = hasName ? rawName.trim() : 'Add your name';
+
+    final rawPhone = (user?['phone'] ?? user?['phoneNumber']) as String?;
+    final hasPhone = rawPhone != null && rawPhone.trim().isNotEmpty;
+    final phone = hasPhone ? rawPhone.trim() : '';
+
+    final rawEmail = user?['email'] as String?;
+    final hasEmail = rawEmail != null && rawEmail.trim().isNotEmpty;
+    final email = hasEmail ? rawEmail.trim() : 'No email address added';
+    final avatarUrl = user?['avatarUrl'] as String?;
+    final isEmailVerified = user?['emailVerified'] == true;
+    final isPhoneVerified = user?['phoneVerified'] == true;
 
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Account & Profile'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit Profile',
+            onPressed: () async {
+              final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
+              if (updated == true && mounted) {
+                await _refreshProfile();
+              }
+            },
+          ),
+        ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User Profile Header Card
-              EbicCard(
-                child: Row(
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+      body: RefreshIndicator(
+        onRefresh: _refreshProfile,
+        color: AppColors.primary,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // User Profile Header Card (Section 5 & 6)
+                EbicCard(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () async {
+                      final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
+                      if (updated == true && mounted) {
+                        await _refreshProfile();
+                      }
+                    },
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () async {
+                                final updated = await AvatarPickerSheet.show(context, currentAvatarUrl: avatarUrl);
+                                if (updated == true && mounted) {
+                                  await _refreshProfile();
+                                }
+                              },
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      gradient: AppColors.primaryGradient,
+                                      shape: BoxShape.circle,
+                                      image: (avatarUrl != null && avatarUrl.isNotEmpty)
+                                          ? DecorationImage(
+                                              image: NetworkImage(AppConfig.resolveMediaUrl(avatarUrl)!),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
+                                    ),
+                                    child: (avatarUrl == null || avatarUrl.isEmpty)
+                                        ? Center(
+                                            child: Text(
+                                              hasName
+                                                  ? name[0].toUpperCase()
+                                                  : (hasPhone ? 'C' : 'U'),
+                                              style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 1.5),
+                                      ),
+                                      child: const Icon(Icons.camera_alt, color: Colors.white, size: 11),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: hasName
+                                          ? (isDark ? Colors.white : AppColors.slate900)
+                                          : AppColors.slate500,
+                                      fontStyle: hasName ? FontStyle.normal : FontStyle.italic,
+                                    ),
+                                  ),
+                                  if (hasPhone) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      phone,
+                                      style: TextStyle(
+                                        color: isDark ? AppColors.slate300 : AppColors.slate600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    email,
+                                    style: TextStyle(
+                                      color: hasEmail ? AppColors.slate500 : AppColors.slate400,
+                                      fontSize: 12,
+                                      fontStyle: hasEmail ? FontStyle.normal : FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.slate400),
+                              onPressed: () async {
+                                final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
+                                if (updated == true && mounted) {
+                                  await _refreshProfile();
+                                }
+                              },
+                            ),
+                          ],
                         ),
+                        const Divider(height: 20),
+                        // Verification Status Chips (Section 14)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              if (hasPhone)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: isPhoneVerified ? AppColors.emerald50 : AppColors.amber50,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: isPhoneVerified
+                                          ? AppColors.emerald700.withOpacity(0.2)
+                                          : AppColors.amber700.withOpacity(0.2),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isPhoneVerified ? Icons.check_circle : Icons.warning_amber_rounded,
+                                        size: 12,
+                                        color: isPhoneVerified ? AppColors.emerald700 : AppColors.warning,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        isPhoneVerified ? 'PHONE VERIFIED' : 'PHONE UNVERIFIED',
+                                        style: TextStyle(
+                                          color: isPhoneVerified ? AppColors.emerald700 : AppColors.warning,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (hasEmail)
+                                InkWell(
+                                  onTap: isEmailVerified
+                                      ? null
+                                      : () async {
+                                          final verified = await EmailOtpSheet.show(context, email: email);
+                                          if (verified == true && mounted) {
+                                            await _refreshProfile();
+                                          }
+                                        },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: isEmailVerified ? AppColors.emerald50 : AppColors.amber50,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: isEmailVerified
+                                            ? AppColors.emerald700.withOpacity(0.2)
+                                            : AppColors.amber700.withOpacity(0.4),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isEmailVerified ? Icons.check_circle : Icons.warning_amber_rounded,
+                                          size: 12,
+                                          color: isEmailVerified ? AppColors.emerald700 : AppColors.warning,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          isEmailVerified ? 'EMAIL VERIFIED' : 'EMAIL UNVERIFIED — TAP TO VERIFY',
+                                          style: TextStyle(
+                                            color: isEmailVerified ? AppColors.emerald700 : AppColors.warning,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              else
+                                InkWell(
+                                  onTap: () async {
+                                    final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
+                                    if (updated == true && mounted) {
+                                      await _refreshProfile();
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.amber50,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: AppColors.amber300),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.add_circle_outline, size: 12, color: AppColors.amber800),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'ADD EMAIL',
+                                          style: TextStyle(
+                                            color: AppColors.amber800,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Section 35: Central Member Switcher Bar
+                const MemberSwitcherBar(),
+                const SizedBox(height: 24),
+
+                // Group 1: Household & Kitchen Addresses (Sections 25–31)
+                Text('Household & Delivery', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? AppColors.slate300 : AppColors.slate800)),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.family_restroom_rounded,
+                  title: 'Household & Family Members',
+                  subtitle: 'Manage family health profiles & covered members',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.household),
+                ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.location_on_outlined,
+                  title: 'Saved Kitchen Addresses',
+                  subtitle: 'Delivery addresses with live hub serviceability',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.addresses),
+                ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.tune_rounded,
+                  title: 'Preferences & Language',
+                  subtitle: 'App language, channels & display settings',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.preferences),
+                ),
+                const SizedBox(height: 20),
+
+                // Group 2: Health Suite
+                Text('Health Pass & Diet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? AppColors.slate300 : AppColors.slate800)),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.health_and_safety_outlined,
+                  title: 'Health Pass Subscription',
+                  subtitle: 'Membership tier, entitlements & benefits',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.healthPass),
+                ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.medical_services_outlined,
+                  title: 'Dietitian Consultations',
+                  subtitle: 'Upcoming sessions & clinical history',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.consultationsList),
+                ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.folder_shared_outlined,
+                  title: 'Health Documents Vault',
+                  subtitle: 'HIPAA encrypted diagnostic reports & prescriptions',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.healthDocuments),
+                ),
+                const SizedBox(height: 20),
+
+                // Group 3: Financial & Promos
+                Text('Payments & Rewards', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? AppColors.slate300 : AppColors.slate800)),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.account_balance_wallet_outlined,
+                  title: 'EBIC Wallet & Credits',
+                  subtitle: 'Ledger balance, cashback & refund history',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.walletCredits),
+                ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.local_offer_outlined,
+                  title: 'Promotions & Coupons',
+                  subtitle: 'Active discounts & referral rewards',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.promotions),
+                ),
+                const SizedBox(height: 20),
+
+                // Group 4: Support & Security
+                Text('Support & Privacy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? AppColors.slate300 : AppColors.slate800)),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.support_agent_rounded,
+                  title: 'Help & Customer Support',
+                  subtitle: 'Raise tickets, FAQs & live resolution',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.support),
+                ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.lock_person_outlined,
+                  title: 'Privacy & Member Data Consent',
+                  subtitle: 'Member-specific health data authorization',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.privacy),
+                ),
+                const SizedBox(height: 24),
+
+                // Sign Out
+                EbicCard(
+                  onTap: _logout,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.logout_rounded, color: AppColors.danger, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Logout of EBIC',
+                        style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 14),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.slate900)),
-                          const SizedBox(height: 2),
-                          Text(phone, style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
-                          Text(email, style: const TextStyle(color: AppColors.slate400, fontSize: 11)),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-
-              // Section 59 Profile Structure Group 1: Household & Service Delivery
-              const Text('Household & Delivery', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate800)),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.family_restroom_rounded,
-                title: 'Household & Family Members',
-                subtitle: 'Manage family health profiles & covered members',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.household),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.location_on_outlined,
-                title: 'Saved Kitchen Addresses',
-                subtitle: 'Delivery addresses with serviceability checks',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.addresses),
-              ),
-              const SizedBox(height: 20),
-
-              // Group 2: Health Suite
-              const Text('Health Pass & Diet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate800)),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.health_and_safety_outlined,
-                title: 'Health Pass Subscription',
-                subtitle: 'Membership tier, entitlements & benefits',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.healthPassPlans),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.medical_services_outlined,
-                title: 'Dietitian Consultations',
-                subtitle: 'Upcoming sessions & clinical history',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.consultationsList),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.folder_shared_outlined,
-                title: 'Health Documents Vault',
-                subtitle: 'HIPAA encrypted diagnostic reports & prescriptions',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.healthDocuments),
-              ),
-              const SizedBox(height: 20),
-
-              // Group 3: Financial & Promos
-              const Text('Payments & Rewards', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate800)),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.account_balance_wallet_outlined,
-                title: 'EBIC Wallet & Credits',
-                subtitle: 'Ledger balance, cashback & refund history',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.walletCredits),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.local_offer_outlined,
-                title: 'Promotions & Coupons',
-                subtitle: 'Active discounts & referral rewards',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.promotions),
-              ),
-              const SizedBox(height: 20),
-
-              // Group 4: Support & Security
-              const Text('Support & Privacy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate800)),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.support_agent_rounded,
-                title: 'Help & Customer Support',
-                subtitle: 'Raise tickets, FAQs & live resolution',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.support),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.notifications_none_rounded,
-                title: 'Notification Preferences',
-                subtitle: 'Real-time chef alerts & meal reminders',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.notifications),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.lock_person_outlined,
-                title: 'Privacy & Member Data Consent',
-                subtitle: 'Member-specific health data authorization',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.privacy),
-              ),
-              const SizedBox(height: 24),
-
-              // Sign Out
-              EbicCard(
-                onTap: _logout,
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.logout_rounded, color: AppColors.danger, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'Logout of EBIC',
-                      style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ],
+                const SizedBox(height: 20),
+                Center(
+                  child: Text(
+                    'EBIC Customer App • Module 3 Customer Profile & Household',
+                    style: TextStyle(color: isDark ? AppColors.slate500 : AppColors.slate400, fontSize: 11),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              const Center(
-                child: Text(
-                  'EBIC Customer App • V1.0.0 (Production Build)',
-                  style: TextStyle(color: AppColors.slate400, fontSize: 11),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -207,6 +499,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildMenuItem({
+    required bool isDark,
     required IconData icon,
     required String title,
     required String subtitle,
@@ -219,23 +512,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.slate100,
+              color: isDark ? AppColors.slate800 : AppColors.slate100,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: AppColors.slate700, size: 20),
+            child: Icon(icon, color: isDark ? AppColors.primaryLight : AppColors.slate700, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isDark ? Colors.white : AppColors.slate900,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(color: AppColors.slate500, fontSize: 11)),
+                Text(subtitle, style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500, fontSize: 11)),
               ],
             ),
           ),
-          const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.slate400),
+          Icon(Icons.arrow_forward_ios, size: 14, color: isDark ? AppColors.slate600 : AppColors.slate400),
         ],
       ),
     );

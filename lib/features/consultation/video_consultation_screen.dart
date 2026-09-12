@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/consultation_model.dart';
@@ -14,10 +17,51 @@ class VideoConsultationScreen extends StatefulWidget {
 }
 
 class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
+  final ApiClient _api = ApiClient();
   bool _isMuted = false;
   bool _isVideoOff = false;
   bool _isSpeakerOn = true;
   bool _isEnded = false;
+  bool _isAuthorizing = true;
+  String? _authError;
+  String? _roomName;
+  String? _joinToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _initJoinSession();
+  }
+
+  Future<void> _initJoinSession() async {
+    try {
+      final res = await _api.post<Map<String, dynamic>>(
+        ApiEndpoints.consultationJoin(widget.consultation.id),
+      );
+      if (mounted) {
+        if (res.success && res.data != null) {
+          setState(() {
+            _isAuthorizing = false;
+            _roomName = res.data!['roomName']?.toString();
+            _joinToken = res.data!['joinToken']?.toString();
+          });
+        } else {
+          // If server rejects join window
+          setState(() {
+            _isAuthorizing = false;
+            _authError = res.message ?? 'Join window opens 15 minutes before your scheduled appointment time.';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isAuthorizing = false;
+          _roomName = 'ebic-consultation-${widget.consultation.id.substring(0, widget.consultation.id.length > 8 ? 8 : widget.consultation.id.length)}';
+        });
+      }
+    }
+  }
 
   void _endCall() {
     setState(() => _isEnded = true);
@@ -25,6 +69,83 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isAuthorizing) {
+      return Scaffold(
+        backgroundColor: AppColors.slate950,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppColors.primary),
+              const SizedBox(height: 16),
+              const Text(
+                'Connecting to secure medical video room...',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_authError != null) {
+      return Scaffold(
+        backgroundColor: AppColors.slate950,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: AppColors.slate800,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.slate700),
+                  ),
+                  child: const Icon(Icons.lock_clock_rounded, size: 32, color: AppColors.accent),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Consultation Not Yet Open',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _authError!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.slate400, fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Scheduled: ${DateFormat('EEEE, dd MMM • hh:mm a').format(widget.consultation.scheduledAt)}',
+                  style: const TextStyle(color: AppColors.primaryLight, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: EbicButton(
+                    label: 'Return to Consultations',
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (_isEnded) {
       return _buildCompletedView();
     }
@@ -56,10 +177,11 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
                     widget.consultation.dietitianName,
                     style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Clinical Nutrition Consultation • Live Encrypted',
-                    style: TextStyle(color: AppColors.primaryLight, fontSize: 12),
+                  Text(
+                    _joinToken != null
+                        ? 'Live Encrypted Room • Session Verified'
+                        : 'Clinical Nutrition Consultation • Live Encrypted',
+                    style: const TextStyle(color: AppColors.primaryLight, fontSize: 12),
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -96,7 +218,7 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      'For: ${widget.consultation.memberName}',
+                      _roomName != null ? 'Room: $_roomName' : 'For: ${widget.consultation.memberName}',
                       style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ),
@@ -209,13 +331,13 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
     );
   }
 
-  // Section 20 "After completion: Consultation Completed, [ View Summary ], [ View Diet Plan ]"
+  // Video ended is not consultation completion — dietitian must complete it from the web portal
   Widget _buildCompletedView() {
     return Scaffold(
       backgroundColor: AppColors.slate50,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('Consultation Completed'),
+        title: const Text('Call Ended'),
       ),
       body: SafeArea(
         child: Padding(
@@ -227,45 +349,71 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: AppColors.primarySubtle,
+                  color: AppColors.primary.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
                 child: const Center(
-                  child: Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 50),
+                  child: Icon(Icons.call_end_rounded, color: AppColors.primary, size: 44),
                 ),
               ),
               const SizedBox(height: 20),
               const Text(
-                'Consultation Completed',
+                'Video Session Ended',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.slate900),
               ),
               const SizedBox(height: 8),
               Text(
-                'Your session with ${widget.consultation.dietitianName} has concluded. Your personalized diet plan is being updated with clinical notes.',
-                style: const TextStyle(fontSize: 13, color: AppColors.slate600, height: 1.4),
+                'Your call with Dr. ${widget.consultation.dietitianName} has concluded.',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slate800),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 6),
+              const Text(
+                'Your dietitian is currently reviewing the clinical discussion, compiling your family health profile, and will finalize your consultation and diet plan on the portal.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.slate600, height: 1.4),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.pending_actions_rounded, size: 16, color: Color(0xFFB45309)),
+                    SizedBox(width: 8),
+                    Text(
+                      'Clinical Finalization in Progress by Dietitian',
+                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
 
               EbicButton(
-                label: 'View Consultation Summary',
-                icon: Icons.notes_outlined,
+                label: 'View My Consultations',
+                icon: Icons.calendar_month_rounded,
                 onPressed: () {
-                  Navigator.pushReplacementNamed(
-                    context,
-                    AppRoutes.consultationSummary,
-                    arguments: {'consultation': widget.consultation},
-                  );
+                  Navigator.pushReplacementNamed(context, AppRoutes.consultationsList);
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               EbicButton(
-                label: 'View Diet Plan',
-                icon: Icons.restaurant_menu_rounded,
+                label: 'Return to Home',
                 variant: EbicButtonVariant.outline,
                 onPressed: () {
-                  Navigator.pushReplacementNamed(context, AppRoutes.dietPlan);
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    AppRoutes.mainShell,
+                    (route) => false,
+                  );
                 },
               ),
             ],

@@ -338,14 +338,14 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
     return EbicCard(
       child: Row(
         children: [
-          const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 24),
+          Icon(_selectedAddress?.kitchenIcon ?? Icons.countertops_rounded, color: AppColors.primary, size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _selectedAddress?.label ?? 'Home',
+                  _selectedAddress?.kitchenLabelDisplayName ?? 'Home Kitchen',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
                 Text(

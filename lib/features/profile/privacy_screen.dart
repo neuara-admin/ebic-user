@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
 
@@ -137,6 +139,68 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Erasure request submitted to Data Protection Officer.')),
                         );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Module 2 Section 21 & 22: Account Lifecycle & Security
+              const Text('Account Lifecycle & Security', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900)),
+              const SizedBox(height: 10),
+
+              EbicCard(
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.devices_outlined, color: AppColors.slate700),
+                      title: const Text('Log Out From All Devices', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      subtitle: const Text('Revoke active sessions across all web and mobile devices', style: TextStyle(fontSize: 11)),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.slate400),
+                      onTap: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Log Out From All Devices?'),
+                            content: const Text('This will sign you out of all devices and return to the login screen.'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Log Out All', style: TextStyle(color: Colors.white)),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true && mounted) {
+                          await AuthService().logoutAll();
+                          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.welcome, (r) => false);
+                        }
+                      },
+                    ),
+                    const Divider(height: 8),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.pause_circle_outline_rounded, color: Colors.amber),
+                      title: const Text('Deactivate Account', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      subtitle: const Text('Temporarily disable access and pause bookings', style: TextStyle(fontSize: 11)),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.slate400),
+                      onTap: () {
+                        Navigator.pushNamed(context, AppRoutes.accountDeactivation);
+                      },
+                    ),
+                    const Divider(height: 8),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                      title: const Text('Delete Account', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.danger)),
+                      subtitle: const Text('Permanently request account closure & data removal', style: TextStyle(fontSize: 11)),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.slate400),
+                      onTap: () {
+                        Navigator.pushNamed(context, AppRoutes.accountDeletion);
                       },
                     ),
                   ],

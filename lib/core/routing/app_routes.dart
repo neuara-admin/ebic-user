@@ -1,11 +1,16 @@
 class AppRoutes {
   // Entry & Auth
   static const String splash = '/';
+  static const String onboarding = '/onboarding';
   static const String welcome = '/welcome';
   static const String login = '/login';
   static const String register = '/register';
   static const String otp = '/otp';
   static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
+  static const String accountRecovery = '/recovery';
+  static const String accountDeactivation = '/profile/deactivate';
+  static const String accountDeletion = '/profile/delete';
 
   // Shell / Bottom Navigation
   static const String mainShell = '/main';
@@ -28,16 +33,27 @@ class AppRoutes {
   static const String preparationChecklist = '/meals/book-chef/preparation';
   static const String orderDetail = '/orders/detail';
 
-  // Health Pass
+  // Health Pass (Module 4 Sections 33–49)
   static const String healthPass = '/health-pass';
   static const String healthPassPlans = '/health-pass/plans';
+  static const String healthPassComparison = '/health-pass/comparison';
+  static const String healthPassConfigure = '/health-pass/configure';
+  static const String healthPassReview = '/health-pass/review';
+  static const String healthPassPayment = '/health-pass/payment';
+  static const String healthPassActivation = '/health-pass/activation';
+  static const String healthPassBenefits = '/health-pass/benefits';
+  static const String healthPassUsage = '/health-pass/usage';
+  static const String healthPassRenew = '/health-pass/renew';
+  static const String healthPassHistory = '/health-pass/history';
   static const String healthPassPurchase = '/health-pass/purchase';
 
   // Dietitian & Consultations
   static const String dietitian = '/health/dietitian';
   static const String dietitianSelect = '/health/dietitian/select';
   static const String consultationBook = '/health/consultations/book';
+  static const String consultationReview = '/health/consultations/review';
   static const String consultationsList = '/health/consultations';
+  static const String consultationDetail = '/health/consultations/detail';
   static const String consultationVideo = '/health/consultations/video';
   static const String consultationSummary = '/health/consultations/summary';
 
@@ -50,8 +66,12 @@ class AppRoutes {
   static const String healthProgress = '/health/progress';
 
   // Profile & Management
+  static const String editProfile = '/profile/edit';
   static const String household = '/profile/household';
+  static const String memberForm = '/profile/household/member-form';
   static const String addresses = '/profile/addresses';
+  static const String addressForm = '/profile/addresses/address-form';
+  static const String preferences = '/profile/preferences';
   static const String walletCredits = '/profile/wallet';
   static const String promotions = '/promotions';
   static const String support = '/support';
@@ -59,4 +79,9 @@ class AppRoutes {
   static const String supportTicketDetail = '/support/tickets/detail';
   static const String notifications = '/notifications';
   static const String privacy = '/profile/privacy';
+
+  // Backwards compatibility aliases
+  static const String bookingConfirmation = bookChefConfirmation;
+  static const String videoConsultation = consultationVideo;
+  static const String purchasePass = healthPassPurchase;
 }

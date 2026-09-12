@@ -9,6 +9,9 @@ class DietitianModel {
   final double rating;
   final String? photoUrl;
   final List<DietitianSlotModel> availableSlots;
+  final String? hubId;
+  final String? hubName;
+  final String? hubCode;
 
   DietitianModel({
     required this.id,
@@ -21,24 +24,39 @@ class DietitianModel {
     this.rating = 4.9,
     this.photoUrl,
     this.availableSlots = const [],
+    this.hubId,
+    this.hubName,
+    this.hubCode,
   });
 
   factory DietitianModel.fromJson(Map<String, dynamic> json) {
     final user = json['user'] as Map<String, dynamic>?;
+    final specs = json['specializations'];
+    final specStr = json['specialization'] ??
+        (specs is List ? specs.join(', ') : specs?.toString()) ??
+        'Metabolic Health & Weight Management';
+
+    final langs = json['languages'];
+    final langStr = (langs is List ? langs.join(', ') : langs?.toString()) ?? 'English, Hindi';
+    final hub = json['hub'] as Map<String, dynamic>?;
+
     return DietitianModel(
       id: json['id'] ?? '',
       name: user?['name'] ?? json['name'] ?? 'Clinical Dietitian',
       qualification: json['qualification'] ?? 'M.Sc Clinical Nutrition, RD',
-      specialization: json['specialization'] ?? 'Metabolic Health & Weight Management',
-      experienceYears: json['experienceYears'] ?? 6,
+      specialization: specStr,
+      experienceYears: int.tryParse(json['experienceYears']?.toString() ?? '6') ?? 6,
       bio: json['bio'] ?? 'Specializing in personalized preventive nutrition and clinical diet plans.',
-      languages: json['languages'] ?? 'English, Hindi',
+      languages: langStr,
       rating: double.tryParse(json['rating']?.toString() ?? '4.9') ?? 4.9,
       photoUrl: json['photoUrl'],
       availableSlots: (json['availability'] as List<dynamic>?)
               ?.map((e) => DietitianSlotModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      hubId: json['hubId'] ?? hub?['id'],
+      hubName: json['hubName'] ?? hub?['name'] ?? 'Hyderabad Central Hub',
+      hubCode: json['hubCode'] ?? hub?['code'] ?? 'HYD-CENTRAL',
     );
   }
 }

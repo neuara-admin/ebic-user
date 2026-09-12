@@ -1,25 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'core/auth/auth_service.dart';
+import 'app/bootstrap/app_bootstrap.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/app_routes.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Set immersive edge-to-edge system status bar styling
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ),
-  );
-
-  // Initialize cached session authentication tokens
-  final authService = AuthService();
-  await authService.initialize();
-
+  await AppBootstrap.initialize();
   runApp(const EbicCustomerApp());
 }
 
@@ -35,20 +22,27 @@ class EbicCustomerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Every Bite Counts (EBIC)',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.light,
-      home: home,
-      initialRoute: home == null ? initialRoute : null,
-      onGenerateInitialRoutes: home == null
-          ? (String initialRouteName) {
-              return [AppRouter.onGenerateRoute(RouteSettings(name: initialRouteName))];
-            }
-          : null,
-      onGenerateRoute: AppRouter.onGenerateRoute,
+    final themeController = ThemeController();
+
+    return ListenableBuilder(
+      listenable: themeController,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'Every Bite Counts (EBIC)',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeController.themeMode,
+          home: home,
+          initialRoute: home == null ? initialRoute : null,
+          onGenerateInitialRoutes: home == null
+              ? (String initialRouteName) {
+                  return [AppRouter.onGenerateRoute(RouteSettings(name: initialRouteName))];
+                }
+              : null,
+          onGenerateRoute: AppRouter.onGenerateRoute,
+        );
+      },
     );
   }
 }

@@ -7,19 +7,39 @@ class ApiEndpoints {
   static const String resetPassword = '/auth/reset-password';
   static const String changePassword = '/auth/change-password';
   static const String refreshToken = '/auth/refresh';
+  static const String logout = '/auth/logout';
+  static const String logoutAll = '/auth/logout-all';
+  static const String authSessions = '/auth/sessions';
+  static const String accountRecovery = '/auth/recovery/start';
 
-  // Customer Profile & Address
+  // Customer Profile, Account Lifecycle & Address
   static const String me = '/me';
+  static const String requestEmailOtp = '/me/email/otp/request';
+  static const String verifyEmailOtp = '/me/email/otp/verify';
+  static const String uploadAvatar = '/me/avatar';
+  static const String preferences = '/me/preferences';
+  static const String customerPreferences = '/me/preferences';
+  static const String deactivateAccount = '/me/deactivate';
+  static const String deletionCheck = '/me/deletion-check';
+  static const String deleteRequest = '/me/delete-request';
   static const String addresses = '/me/addresses';
   static const String customerAddresses = '/me/addresses';
   static String address(String id) => '/me/addresses/$id';
   static String customerAddressDetail(String id) => '/me/addresses/$id';
+  static String customerAddressSetDefault(String id) => '/me/addresses/$id/default';
+  static String addressServiceabilityCheck(String id) => '/me/addresses/$id/serviceability-check';
   static const String serviceabilityCheck = '/serviceability/check';
+
+  // Maps (server-side geocoding — no client API key needed)
+  static const String mapsGeocode = '/maps/geocode';
+  static const String mapsReverseGeocode = '/maps/reverse';
+  static const String mapsAutocomplete = '/maps/autocomplete';
 
   // Household & Members
   static const String householdMembers = '/household/members';
   static String householdMember(String id) => '/household/members/$id';
   static String householdMemberDetail(String id) => '/household/members/$id';
+  static String householdMemberAvatar(String id) => '/household/members/$id/avatar';
 
   // Member Health & Documents
   static const String healthDocuments = '/health-documents';
@@ -30,7 +50,9 @@ class ApiEndpoints {
   static String memberHealthDocuments(String memberId) =>
       '/household/members/$memberId/health/documents';
 
-  // Catalogue
+  // Catalogue & Taxonomy
+  static const String catalogueAllergens = '/catalogue/allergens';
+  static const String catalogueDietaryTags = '/catalogue/dietary-tags';
   static const String dishes = '/catalogue/dishes';
   static const String catalogueDishes = '/catalogue/dishes';
   static String dish(String id) => '/catalogue/dishes/$id';
@@ -63,13 +85,19 @@ class ApiEndpoints {
   static const String calculateQuote = '/pricing/quotes';
   static String recalculateQuote(String id) => '/pricing/quotes/$id/recalculate';
 
-  // Health Pass
+  // Health Pass (Module 4 Sections 33–49)
   static const String healthPassPlans = '/health-pass/plans';
+  static const String healthPassPlansComparison = '/health-pass/plans/comparison';
+  static String healthPassPlanDetail(String id) => '/health-pass/plans/$id';
   static const String myHealthPass = '/health-pass/my';
-  static const String healthPassCurrent = '/health-pass/my';
+  static const String healthPassCurrent = '/health-pass/current';
+  static const String healthPassHistory = '/health-pass/history';
   static const String healthPassQuote = '/health-pass/quote';
-  static const String healthPassPurchase = '/health-pass';
+  static const String healthPassPurchase = '/health-pass/purchase';
   static String healthPassDetail(String id) => '/health-pass/$id';
+  static String healthPassUsage(String id) => '/health-pass/$id/usage';
+  static String healthPassRenewQuote(String id) => '/health-pass/$id/renew/quote';
+  static String healthPassRenew(String id) => '/health-pass/$id/renew';
   static String healthPassPayInitiate(String id) => '/health-pass/$id/pay/initiate';
   static String healthPassPayVerify(String id) => '/health-pass/$id/pay/verify';
 
@@ -79,8 +107,15 @@ class ApiEndpoints {
   static String dietitianAvailability(String id) => '/dietitians/$id/availability';
   static const String consultations = '/consultations';
   static String consultation(String id) => '/consultations/$id';
+  static const String consultationEligibility = '/consultations/eligibility';
+  static const String consultationTypes = '/consultations/types';
+  static const String consultationAvailabilityDates = '/consultations/availability/dates';
+  static const String consultationAvailabilitySlots = '/consultations/availability/slots';
+  static const String consultationHistory = '/consultations/history';
+  static String consultationJoin(String id) => '/consultations/$id/join';
   static String cancelConsultation(String id) => '/consultations/$id/cancel';
   static String consultationCancel(String id) => '/consultations/$id/cancel';
+  static String consultationReschedule(String id) => '/consultations/$id/reschedule';
   static const String todayDietPlan = '/diet-plans/today';
   static const String dietPlanToday = '/diet-plans/today';
   static String memberDietPlans(String memberId) =>
