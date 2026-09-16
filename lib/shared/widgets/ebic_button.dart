@@ -5,6 +5,7 @@ enum EbicButtonVariant { primary, outline, ghost, danger }
 
 class EbicButton extends StatelessWidget {
   final String label;
+  final String? text;
   final VoidCallback? onPressed;
   final bool isLoading;
   final IconData? icon;
@@ -15,7 +16,8 @@ class EbicButton extends StatelessWidget {
 
   const EbicButton({
     super.key,
-    required this.label,
+    this.label = '',
+    this.text,
     required this.onPressed,
     this.isLoading = false,
     this.icon,
@@ -83,7 +85,7 @@ class EbicButton extends StatelessWidget {
         ],
         Flexible(
           child: Text(
-            label,
+            text ?? label,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 14,

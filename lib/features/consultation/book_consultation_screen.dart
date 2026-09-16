@@ -919,6 +919,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                     radius: 26,
                     backgroundColor: AppColors.primaryLight.withOpacity(0.3),
                     backgroundImage: d.photoUrl != null ? NetworkImage(d.photoUrl!) : null,
+                    onBackgroundImageError: d.photoUrl != null ? (_, __) {} : null,
                     child: d.photoUrl == null
                         ? const Icon(Icons.person, color: AppColors.primary, size: 28)
                         : null,
@@ -1363,6 +1364,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                       radius: 26,
                       backgroundColor: AppColors.primaryLight.withOpacity(0.3),
                       backgroundImage: d.photoUrl != null ? NetworkImage(d.photoUrl!) : null,
+                      onBackgroundImageError: d.photoUrl != null ? (_, __) {} : null,
                       child: d.photoUrl == null
                           ? const Icon(Icons.person, color: AppColors.primary, size: 28)
                           : null,

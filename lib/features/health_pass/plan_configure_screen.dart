@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/context/member_context.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -484,11 +485,12 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
     return Column(
       children: _householdMembers.map((member) {
         final isSelected = _selectedMemberIds.contains(member.id);
+        final resolvedAvatar = AppConfig.resolveMediaUrl(member.avatarUrl);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
+            color: isDark ? AppColors.slate900 : (isSelected ? const Color(0xFFF0FDF4) : Colors.white),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isSelected ? AppColors.primary : (isDark ? AppColors.slate800 : AppColors.slate200),
@@ -499,44 +501,93 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
             borderRadius: BorderRadius.circular(12),
             onTap: () => _toggleMember(member.id),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: isSelected ? AppColors.primarySubtle : AppColors.slate100,
-                    child: Text(
-                      member.name.isNotEmpty ? member.name[0].toUpperCase() : 'M',
-                      style: TextStyle(
-                        color: isSelected ? AppColors.primary : AppColors.slate700,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primary : AppColors.slate200,
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                    clipBehavior: Clip.antiAlias,
+                    child: resolvedAvatar != null && resolvedAvatar.isNotEmpty
+                        ? Image.network(
+                            resolvedAvatar,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Text(
+                                member.initials,
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : AppColors.slate700,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              member.initials,
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : AppColors.slate700,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          member.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: isDark ? Colors.white : AppColors.slate900,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                member.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: isDark ? Colors.white : AppColors.slate900,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: member.isSelf ? AppColors.emerald50 : AppColors.slate100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                member.isSelf ? 'SELF' : member.relationship.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: member.isSelf ? AppColors.primaryDark : AppColors.slate600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${member.displayRelationship} • ${member.age > 0 ? '${member.age} yrs' : 'Age not specified'}',
-                          style: const TextStyle(color: AppColors.slate500, fontSize: 12),
+                          '${member.gender} • ${member.age > 0 ? '${member.age} yrs' : 'Age not specified'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppColors.slate500, fontSize: 11.5),
                         ),
                       ],
                     ),
                   ),
                   if (!member.isSelf)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.slate400),
+                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.slate400),
                       tooltip: 'Remove from household',
                       onPressed: () => _deleteMember(member),
                     ),

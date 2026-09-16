@@ -770,6 +770,7 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                   backgroundImage: pass.assignedDietitian!.photoUrl != null
                       ? NetworkImage(pass.assignedDietitian!.photoUrl!)
                       : null,
+                  onBackgroundImageError: pass.assignedDietitian!.photoUrl != null ? (_, __) {} : null,
                   child: pass.assignedDietitian!.photoUrl == null
                       ? const Icon(Icons.person, color: AppColors.primary)
                       : null,
@@ -1054,6 +1055,7 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                   radius: 22,
                   backgroundColor: const Color(0xFFF59E0B).withOpacity(0.2),
                   backgroundImage: c.dietitianPhotoUrl != null ? NetworkImage(c.dietitianPhotoUrl!) : null,
+                  onBackgroundImageError: c.dietitianPhotoUrl != null ? (_, __) {} : null,
                   child: c.dietitianPhotoUrl == null
                       ? const Icon(Icons.person, color: Color(0xFFB45309), size: 22)
                       : null,
@@ -1204,6 +1206,7 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                   radius: 22,
                   backgroundColor: AppColors.primary.withOpacity(0.15),
                   backgroundImage: c.dietitianPhotoUrl != null ? NetworkImage(c.dietitianPhotoUrl!) : null,
+                  onBackgroundImageError: c.dietitianPhotoUrl != null ? (_, __) {} : null,
                   child: c.dietitianPhotoUrl == null
                       ? const Icon(Icons.person, color: AppColors.primary, size: 22)
                       : null,
@@ -1428,6 +1431,7 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                     radius: 24,
                     backgroundColor: AppColors.primary.withOpacity(0.12),
                     backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                    onBackgroundImageError: photoUrl != null ? (_, __) {} : null,
                     child: photoUrl == null
                         ? const Icon(Icons.person, color: AppColors.primary, size: 24)
                         : null,

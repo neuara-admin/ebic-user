@@ -400,6 +400,7 @@ class _ConsultationReviewScreenState extends State<ConsultationReviewScreen> {
                                 backgroundImage: _dietitian.photoUrl != null
                                     ? NetworkImage(_dietitian.photoUrl!)
                                     : null,
+                                 onBackgroundImageError: _dietitian.photoUrl != null ? (_, __) {} : null,
                                 child: _dietitian.photoUrl == null
                                     ? const Icon(Icons.person, color: AppColors.primary, size: 26)
                                     : null,

@@ -44,6 +44,10 @@ class AppColors {
   static const Color slate100 = Color(0xFFF1F5F9);
   static const Color slate50 = Color(0xFFF8FAFC);
 
+  // Text aliases
+  static const Color textPrimary = slate900;
+  static const Color textSecondary = slate600;
+
   // Status Colors
   static const Color success = Color(0xFF10B981);
   static const Color successLight = Color(0xFFD1FAE5);

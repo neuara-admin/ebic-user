@@ -60,10 +60,22 @@ class AppRoutes {
   // Diet Plan
   static const String dietPlan = '/health/diet-plan';
 
-  // Health Data
+  // Health Data (Module 8)
   static const String healthProfile = '/health/profile';
+  static const String healthProfileEdit = '/health/profile/edit';
+  static const String healthGoals = '/health/goals';
+  static const String healthAllergies = '/health/allergies';
+  static const String healthDietaryPreferences = '/health/dietary-preferences';
+  static const String healthLifestyle = '/health/lifestyle';
+  static const String healthBodyMeasurements = '/health/body-measurements';
+  static const String healthMetrics = '/health/metrics';
+  static const String healthPermissions = '/health/permissions';
   static const String healthDocuments = '/health/documents';
+  static const String healthDocumentUpload = '/health/documents/upload';
+  static const String healthDocumentDetail = '/health/documents/detail';
+  static const String healthDocumentPreview = '/health/documents/preview';
   static const String healthProgress = '/health/progress';
+  static const String progressTimeline = '/health/progress/timeline';
 
   // Profile & Management
   static const String editProfile = '/profile/edit';

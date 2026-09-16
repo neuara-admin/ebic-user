@@ -57,8 +57,17 @@ import '../../features/consultation/consultation_summary_screen.dart';
 // Diet Plan & Health Data
 import '../../features/diet_plan/diet_plan_screen.dart';
 import '../../features/health/health_profile_screen.dart';
-import '../../features/health/progress_charts_screen.dart';
-import '../../features/health/health_documents_screen.dart';
+import '../../features/health/presentation/screens/health_goals_screen.dart';
+import '../../features/health/presentation/screens/allergies_screen.dart';
+import '../../features/health/presentation/screens/health_metrics_screen.dart';
+import '../../features/health/presentation/screens/health_data_permissions_screen.dart';
+import '../../features/health_progress/presentation/screens/health_progress_screen.dart';
+import '../../features/health_progress/presentation/screens/progress_timeline_screen.dart';
+import '../../features/health_documents/presentation/screens/health_documents_screen.dart';
+import '../../features/health_documents/presentation/screens/upload_health_document_screen.dart';
+import '../../features/health_documents/presentation/screens/document_details_screen.dart';
+import '../../features/health_documents/presentation/screens/document_preview_screen.dart';
+import '../../features/health_documents/domain/entities/health_document_entity.dart';
 
 // Orders
 import '../../features/orders/order_detail_screen.dart';
@@ -291,10 +300,66 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const DietPlanScreen());
       case AppRoutes.healthProfile:
         return MaterialPageRoute(builder: (_) => const HealthProfileScreen());
+      case AppRoutes.healthGoals:
+        final memberId = (args is Map ? args['memberId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(builder: (_) => HealthGoalsScreen(memberId: memberId));
+      case AppRoutes.healthAllergies:
+        final memberId = (args is Map ? args['memberId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(builder: (_) => AllergiesScreen(memberId: memberId));
+      case AppRoutes.healthMetrics:
+        final memberId = (args is Map ? args['memberId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(builder: (_) => HealthMetricsScreen(memberId: memberId));
+      case AppRoutes.healthPermissions:
+        final memberId = (args is Map ? args['memberId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(builder: (_) => HealthDataPermissionsScreen(memberId: memberId));
       case AppRoutes.healthProgress:
-        return MaterialPageRoute(builder: (_) => const ProgressChartsScreen());
+        final memberId = (args is Map ? args['memberId'] : args)?.toString();
+        return MaterialPageRoute(
+          builder: (_) => HealthProgressScreen(initialMemberId: memberId),
+        );
+      case AppRoutes.progressTimeline:
+        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => ProgressTimelineScreen(
+            memberId: data['memberId']?.toString() ?? '',
+            memberName: data['memberName']?.toString() ?? 'Member',
+          ),
+        );
       case AppRoutes.healthDocuments:
-        return MaterialPageRoute(builder: (_) => const HealthDocumentsScreen());
+        final memberId = (args is Map ? args['memberId'] : args)?.toString();
+        return MaterialPageRoute(
+          builder: (_) => HealthDocumentsScreen(initialMemberId: memberId),
+        );
+      case AppRoutes.healthDocumentUpload:
+        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => UploadHealthDocumentScreen(
+            memberId: data['memberId']?.toString() ?? '',
+            memberName: data['memberName']?.toString() ?? 'Member',
+            availableCategories: (data['categories'] as List<dynamic>?)
+                    ?.whereType<DocumentCategoryItem>()
+                    .toList() ??
+                const [],
+          ),
+        );
+      case AppRoutes.healthDocumentDetail:
+        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => DocumentDetailsScreen(
+            documentId: data['documentId']?.toString() ?? '',
+            memberId: data['memberId']?.toString() ?? '',
+          ),
+        );
+      case AppRoutes.healthDocumentPreview:
+        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => DocumentPreviewScreen(
+            documentId: data['documentId']?.toString() ?? '',
+            title: data['title']?.toString() ?? 'Document',
+            fileExtension: data['fileExtension']?.toString() ?? 'PDF',
+            mimeType: data['mimeType']?.toString(),
+          ),
+        );
 
       // Profile & Settings
       case AppRoutes.editProfile:

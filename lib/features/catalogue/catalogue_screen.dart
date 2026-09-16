@@ -4,6 +4,7 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dish_model.dart';
+import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/loading_view.dart';
@@ -23,14 +24,19 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
   bool _isLoading = true;
   List<DishModel> _dishes = [];
-  String _selectedCategory = 'ALL'; // ALL, HIGH_PROTEIN, HIGH_FIBRE, BALANCED
+  List<HouseholdMemberModel> _members = [];
+  HouseholdMemberModel? _selectedMember;
+  List<Map<String, dynamic>> _categories = [];
+  String _selectedCategory = 'ALL';
   String _searchQuery = '';
+  String? _validationError;
+  bool _isValidating = false;
 
   @override
   void initState() {
     super.initState();
     _cart.addListener(_onCartChanged);
-    _loadDishes();
+    _loadInitialData();
   }
 
   @override
@@ -40,16 +46,54 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   }
 
   void _onCartChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _validateSelection();
+    }
   }
 
-  Future<void> _loadDishes() async {
+  Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
 
     try {
+      // 1. Fetch Household Members (Section 8)
+      final membersRes = await _api.get<List<dynamic>>(ApiEndpoints.householdMembers);
+      if (membersRes.success && membersRes.data != null) {
+        _members = membersRes.data!
+            .map((m) => HouseholdMemberModel.fromJson(m as Map<String, dynamic>))
+            .toList();
+        if (_members.isNotEmpty) {
+          _selectedMember = _members.first;
+          _cart.setMember(_selectedMember!.id, _selectedMember!.name);
+        }
+      }
+
+      // 2. Fetch Dynamic Catalogue Categories (Section 11)
+      final catRes = await _api.get<List<dynamic>>(ApiEndpoints.categories);
+      if (catRes.success && catRes.data != null) {
+        _categories = catRes.data!.map((c) => c as Map<String, dynamic>).toList();
+      }
+
+      // 3. Fetch Dishes (Section 51)
+      await _loadDishes();
+    } catch (_) {}
+
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadDishes() async {
+    try {
+      final query = <String, dynamic>{'limit': 50};
+      if (_cart.selectedOccasion.isNotEmpty) {
+        query['meal_type'] = _cart.selectedOccasion == 'BREAKFAST'
+            ? 'B'
+            : _cart.selectedOccasion == 'LUNCH'
+                ? 'L'
+                : 'D';
+      }
       final res = await _api.get<Map<String, dynamic>>(
         ApiEndpoints.dishes,
-        queryParameters: {'limit': 50},
+        queryParameters: query,
       );
       if (res.success && res.data != null) {
         final items = res.data!['items'] as List<dynamic>? ?? [];
@@ -57,12 +101,51 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       }
     } catch (_) {}
 
-    // Fallback healthy catalogue if server has limited seed
     if (_dishes.isEmpty) {
       _dishes = _getCuratedFallbackDishes();
     }
+  }
 
-    if (mounted) setState(() => _isLoading = false);
+  Future<void> _validateSelection() async {
+    if (_cart.isEmpty || _selectedMember == null) {
+      setState(() => _validationError = null);
+      return;
+    }
+
+    setState(() => _isValidating = true);
+    final mealCode = _cart.selectedOccasion == 'BREAKFAST'
+        ? 'B'
+        : _cart.selectedOccasion == 'LUNCH'
+            ? 'L'
+            : 'D';
+
+    try {
+      final res = await _api.post<Map<String, dynamic>>(
+        ApiEndpoints.catalogueBookingValidate,
+        body: {
+          'member_id': _selectedMember!.id,
+          'meal_type': mealCode,
+          'items': _cart.toApiItems(),
+        },
+      );
+
+      if (res.success && res.data != null) {
+        final data = res.data!;
+        if (data['valid'] == false) {
+          final errors = data['errors'] as List<dynamic>? ?? [];
+          if (errors.isNotEmpty) {
+            final firstErr = errors.first as Map<String, dynamic>;
+            _validationError = firstErr['message']?.toString() ?? 'Selection conflict';
+          }
+        } else {
+          _validationError = null;
+        }
+      }
+    } catch (_) {
+      _validationError = null;
+    }
+
+    if (mounted) setState(() => _isValidating = false);
   }
 
   List<DishModel> _getCuratedFallbackDishes() {
@@ -138,11 +221,22 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       return;
     }
 
+    if (_validationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please resolve validation conflict: $_validationError'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
+    }
+
     final dishInputs = _cart.items.map((item) {
       return {
         'dishId': item.dish.id,
         'name': item.dish.name,
         'servings': item.servings,
+        'quantity': 1,
         'baseCookTimeMin': item.dish.baseCookTimeMin,
         'perServingIncMin': item.dish.perServingIncMin,
       };
@@ -153,6 +247,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       AppRoutes.bookChefQuote,
       arguments: {
         'mode': 'CATALOGUE',
+        'memberId': _selectedMember?.id,
+        'memberName': _selectedMember?.name ?? 'Self',
         'occasion': _cart.selectedOccasion,
         'bookingOption': _cart.selectedOccasion == 'BREAKFAST'
             ? 'B'
@@ -186,15 +282,135 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // Step 1: Member Selector (Section 8)
+            if (_members.isNotEmpty)
+              Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _members.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final member = _members[index];
+                    final isSelected = _selectedMember?.id == member.id;
+                    return ChoiceChip(
+                      avatar: CircleAvatar(
+                        backgroundColor: isSelected ? AppColors.primary : AppColors.slate300,
+                        child: Text(
+                          member.name.isNotEmpty ? member.name[0] : 'M',
+                          style: const TextStyle(fontSize: 10, color: Colors.white),
+                        ),
+                      ),
+                      label: Text(member.name),
+                      selected: isSelected,
+                      selectedColor: AppColors.primarySubtle,
+                      backgroundColor: Colors.white,
+                      side: BorderSide(color: isSelected ? AppColors.primary : AppColors.slate200),
+                      labelStyle: TextStyle(
+                        color: isSelected ? AppColors.primary : AppColors.slate700,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 12,
+                      ),
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() => _selectedMember = member);
+                          _cart.setMember(member.id, member.name);
+                          _validateSelection();
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+
+            // Step 2: Meal Occasion Selector (Section 9)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: ['BREAKFAST', 'LUNCH', 'DINNER'].map((occ) {
+                  final isSelected = _cart.selectedOccasion == occ;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () {
+                          _cart.setOccasion(occ);
+                          _loadDishes();
+                          _validateSelection();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.primarySubtle : Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected ? AppColors.primary : AppColors.slate200,
+                              width: isSelected ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              occ,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected ? AppColors.primary : AppColors.slate600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+            if (_isValidating)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                child: LinearProgressIndicator(minHeight: 2, color: AppColors.primary),
+              ),
+
+            // Section 31 Allergy / Selection Warning UI
+            if (_validationError != null)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _validationError!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.danger,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Search and Category filter
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: TextField(
                 onChanged: (val) => setState(() => _searchQuery = val),
                 decoration: InputDecoration(
                   hintText: 'Search dishes, cuisines...',
                   prefixIcon: const Icon(Icons.search),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   fillColor: Colors.white,
                   filled: true,
                   border: OutlineInputBorder(
@@ -205,9 +421,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
               ),
             ),
 
-            // Category Chips
+            // Dynamic Category Chips (Section 11)
             SizedBox(
-              height: 44,
+              height: 40,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -216,10 +432,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   _buildCategoryChip('HIGH_PROTEIN', 'High Protein'),
                   _buildCategoryChip('HIGH_FIBRE', 'High Fibre'),
                   _buildCategoryChip('BALANCED', 'Balanced Meals'),
+                  ..._categories.map((c) => _buildCategoryChip(c['code']?.toString() ?? '', c['name']?.toString() ?? '')),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
 
             // Dish list
             Expanded(

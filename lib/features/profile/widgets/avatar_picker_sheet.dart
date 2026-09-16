@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
@@ -77,15 +78,18 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
       });
 
       final bytes = await pickedFile.readAsBytes();
-      final filename = pickedFile.name.isNotEmpty
-          ? pickedFile.name
-          : 'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final rawExt = pickedFile.name.contains('.')
+          ? pickedFile.name.split('.').last.toLowerCase()
+          : 'jpg';
+      final cleanExt = (rawExt == 'png' || rawExt == 'webp') ? rawExt : 'jpg';
+      final filename = 'avatar_${DateTime.now().millisecondsSinceEpoch}.$cleanExt';
 
       final endpoint = widget.uploadEndpoint ?? ApiEndpoints.uploadAvatar;
       final res = await _api.uploadMultipart<Map<String, dynamic>>(
         endpoint,
         fileBytes: bytes,
         filename: filename,
+        contentType: MediaType('image', cleanExt == 'png' ? 'png' : cleanExt == 'webp' ? 'webp' : 'jpeg'),
       );
 
       if (!mounted) return;
@@ -228,26 +232,29 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _hasPhoto ? 'Profile Photo' : 'Upload Profile Photo',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.slate900,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _hasPhoto ? 'Profile Photo' : 'Upload Profile Photo',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.slate900,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _hasPhoto
-                        ? 'Replace with a new image or remove current photo.'
-                        : 'Choose an image from camera or gallery.',
-                    style: const TextStyle(fontSize: 13, color: AppColors.slate500),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      _hasPhoto
+                          ? 'Replace with a new image or remove current photo.'
+                          : 'Choose an image from camera or gallery.',
+                      style: const TextStyle(fontSize: 13, color: AppColors.slate500),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.close_rounded, color: AppColors.slate500),
                 onPressed: _isLoading ? null : () => Navigator.pop(context),

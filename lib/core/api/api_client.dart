@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
 import 'api_endpoints.dart';
@@ -377,6 +378,7 @@ class ApiClient {
     required String filename,
     String fieldName = 'file',
     Map<String, String>? fields,
+    MediaType? contentType,
     bool requiresAuth = true,
     T Function(dynamic)? fromDataJson,
     bool isRetry = false,
@@ -393,11 +395,28 @@ class ApiClient {
         request.fields.addAll(fields);
       }
 
+      MediaType? resolvedContentType = contentType;
+      if (resolvedContentType == null) {
+        final lower = filename.toLowerCase();
+        if (lower.endsWith('.png')) {
+          resolvedContentType = MediaType('image', 'png');
+        } else if (lower.endsWith('.webp')) {
+          resolvedContentType = MediaType('image', 'webp');
+        } else if (lower.endsWith('.pdf')) {
+          resolvedContentType = MediaType('application', 'pdf');
+        } else if (lower.endsWith('.mp4')) {
+          resolvedContentType = MediaType('video', 'mp4');
+        } else {
+          resolvedContentType = MediaType('image', 'jpeg');
+        }
+      }
+
       request.files.add(
         http.MultipartFile.fromBytes(
           fieldName,
           fileBytes,
           filename: filename,
+          contentType: resolvedContentType,
         ),
       );
 
@@ -413,6 +432,7 @@ class ApiClient {
             filename: filename,
             fieldName: fieldName,
             fields: fields,
+            contentType: contentType,
             requiresAuth: requiresAuth,
             fromDataJson: fromDataJson,
             isRetry: true,

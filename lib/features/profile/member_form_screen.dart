@@ -5,6 +5,10 @@ import '../../core/config/app_config.dart';
 import '../../core/context/member_context.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/household_member_model.dart';
+import '../../shared/widgets/height_weight_input_widget.dart';
+import '../../shared/widgets/dietary_health_selection_widget.dart';
+import '../../shared/widgets/gender_selection_widget.dart';
+import '../../shared/widgets/clinical_notes_input_widget.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'widgets/avatar_picker_sheet.dart';
@@ -58,49 +62,6 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
 
   final List<String> _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
-  final List<String> _dietaryOptions = [
-    'Vegetarian',
-    'Non-Vegetarian',
-    'Eggetarian',
-    'Vegan',
-    'Jain',
-    'Keto / Low-Carb',
-    'Diabetic-Friendly',
-    'High-Protein',
-  ];
-
-  final List<String> _allergyOptions = [
-    'None',
-    'Lactose / Dairy',
-    'Gluten / Celiac',
-    'Peanuts',
-    'Tree Nuts',
-    'Shellfish',
-    'Soy',
-    'Eggs',
-    'Fish',
-  ];
-
-  final List<String> _goalOptions = [
-    'Weight Management',
-    'Blood Sugar Control',
-    'Heart Health',
-    'PCOS / PCOD Support',
-    'Digestive Health',
-    'Muscle Gain',
-    'General Vitality',
-  ];
-
-  final List<String> _conditionOptions = [
-    'None',
-    'Type 2 Diabetes',
-    'Hypertension',
-    'Hypothyroid',
-    'High Cholesterol',
-    'Fatty Liver',
-    'Acid Reflux / GERD',
-  ];
-
   bool get _isEditing => widget.memberToEdit != null;
 
   List<Map<String, String>> get _availableRelationships {
@@ -148,20 +109,23 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
     _weightCtrl = TextEditingController(
       text: m?.weightKg != null ? m!.weightKg!.toStringAsFixed(1) : '',
     );
-    _notesCtrl = TextEditingController(text: m?.healthGoals ?? '');
 
     _selectedDietary = List<String>.from(m?.dietaryPreferences ?? []);
     _selectedAllergies = List<String>.from(m?.allergies ?? []);
     _selectedConditions = List<String>.from(m?.medicalConditions ?? []);
 
+    String initialNotes = m?.clinicalNotes ?? '';
     if (m?.healthGoals != null && m!.healthGoals!.trim().isNotEmpty) {
       final goals = m.healthGoals!.split(',').map((s) => s.trim());
       for (final g in goals) {
-        if (_goalOptions.contains(g)) {
+        if (DietaryHealthSelectionWidget.goalOptions.contains(g)) {
           _selectedGoals.add(g);
+        } else if (initialNotes.isEmpty && g.isNotEmpty && !g.startsWith('Conditions:') && !g.startsWith('Notes:')) {
+          initialNotes = g;
         }
       }
     }
+    _notesCtrl = TextEditingController(text: initialNotes);
 
     _householdMembers = MemberContext().members;
     _initSelectedRelationship();
@@ -195,8 +159,17 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
           if (_weightCtrl.text.isEmpty && data['currentWeightKg'] != null) {
             _weightCtrl.text = data['currentWeightKg'].toString();
           }
-          if (_notesCtrl.text.isEmpty && data['healthGoals'] != null) {
-            _notesCtrl.text = data['healthGoals'].toString();
+          if (_notesCtrl.text.isEmpty && data['clinicalNotes'] != null && data['clinicalNotes'].toString().isNotEmpty) {
+            _notesCtrl.text = data['clinicalNotes'].toString();
+          }
+          if (data['healthGoals'] != null) {
+            final raw = data['healthGoals'].toString();
+            final goals = raw.split(',').map((s) => s.trim()).toList();
+            for (final g in goals) {
+              if (DietaryHealthSelectionWidget.goalOptions.contains(g)) {
+                if (!_selectedGoals.contains(g)) _selectedGoals.add(g);
+              }
+            }
           }
           if (data['allergens'] is List && _selectedAllergies.isEmpty) {
             _selectedAllergies = (data['allergens'] as List)
@@ -257,42 +230,6 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
       age--;
     }
     return age >= 0 ? age : 0;
-  }
-
-  double? get _liveBmi {
-    final h = double.tryParse(_heightCtrl.text.trim());
-    final w = double.tryParse(_weightCtrl.text.trim());
-    if (h != null && w != null && h > 40 && w > 10) {
-      final hm = h / 100.0;
-      final val = w / (hm * hm);
-      return double.parse(val.toStringAsFixed(1));
-    }
-    return null;
-  }
-
-  String? get _liveBmiCategory {
-    final b = _liveBmi;
-    if (b == null) return null;
-    if (b < 18.5) return 'Underweight';
-    if (b < 25.0) return 'Normal weight';
-    if (b < 30.0) return 'Overweight';
-    return 'Obese';
-  }
-
-  Color get _liveBmiColor {
-    final cat = _liveBmiCategory;
-    switch (cat) {
-      case 'Underweight':
-        return Colors.blue;
-      case 'Normal weight':
-        return const Color(0xFF059669);
-      case 'Overweight':
-        return const Color(0xFFD97706);
-      case 'Obese':
-        return const Color(0xFFDC2626);
-      default:
-        return AppColors.slate500;
-    }
   }
 
   Future<void> _pickDateOfBirth() async {
@@ -356,20 +293,17 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
     final height = double.tryParse(_heightCtrl.text.trim());
     final weight = double.tryParse(_weightCtrl.text.trim());
 
-    final combinedGoals = [
-      ..._selectedGoals,
-      if (_notesCtrl.text.trim().isNotEmpty) _notesCtrl.text.trim(),
-    ].join(', ');
-
     final payload = {
       'name': _nameCtrl.text.trim(),
       'relationship': _selectedRelationship,
+      'isSelf': widget.memberToEdit?.isSelf == true || _selectedRelationship == 'SELF',
       'sex': _selectedGender,
       'dateOfBirth': _selectedDob!.toIso8601String().split('T').first,
       'avatarUrl': _avatarUrl,
-      'heightCm': ?height,
-      'currentWeightKg': ?weight,
-      if (combinedGoals.isNotEmpty) 'healthGoals': combinedGoals,
+      if (height != null) 'heightCm': height,
+      if (weight != null) 'currentWeightKg': weight,
+      if (_selectedGoals.isNotEmpty) 'healthGoals': _selectedGoals.join(', '),
+      if (_notesCtrl.text.trim().isNotEmpty) 'clinicalNotes': _notesCtrl.text.trim(),
       'dietaryPreferences': _selectedDietary,
       'allergies': _selectedAllergies.where((a) => a != 'None').toList(),
       'medicalConditions': _selectedConditions.where((c) => c != 'None').toList(),
@@ -493,15 +427,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
   @override
   Widget build(BuildContext context) {
     final hasAvatar = _avatarUrl != null && _avatarUrl!.trim().isNotEmpty;
-    final fullAvatarUrl = hasAvatar
-        ? (_avatarUrl!.startsWith('http')
-            ? _avatarUrl!
-            : '${AppConfig.apiBaseUrl.replaceAll(RegExp(r'/v1/?$'), '')}${_avatarUrl!.startsWith('/') ? '' : '/'}$_avatarUrl')
-        : null;
-
-    final liveBmi = _liveBmi;
-    final liveCat = _liveBmiCategory;
-    final bmiColor = _liveBmiColor;
+    final resolvedAvatarUrl = AppConfig.resolveMediaUrl(_avatarUrl);
 
     return Scaffold(
       backgroundColor: AppColors.slate50,
@@ -563,16 +489,15 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                                 shape: BoxShape.circle,
                                 color: AppColors.primarySubtle,
                                 border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 2),
-                                image: fullAvatarUrl != null
-                                    ? DecorationImage(
-                                        image: NetworkImage(fullAvatarUrl),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
                               ),
-                              child: fullAvatarUrl == null
-                                  ? const Icon(Icons.person, size: 48, color: AppColors.primary)
-                                  : null,
+                              clipBehavior: Clip.antiAlias,
+                              child: resolvedAvatarUrl != null && resolvedAvatarUrl.isNotEmpty
+                                  ? Image.network(
+                                      resolvedAvatarUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 48, color: AppColors.primary),
+                                    )
+                                  : const Icon(Icons.person, size: 48, color: AppColors.primary),
                             ),
                             Positioned(
                               bottom: 0,
@@ -663,22 +588,11 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Gender Dropdown
-                      DropdownButtonFormField<String>(
-                        value: _selectedGender,
-                        decoration: const InputDecoration(
-                          labelText: 'Gender / Sex',
-                          prefixIcon: Icon(Icons.transgender, size: 20),
-                        ),
-                        items: _genders.map((g) {
-                          return DropdownMenuItem<String>(
-                            value: g,
-                            child: Text(g),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _selectedGender = val);
-                        },
+                      // Gender Selection
+                      GenderSelectionWidget(
+                        selectedGender: _selectedGender,
+                        genders: _genders,
+                        onGenderChanged: (val) => setState(() => _selectedGender = val),
                       ),
                       const SizedBox(height: 16),
 
@@ -692,15 +606,43 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                             prefixIcon: const Icon(Icons.cake_outlined, size: 20),
                             suffixIcon: const Icon(Icons.calendar_today_rounded, size: 18),
                             errorText: _dobError,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
-                          child: Text(
-                            _selectedDob != null
-                                ? '${_selectedDob!.day.toString().padLeft(2, '0')}/${_selectedDob!.month.toString().padLeft(2, '0')}/${_selectedDob!.year} (${_computedAge ?? 0} years)'
-                                : 'Select date of birth',
-                            style: TextStyle(
-                              color: _selectedDob != null ? AppColors.slate900 : AppColors.slate400,
-                              fontSize: 14,
-                            ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _selectedDob != null
+                                      ? '${_selectedDob!.day.toString().padLeft(2, '0')}/${_selectedDob!.month.toString().padLeft(2, '0')}/${_selectedDob!.year}'
+                                      : 'Select date of birth',
+                                  style: TextStyle(
+                                    color: _selectedDob != null ? AppColors.slate900 : AppColors.slate400,
+                                    fontSize: 14,
+                                    fontWeight: _selectedDob != null ? FontWeight.w500 : FontWeight.normal,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_computedAge != null) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primarySubtle,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    '$_computedAge yrs',
+                                    style: const TextStyle(
+                                      color: AppColors.primaryDark,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ),
@@ -722,304 +664,36 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                 const SizedBox(height: 10),
 
                 EbicCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _heightCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'Height (cm)',
-                                hintText: 'e.g. 172',
-                                prefixIcon: Icon(Icons.height_rounded, size: 20),
-                                suffixText: 'cm',
-                              ),
-                              onChanged: (_) => setState(() {}),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _weightCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'Weight (kg)',
-                                hintText: 'e.g. 68.5',
-                                prefixIcon: Icon(Icons.scale_rounded, size: 20),
-                                suffixText: 'kg',
-                              ),
-                              onChanged: (_) => setState(() {}),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (liveBmi != null) ...[
-                        const SizedBox(height: 14),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: bmiColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: bmiColor.withOpacity(0.3)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.monitor_weight_outlined, size: 18, color: bmiColor),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Calculated BMI: $liveBmi',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: bmiColor),
-                                  ),
-                                ],
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: bmiColor,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  liveCat ?? '',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: HeightWeightInputWidget(
+                    initialHeightCm: double.tryParse(_heightCtrl.text.trim()) ?? 175.0,
+                    initialWeightKg: double.tryParse(_weightCtrl.text.trim()) ?? 68.0,
+                    onHeightChanged: (h) {
+                      _heightCtrl.text = h != null ? h.toStringAsFixed(1) : '';
+                      setState(() {});
+                    },
+                    onWeightChanged: (w) {
+                      _weightCtrl.text = w != null ? w.toStringAsFixed(1) : '';
+                      setState(() {});
+                    },
                   ),
                 ),
                 const SizedBox(height: 22),
 
-                // 4. Dietary Preferences Section
-                const Text(
-                  'DIETARY PREFERENCES',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.slate500,
-                    letterSpacing: 0.8,
-                  ),
+                // 4. Dietary, Allergies, Goals & Medical Conditions
+                DietaryHealthSelectionWidget(
+                  selectedDietary: _selectedDietary,
+                  onDietaryChanged: (val) => setState(() => _selectedDietary = val),
+                  selectedAllergies: _selectedAllergies,
+                  onAllergiesChanged: (val) => setState(() => _selectedAllergies = val),
+                  selectedGoals: _selectedGoals,
+                  onGoalsChanged: (val) => setState(() => _selectedGoals = val),
+                  selectedConditions: _selectedConditions,
+                  onConditionsChanged: (val) => setState(() => _selectedConditions = val),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 18),
 
-                EbicCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Select preferred meal types for personalized recipe matching:',
-                        style: TextStyle(fontSize: 12, color: AppColors.slate600),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _dietaryOptions.map((diet) {
-                          final isSelected = _selectedDietary.contains(diet);
-                          return FilterChip(
-                            label: Text(diet),
-                            selected: isSelected,
-                            selectedColor: AppColors.primarySubtle,
-                            checkmarkColor: AppColors.primaryDark,
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              color: isSelected ? AppColors.primaryDark : AppColors.slate700,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                            onSelected: (selected) {
-                              setState(() {
-                                if (selected) {
-                                  _selectedDietary.add(diet);
-                                } else {
-                                  _selectedDietary.remove(diet);
-                                }
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-
-                // 5. Food Allergies & Intolerances
-                const Text(
-                  'FOOD ALLERGIES & RESTRICTIONS',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.slate500,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                EbicCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Kitchen chef and clinical dietitians will strictly exclude these ingredients:',
-                        style: TextStyle(fontSize: 12, color: AppColors.slate600),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _allergyOptions.map((allergy) {
-                          final isSelected = _selectedAllergies.contains(allergy);
-                          return FilterChip(
-                            label: Text(allergy),
-                            selected: isSelected,
-                            selectedColor: allergy == 'None'
-                                ? AppColors.slate200
-                                : const Color(0xFFFEE2E2),
-                            checkmarkColor: allergy == 'None' ? AppColors.slate800 : AppColors.danger,
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              color: isSelected
-                                  ? (allergy == 'None' ? AppColors.slate900 : AppColors.danger)
-                                  : AppColors.slate700,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                            onSelected: (selected) {
-                              setState(() {
-                                if (allergy == 'None') {
-                                  if (selected) {
-                                    _selectedAllergies = ['None'];
-                                  } else {
-                                    _selectedAllergies.remove('None');
-                                  }
-                                } else {
-                                  _selectedAllergies.remove('None');
-                                  if (selected) {
-                                    _selectedAllergies.add(allergy);
-                                  } else {
-                                    _selectedAllergies.remove(allergy);
-                                  }
-                                }
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-
-                // 6. Health Goals & Medical Conditions
-                const Text(
-                  'HEALTH GOALS & CONDITIONS',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.slate500,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                EbicCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Primary Health Goals:',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.slate800),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _goalOptions.map((g) {
-                          final isSelected = _selectedGoals.contains(g);
-                          return FilterChip(
-                            label: Text(g),
-                            selected: isSelected,
-                            selectedColor: AppColors.primarySubtle,
-                            checkmarkColor: AppColors.primaryDark,
-                            labelStyle: TextStyle(
-                              fontSize: 11.5,
-                              color: isSelected ? AppColors.primaryDark : AppColors.slate700,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                            onSelected: (selected) {
-                              setState(() {
-                                if (selected) {
-                                  _selectedGoals.add(g);
-                                } else {
-                                  _selectedGoals.remove(g);
-                                }
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Known Medical Conditions:',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.slate800),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _conditionOptions.map((c) {
-                          final isSelected = _selectedConditions.contains(c);
-                          return FilterChip(
-                            label: Text(c),
-                            selected: isSelected,
-                            selectedColor: const Color(0xFFFEF3C7),
-                            checkmarkColor: const Color(0xFFB45309),
-                            labelStyle: TextStyle(
-                              fontSize: 11.5,
-                              color: isSelected ? const Color(0xFFB45309) : AppColors.slate700,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                            onSelected: (selected) {
-                              setState(() {
-                                if (c == 'None') {
-                                  if (selected) {
-                                    _selectedConditions = ['None'];
-                                  } else {
-                                    _selectedConditions.remove('None');
-                                  }
-                                } else {
-                                  _selectedConditions.remove('None');
-                                  if (selected) {
-                                    _selectedConditions.add(c);
-                                  } else {
-                                    _selectedConditions.remove(c);
-                                  }
-                                }
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _notesCtrl,
-                        maxLines: 2,
-                        decoration: const InputDecoration(
-                          labelText: 'Additional Dietitian Notes / Details',
-                          hintText: 'e.g. Needs low-sodium meals, vegetarian on Tuesdays',
-                          prefixIcon: Icon(Icons.notes_rounded, size: 20),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // 5. Clinical Notes
+                ClinicalNotesInputWidget(controller: _notesCtrl),
                 const SizedBox(height: 32),
 
                 // Submit Button

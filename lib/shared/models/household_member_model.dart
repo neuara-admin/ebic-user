@@ -12,6 +12,7 @@ class HouseholdMemberModel {
   final double? heightCm;
   final double? weightKg;
   final String? healthGoals;
+  final String? clinicalNotes;
   final List<String> dietaryPreferences;
   final List<String> allergies;
   final List<String> medicalConditions;
@@ -28,6 +29,7 @@ class HouseholdMemberModel {
     this.heightCm,
     this.weightKg,
     this.healthGoals,
+    this.clinicalNotes,
     this.dietaryPreferences = const [],
     this.allergies = const [],
     this.medicalConditions = const [],
@@ -71,6 +73,34 @@ class HouseholdMemberModel {
     return 'Obese';
   }
 
+  String get formattedDob {
+    if (dateOfBirth == null) return 'Not provided';
+    try {
+      final dob = DateTime.parse(dateOfBirth!);
+      final d = dob.day.toString().padLeft(2, '0');
+      final m = dob.month.toString().padLeft(2, '0');
+      return '$d/$m/${dob.year}';
+    } catch (_) {
+      return dateOfBirth!;
+    }
+  }
+
+  String get heightDisplay {
+    if (heightCm == null) return 'Not set';
+    final totalInches = (heightCm! / 2.54).round();
+    final ft = totalInches ~/ 12;
+    final inch = totalInches % 12;
+    return "$ft'$inch\" (${heightCm!.round()} cm)";
+  }
+
+  String get weightDisplay {
+    if (weightKg == null) return 'Not set';
+    final lbs = (weightKg! * 2.20462).round();
+    return '${weightKg!.toStringAsFixed(1)} kg ($lbs lbs)';
+  }
+
+  String get bmiFormatted => bmi != null ? bmi!.toStringAsFixed(1) : '--';
+
   String get displayRelationship {
     switch (relationship.toUpperCase()) {
       case 'SELF':
@@ -107,6 +137,8 @@ class HouseholdMemberModel {
     List<String> allergs = [];
     List<String> conditions = [];
 
+    String? clinicalNotes;
+
     if (json['healthProfile'] is Map<String, dynamic>) {
       final hp = json['healthProfile'] as Map<String, dynamic>;
       if (hp['heightCm'] != null) {
@@ -116,6 +148,7 @@ class HouseholdMemberModel {
         weight = double.tryParse(hp['currentWeightKg'].toString());
       }
       goals = hp['healthGoals']?.toString();
+      clinicalNotes = hp['clinicalNotes']?.toString();
 
       if (hp['allergens'] is List) {
         allergs = (hp['allergens'] as List)
@@ -140,11 +173,18 @@ class HouseholdMemberModel {
             .where((s) => s.isNotEmpty)
             .toList();
       }
+
+      if (hp['medicalConditions'] is List) {
+        conditions = (hp['medicalConditions'] as List).map((e) => e.toString()).toList();
+      }
     }
 
     // Direct fallback fields
     if (height == null && json['heightCm'] != null) {
       height = double.tryParse(json['heightCm'].toString());
+    }
+    if (weight == null && json['currentWeightKg'] != null) {
+      weight = double.tryParse(json['currentWeightKg'].toString());
     }
     if (weight == null && json['weightKg'] != null) {
       weight = double.tryParse(json['weightKg'].toString());
@@ -152,14 +192,38 @@ class HouseholdMemberModel {
     if (goals == null && json['healthGoals'] != null) {
       goals = json['healthGoals']?.toString();
     }
+    if (clinicalNotes == null && json['clinicalNotes'] != null) {
+      clinicalNotes = json['clinicalNotes']?.toString();
+    }
     if (diets.isEmpty && json['dietaryPreferences'] is List) {
       diets = (json['dietaryPreferences'] as List).map((e) => e.toString()).toList();
     }
     if (allergs.isEmpty && json['allergies'] is List) {
       allergs = (json['allergies'] as List).map((e) => e.toString()).toList();
     }
-    if (json['medicalConditions'] is List) {
+    if (conditions.isEmpty && json['medicalConditions'] is List) {
       conditions = (json['medicalConditions'] as List).map((e) => e.toString()).toList();
+    }
+
+    // Parse 'Notes: ...' embedded inside healthGoals if clinicalNotes is still empty
+    if ((clinicalNotes == null || clinicalNotes.isEmpty) && goals != null && goals.contains('Notes:')) {
+      final match = RegExp(r'Notes:\s*([^|]+)', caseSensitive: false).firstMatch(goals);
+      if (match != null) {
+        clinicalNotes = match.group(1)!.trim();
+        goals = goals.replaceAll(RegExp(r'Notes:\s*[^|]+(\|?\s*)?', caseSensitive: false), '').trim();
+        if (goals.isEmpty) goals = null;
+      }
+    }
+
+    // Parse 'Conditions: ...' embedded inside healthGoals if conditions list is still empty
+    if (conditions.isEmpty && goals != null && goals.contains('Conditions:')) {
+      final match = RegExp(r'Conditions:\s*([^|]+)', caseSensitive: false).firstMatch(goals);
+      if (match != null) {
+        final parsed = match.group(1)!.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty && s != 'None');
+        conditions.addAll(parsed);
+        goals = goals.replaceAll(RegExp(r'Conditions:\s*[^|]+(\|?\s*)?', caseSensitive: false), '').trim();
+        if (goals.isEmpty) goals = null;
+      }
     }
 
     return HouseholdMemberModel(
@@ -174,6 +238,7 @@ class HouseholdMemberModel {
       heightCm: height,
       weightKg: weight,
       healthGoals: goals,
+      clinicalNotes: clinicalNotes,
       dietaryPreferences: diets,
       allergies: allergs,
       medicalConditions: conditions,
@@ -193,6 +258,7 @@ class HouseholdMemberModel {
       'heightCm': heightCm,
       'weightKg': weightKg,
       'healthGoals': healthGoals,
+      'clinicalNotes': clinicalNotes,
       'dietaryPreferences': dietaryPreferences,
       'allergies': allergies,
       'medicalConditions': medicalConditions,

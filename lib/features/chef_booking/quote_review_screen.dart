@@ -72,7 +72,28 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
       final estimatedCookMinutes = _cookingTimeData?['totalMinutes'] ?? 35;
 
-      // 2. Build Authoritative Dynamic Quote (Section 35 & 36)
+      // 2. Fetch authoritative Health Pass Quote Context (Section 50 & 54)
+      Map<String, dynamic>? hpQuoteContext;
+      final memberId = widget.bookingConfig['memberId'] as String?;
+      final serviceDate = (widget.bookingConfig['serviceDate'] as String?) ??
+          DateTime.now().toIso8601String().split('T')[0];
+      final mealType = (widget.bookingConfig['bookingOption'] as String?) ?? 'L';
+
+      if (memberId != null) {
+        final hpCtxRes = await _api.get<Map<String, dynamic>>(
+          ApiEndpoints.healthPassChefQuoteContext,
+          queryParameters: {
+            'member_id': memberId,
+            'service_date': serviceDate,
+            'meal_type': mealType,
+          },
+        );
+        if (hpCtxRes.success && hpCtxRes.data != null) {
+          hpQuoteContext = hpCtxRes.data;
+        }
+      }
+
+      // 3. Build Authoritative Dynamic Quote (Section 35 & 36, Module 12)
       final isAssigned = widget.bookingConfig['mode'] == 'ASSIGNED_MEAL';
       final quoteItems = dishes.map((d) {
         return {
@@ -97,6 +118,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         'items': quoteItems,
         'couponCode': _appliedCoupon,
         'currency': 'INR',
+        'memberId': memberId,
+        'serviceDate': serviceDate,
+        'healthPassId': hpQuoteContext?['health_pass_id'],
+        'entitlementId': hpQuoteContext?['entitlement_id'],
       };
 
       final quoteRes = await _api.post<Map<String, dynamic>>(
@@ -104,15 +129,43 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         body: quotePayload,
       );
 
+      final hasFreeVisitEntitlement = hpQuoteContext?['entitlement_available'] == true ||
+          (isAssigned && widget.bookingConfig['hpEligibility']?['entitlement_available'] == true);
+
       if (quoteRes.success && quoteRes.data != null) {
-        _quote = QuoteModel.fromJson(quoteRes.data!);
+        final rawQuote = quoteRes.data!;
+        // Ensure Health Pass benefit from quote context is represented
+        final hpBenefit = (rawQuote['healthPassBenefit'] as num?)?.toDouble() ??
+            (hasFreeVisitEntitlement ? 249.0 : 0.0);
+        final chefCharge = (rawQuote['chefServiceCharge'] as num?)?.toDouble() ?? 249.0;
+        final itemCharge = (rawQuote['itemCharges'] as num?)?.toDouble() ?? 0.0;
+        final disc = (rawQuote['discount'] as num?)?.toDouble() ?? _couponDiscount;
+        final promo = (rawQuote['promotion'] as num?)?.toDouble() ?? 0.0;
+        final subtotal = (rawQuote['subtotal'] as num?)?.toDouble() ?? (chefCharge + itemCharge);
+        final taxable = (subtotal - hpBenefit - disc - promo).clamp(0.0, 999999.0);
+        final tax = (rawQuote['tax'] as num?)?.toDouble() ?? (taxable * 0.05);
+        final total = (rawQuote['total'] as num?)?.toDouble() ?? (taxable + tax);
+
+        _quote = QuoteModel(
+          quoteId: rawQuote['quoteId']?.toString() ?? 'quote_${DateTime.now().millisecondsSinceEpoch}',
+          cookingTimeMinutes: estimatedCookMinutes,
+          chefServiceCharge: chefCharge,
+          itemCharges: itemCharge,
+          healthPassBenefit: hpBenefit,
+          discount: disc,
+          promotion: promo,
+          tax: tax,
+          subtotal: subtotal,
+          total: total,
+          currency: 'INR',
+        );
       } else {
-        // Build commercial quote response adhering to Section 36
+        // Build commercial quote response adhering to Section 29 & 36
         final dishCharge = isAssigned ? 0.0 : (dishes.length * 120.0);
         const chefFee = 249.0;
         final subtotal = chefFee + dishCharge;
         final discount = _couponDiscount;
-        final hpBenefit = isAssigned ? 249.0 : 0.0;
+        final hpBenefit = hasFreeVisitEntitlement ? chefFee : 0.0;
         final taxable = (subtotal - discount - hpBenefit).clamp(0.0, 99999.0);
         final gst = taxable * 0.05; // 5% GST
         final total = taxable + gst;

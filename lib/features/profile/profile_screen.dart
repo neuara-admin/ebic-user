@@ -7,6 +7,8 @@ import '../../core/context/member_context.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/storage/token_storage.dart';
 import '../../core/theme/app_colors.dart';
+import '../../shared/models/household_member_model.dart';
+import '../../shared/widgets/bmi_health_widget.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/member_switcher_widget.dart';
 import 'widgets/avatar_picker_sheet.dart';
@@ -104,6 +106,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isEmailVerified = user?['emailVerified'] == true;
     final isPhoneVerified = user?['phoneVerified'] == true;
 
+    HouseholdMemberModel? selfMember;
+    for (final m in MemberContext().members) {
+      if (m.isSelf || m.relationship.toUpperCase() == 'SELF') {
+        selfMember = m;
+        break;
+      }
+    }
+    selfMember ??= MemberContext().members.isNotEmpty ? MemberContext().members.first : null;
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
@@ -160,23 +171,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     decoration: BoxDecoration(
                                       gradient: AppColors.primaryGradient,
                                       shape: BoxShape.circle,
-                                      image: (avatarUrl != null && avatarUrl.isNotEmpty)
-                                          ? DecorationImage(
-                                              image: NetworkImage(AppConfig.resolveMediaUrl(avatarUrl)!),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : null,
                                     ),
-                                    child: (avatarUrl == null || avatarUrl.isEmpty)
-                                        ? Center(
+                                    clipBehavior: Clip.antiAlias,
+                                    child: (avatarUrl != null && avatarUrl.isNotEmpty)
+                                        ? Image.network(
+                                            AppConfig.resolveMediaUrl(avatarUrl) ?? avatarUrl,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Center(
+                                              child: Text(
+                                                hasName
+                                                    ? name[0].toUpperCase()
+                                                    : (hasPhone ? 'C' : 'U'),
+                                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          )
+                                        : Center(
                                             child: Text(
                                               hasName
                                                   ? name[0].toUpperCase()
                                                   : (hasPhone ? 'C' : 'U'),
                                               style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                                             ),
-                                          )
-                                        : null,
+                                          ),
                                   ),
                                   Positioned(
                                     bottom: 0,
@@ -364,6 +381,226 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Health Vitals, BMI & Dietary Profile Section
+                EbicCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primarySubtle,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.favorite_rounded, size: 16, color: AppColors.primary),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'HEALTH VITALS & BMI',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.6,
+                                  color: AppColors.slate700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.primary),
+                            label: const Text(
+                              'Update Vitals',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            ),
+                            onPressed: () async {
+                              final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
+                              if (updated == true && mounted) {
+                                await _refreshProfile();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Measurements row: Height, Weight, DOB
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.slate800 : AppColors.slate50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Height', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    selfMember?.heightDisplay ?? 'Not set',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(width: 1, height: 28, color: AppColors.slate200),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Weight', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      selfMember?.weightDisplay ?? 'Not set',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Container(width: 1, height: 28, color: AppColors.slate200),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('DOB', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      selfMember?.dateOfBirth != null
+                                          ? '${selfMember!.formattedDob} (${selfMember.age}y)'
+                                          : 'Not set',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // BMI Visual Card / Gauge
+                      if (selfMember?.bmi != null || (selfMember?.heightCm != null && selfMember?.weightKg != null))
+                        BmiHealthWidget(
+                          bmi: selfMember?.bmi,
+                          heightCm: selfMember?.heightCm,
+                          weightKg: selfMember?.weightKg,
+                        )
+                      else
+                        InkWell(
+                          onTap: () async {
+                            final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
+                            if (updated == true && mounted) {
+                              await _refreshProfile();
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.primarySubtle.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.add_chart_rounded, size: 18, color: AppColors.primary),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Add height, weight and DOB to calculate BMI and receive personalized nutrition recommendations.',
+                                    style: TextStyle(fontSize: 12, color: AppColors.slate700),
+                                  ),
+                                ),
+                                Icon(Icons.chevron_right, size: 18, color: AppColors.primary),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // Dietary & Health Conditions Tags
+                      if (selfMember != null &&
+                          (selfMember.dietaryPreferences.isNotEmpty || selfMember.medicalConditions.isNotEmpty)) ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            ...selfMember.dietaryPreferences.map((d) => Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.emerald50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: AppColors.emerald700.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.restaurant_menu, size: 11, color: AppColors.emerald700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        d,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.emerald700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                            ...selfMember.medicalConditions.map((c) => Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFFD97706).withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.healing, size: 11, color: Color(0xFFB45309)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        c,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFB45309),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),

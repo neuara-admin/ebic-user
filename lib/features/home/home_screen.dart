@@ -690,6 +690,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 radius: 22,
                 backgroundColor: AppColors.primary.withOpacity(0.12),
                 backgroundImage: consultation.dietitianPhotoUrl != null ? NetworkImage(consultation.dietitianPhotoUrl!) : null,
+                onBackgroundImageError: consultation.dietitianPhotoUrl != null ? (_, __) {} : null,
                 child: consultation.dietitianPhotoUrl == null
                     ? const Icon(Icons.person, color: AppColors.primary, size: 22)
                     : null,

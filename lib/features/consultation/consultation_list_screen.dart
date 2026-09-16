@@ -458,6 +458,7 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
                       radius: 24,
                       backgroundColor: AppColors.primary.withOpacity(0.12),
                       backgroundImage: c.dietitianPhotoUrl != null ? NetworkImage(c.dietitianPhotoUrl!) : null,
+                      onBackgroundImageError: c.dietitianPhotoUrl != null ? (_, __) {} : null,
                       child: c.dietitianPhotoUrl == null
                           ? const Icon(Icons.person, color: AppColors.primary, size: 24)
                           : null,

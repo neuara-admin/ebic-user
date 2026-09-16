@@ -28,6 +28,11 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
   String _selectedOccasion = 'LUNCH'; // BREAKFAST, LUNCH, DINNER
   Map<String, dynamic>? _assignedDietPlan;
 
+  // Module 12: Health Pass Chef Booking Context & State
+  Map<String, dynamic>? _hpEligibility;
+  Map<String, dynamic>? _hpEntitlements;
+  bool _isHpChecking = false;
+
   @override
   void initState() {
     super.initState();
@@ -63,9 +68,12 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
         }
       }
 
-      // 3. Today's diet plan
+      // 3. Today's diet plan & Health Pass Chef Booking verification
       if (_selectedMember != null) {
-        await _fetchDietPlanForMember(_selectedMember!.id);
+        await Future.wait([
+          _fetchDietPlanForMember(_selectedMember!.id),
+          _checkHealthPassEligibility(_selectedMember!.id),
+        ]);
       }
     } catch (_) {}
 
@@ -81,6 +89,51 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
     );
     if (res.success && res.data != null) {
       _assignedDietPlan = res.data;
+    } else {
+      _assignedDietPlan = null;
+    }
+  }
+
+  Future<void> _checkHealthPassEligibility(String memberId) async {
+    setState(() => _isHpChecking = true);
+    final todayStr = DateTime.now().toIso8601String().split('T')[0];
+    final mealCode = _selectedOccasion == 'BREAKFAST'
+        ? 'B'
+        : _selectedOccasion == 'LUNCH'
+            ? 'L'
+            : 'D';
+
+    try {
+      final eligRes = await _api.post<Map<String, dynamic>>(
+        ApiEndpoints.healthPassChefEligibility,
+        body: {
+          'member_id': memberId,
+          'service_date': todayStr,
+          'meal_type': mealCode,
+        },
+      );
+      if (eligRes.success && eligRes.data != null) {
+        _hpEligibility = eligRes.data;
+      } else {
+        _hpEligibility = null;
+      }
+
+      final entRes = await _api.get<Map<String, dynamic>>(
+        ApiEndpoints.healthPassChefEntitlements,
+        queryParameters: {'member_id': memberId},
+      );
+      if (entRes.success && entRes.data != null) {
+        _hpEntitlements = entRes.data;
+      } else {
+        _hpEntitlements = null;
+      }
+    } catch (_) {
+      _hpEligibility = null;
+      _hpEntitlements = null;
+    }
+
+    if (mounted) {
+      setState(() => _isHpChecking = false);
     }
   }
 
@@ -92,7 +145,13 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
       return;
     }
 
-    // Pass configuration to cooking time & quote calculation
+    final mealCode = _selectedOccasion == 'BREAKFAST'
+        ? 'B'
+        : _selectedOccasion == 'LUNCH'
+            ? 'L'
+            : 'D';
+
+    // Pass configuration to cooking time & quote calculation (Section 54)
     Navigator.pushNamed(
       context,
       AppRoutes.bookChefQuote,
@@ -103,11 +162,10 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
         'addressId': _selectedAddress?.id,
         'addressLine': _selectedAddress?.line1,
         'occasion': _selectedOccasion,
-        'bookingOption': _selectedOccasion == 'BREAKFAST'
-            ? 'B'
-            : _selectedOccasion == 'LUNCH'
-                ? 'L'
-                : 'D',
+        'bookingOption': mealCode,
+        'serviceDate': DateTime.now().toIso8601String().split('T')[0],
+        'hpEligibility': _hpEligibility,
+        'hpEntitlements': _hpEntitlements,
         'dishes': [
           {'dishId': 'herb-chicken-dish-id', 'name': 'Herb Roasted Chicken', 'servings': 1, 'baseCookTimeMin': 25},
           {'dishId': 'brown-rice-dish-id', 'name': 'Brown Basmati Rice', 'servings': 1, 'baseCookTimeMin': 15},
@@ -208,6 +266,7 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
               if (selected) {
                 setState(() => _selectedMember = member);
                 _fetchDietPlanForMember(member.id);
+                _checkHealthPassEligibility(member.id);
               }
             },
           );
@@ -227,7 +286,12 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: () => setState(() => _selectedOccasion = occ),
+              onTap: () {
+                setState(() => _selectedOccasion = occ);
+                if (_selectedMember != null) {
+                  _checkHealthPassEligibility(_selectedMember!.id);
+                }
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
@@ -257,6 +321,54 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
   }
 
   Widget _buildAssignedMealCard() {
+    // Section 64 Empty State: No assigned meal
+    if (_assignedDietPlan == null) {
+      return EbicCard(
+        border: Border.all(color: AppColors.slate200),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Icon(Icons.restaurant_menu_outlined, size: 44, color: AppColors.slate400),
+              const SizedBox(height: 12),
+              const Text(
+                'No meal has been assigned for this meal/date.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slate800),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'You can choose items directly from our healthy kitchen catalogue.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: AppColors.slate500),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
+                },
+                icon: const Icon(Icons.menu_book_rounded, size: 16),
+                label: const Text('Browse Meals From Catalogue'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Health Pass benefit entitlement banner calculation
+    final isEligible = _hpEligibility?['eligible'] == true;
+    final hasEntitlement = _hpEligibility?['entitlement_available'] == true;
+    final availableVisits = (_hpEntitlements?['entitlements'] as List<dynamic>?)
+            ?.firstWhere((e) => e['type'] == 'CHEF_VISIT', orElse: () => null)?['available'] ??
+        (_hpEligibility?['entitlement_available'] == true ? 1 : 0);
+
     return EbicCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -281,25 +393,86 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
           const SizedBox(height: 10),
           _buildDishItem('Steamed Garlic Broccoli', '100g • High Fibre', '10 mins'),
           const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primarySubtle,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.verified_outlined, color: AppColors.primary, size: 16),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Health Pass benefit eligible: 1 Chef Visit free allowance available.',
-                    style: TextStyle(fontSize: 12, color: AppColors.primaryDark, fontWeight: FontWeight.w500),
+
+          // Section 63 & 64: Benefit and Empty State Indicators
+          if (_isHpChecking)
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.slate100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 10),
+                  Text('Checking Health Pass entitlement...', style: TextStyle(fontSize: 12, color: AppColors.slate600)),
+                ],
+              ),
+            )
+          else if (isEligible && hasEntitlement)
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primarySubtle,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_outlined, color: AppColors.primary, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Health Pass benefit eligible: $availableVisits Chef Visit${availableVisits == 1 ? "" : "s"} remaining this period.',
+                      style: const TextStyle(fontSize: 12, color: AppColors.primaryDark, fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            )
+          else if (isEligible && !hasEntitlement)
+            // Section 64 Empty State: No entitlement
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.amber, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your included chef visits are currently unavailable. Paid booking available.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF78350F), fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            // Section 64 Empty State: Health Pass expired / inactive
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.slate100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.card_membership_outlined, color: AppColors.slate500, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your Health Pass is not active for this service date. Standard visit rates apply.',
+                      style: TextStyle(fontSize: 12, color: AppColors.slate600),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );

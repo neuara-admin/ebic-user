@@ -35,17 +35,27 @@ class AppConfig {
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
 
-  /// Resolves media/avatar URLs containing localhost or 127.0.0.1 to the active API host
+  /// Resolves media/avatar URLs containing localhost or 127.0.0.1 to the active API host & port,
+  /// and handles relative paths cleanly.
   static String? resolveMediaUrl(String? url) {
     if (url == null || url.trim().isEmpty) return null;
     final trimmed = url.trim();
-    if (!trimmed.contains('localhost') && !trimmed.contains('127.0.0.1')) {
-      return trimmed;
-    }
     try {
       final baseUri = Uri.parse(apiBaseUrl);
+      if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+        final cleanBase = apiBaseUrl.replaceAll(RegExp(r'/v1/?$'), '');
+        final slash = trimmed.startsWith('/') ? '' : '/';
+        return '$cleanBase$slash$trimmed';
+      }
       final mediaUri = Uri.parse(trimmed);
-      return mediaUri.replace(host: baseUri.host).toString();
+      if (mediaUri.host == 'localhost' || mediaUri.host == '127.0.0.1') {
+        return mediaUri.replace(
+          scheme: baseUri.scheme.isNotEmpty ? baseUri.scheme : 'http',
+          host: baseUri.host,
+          port: baseUri.hasPort ? baseUri.port : (mediaUri.hasPort ? mediaUri.port : 3000),
+        ).toString();
+      }
+      return trimmed;
     } catch (_) {
       return trimmed;
     }
