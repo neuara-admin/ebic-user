@@ -25,6 +25,7 @@ import '../../features/chef_booking/assigned_meal_screen.dart';
 import '../../features/chef_booking/quote_review_screen.dart';
 import '../../features/chef_booking/payment_checkout_screen.dart';
 import '../../features/chef_booking/booking_confirmation_screen.dart';
+import '../../features/chef_booking/booking_failure_screen.dart';
 import '../../features/chef_booking/chef_tracking_screen.dart';
 import '../../features/catalogue/catalogue_screen.dart';
 
@@ -46,7 +47,9 @@ import '../../features/health_pass/history_screen.dart';
 import '../../features/health_pass/purchase_pass_screen.dart';
 
 // Dietitian & Consultations
+import '../../shared/models/dietitian_model.dart';
 import '../../features/dietitian/dietitian_list_screen.dart';
+import '../../features/dietitian/dietitian_chat_screen.dart';
 import '../../features/consultation/book_consultation_screen.dart';
 import '../../features/consultation/consultation_review_screen.dart';
 import '../../features/consultation/consultation_list_screen.dart';
@@ -84,11 +87,18 @@ import '../../features/profile/promotions_screen.dart';
 import '../../features/profile/support_screen.dart';
 import '../../features/profile/notifications_screen.dart';
 import '../../features/profile/privacy_screen.dart';
+import '../../features/profile/security_screen.dart';
+import '../../features/referrals/presentation/referral_home_screen.dart';
+import '../../features/referrals/presentation/referral_history_screen.dart';
+import '../../features/system/app_update_screen.dart';
+import '../../features/system/not_found_screen.dart';
 
 // Shared models
 import '../../shared/models/consultation_model.dart';
+import '../../shared/models/health_pass_model.dart';
 import '../../shared/models/household_member_model.dart';
 import '../../shared/models/address_model.dart';
+import '../../shared/models/order_model.dart';
 
 class AppRouter {
   /// Section 62 — Centralized Route Guard public routes
@@ -102,6 +112,8 @@ class AppRouter {
     AppRoutes.forgotPassword,
     AppRoutes.resetPassword,
     AppRoutes.accountRecovery,
+    AppRoutes.appUpdate,
+    AppRoutes.notFound,
   };
 
   /// Saved route and args for session-aware return navigation (Section 63)
@@ -196,6 +208,9 @@ class AppRouter {
       case AppRoutes.bookChefConfirmation:
         final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
         return MaterialPageRoute(builder: (_) => BookingConfirmationScreen(confirmationData: data));
+      case AppRoutes.bookChefFailure:
+        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        return MaterialPageRoute(builder: (_) => BookingFailureScreen(failureData: data));
       case AppRoutes.chefTracking:
         final orderId = (args is Map ? args['orderId'] : args)?.toString() ?? '';
         return MaterialPageRoute(builder: (_) => ChefTrackingScreen(orderId: orderId));
@@ -204,7 +219,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => PreparationChecklistScreen(orderId: orderId));
       case AppRoutes.orderDetail:
         final orderId = (args is Map ? args['orderId'] : args)?.toString() ?? '';
-        return MaterialPageRoute(builder: (_) => OrderDetailScreen(orderId: orderId));
+        final initialOrder = (args is Map && args['order'] is OrderModel) ? args['order'] as OrderModel : null;
+        return MaterialPageRoute(builder: (_) => OrderDetailScreen(orderId: orderId, initialOrder: initialOrder));
 
       // Health Pass (Module 4 Sections 33–49)
       case AppRoutes.healthPass:
@@ -243,6 +259,29 @@ class AppRouter {
       // Dietitian & Consultations
       case AppRoutes.dietitian:
         return MaterialPageRoute(builder: (_) => const DietitianListScreen());
+      case AppRoutes.dietitianChat:
+        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        DietitianModel dietitian;
+        if (data['dietitian'] is DietitianModel) {
+          dietitian = data['dietitian'] as DietitianModel;
+        } else if (data['dietitian'] is Map<String, dynamic>) {
+          dietitian = DietitianModel.fromJson(data['dietitian'] as Map<String, dynamic>);
+        } else {
+          dietitian = DietitianModel(
+            id: data['dietitianId']?.toString() ?? 'dietitian_primary',
+            name: data['dietitianName']?.toString() ?? 'Clinical Dietitian',
+            qualification: data['dietitianQualification']?.toString() ?? 'Clinical Nutritionist (RD)',
+          );
+        }
+        final activePass = data['activePass'] as ActiveHealthPassModel?;
+        final memberId = data['memberId'] as String?;
+        return MaterialPageRoute(
+          builder: (_) => DietitianChatScreen(
+            dietitian: dietitian,
+            activePass: activePass,
+            memberId: memberId,
+          ),
+        );
       case AppRoutes.consultationBook:
         final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
         return MaterialPageRoute(builder: (_) => BookConsultationScreen(arguments: data));
@@ -370,7 +409,8 @@ class AppRouter {
         final member = args is HouseholdMemberModel ? args : null;
         return MaterialPageRoute(builder: (_) => MemberFormScreen(memberToEdit: member));
       case AppRoutes.addresses:
-        return MaterialPageRoute(builder: (_) => const AddressesScreen());
+        final isPicker = args is bool ? args : (args is Map ? args['isPicker'] == true : false);
+        return MaterialPageRoute(builder: (_) => AddressesScreen(isPicker: isPicker));
       case AppRoutes.addressForm:
         final address = args is AddressModel ? args : null;
         return MaterialPageRoute(builder: (_) => AddressFormScreen(addressToEdit: address));
@@ -380,17 +420,35 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const WalletCreditsScreen());
       case AppRoutes.promotions:
         return MaterialPageRoute(builder: (_) => const PromotionsScreen());
+      case AppRoutes.referrals:
+        return MaterialPageRoute(builder: (_) => const ReferralHomeScreen());
+      case AppRoutes.referralHistory:
+        return MaterialPageRoute(builder: (_) => const ReferralHistoryScreen());
       case AppRoutes.support:
         return MaterialPageRoute(builder: (_) => const SupportScreen());
       case AppRoutes.notifications:
         return MaterialPageRoute(builder: (_) => const NotificationsScreen());
       case AppRoutes.privacy:
         return MaterialPageRoute(builder: (_) => const PrivacyScreen());
+      case AppRoutes.security:
+        return MaterialPageRoute(builder: (_) => const SecurityScreen());
+      case AppRoutes.appUpdate:
+        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => AppUpdateScreen(
+            isForced: data['isForced'] == true,
+            latestVersion: data['latestVersion']?.toString(),
+            updateUrl: data['updateUrl']?.toString(),
+          ),
+        );
+      case AppRoutes.notFound:
+        final message = args is String ? args : null;
+        return MaterialPageRoute(builder: (_) => NotFoundScreen(message: message));
 
       default:
         return MaterialPageRoute(
-          builder: (_) => Scaffold(
-            body: Center(child: Text('Route ${settings.name} not found')),
+          builder: (_) => NotFoundScreen(
+            message: 'Route "${settings.name}" could not be found.',
           ),
         );
     }

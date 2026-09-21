@@ -52,16 +52,23 @@ class _HealthMetricHistoryScreenState extends State<HealthMetricHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? AppColors.slate900 : Colors.white;
+    final cardBorder = isDark ? AppColors.slate800 : AppColors.slate200;
+    final textPrimary = isDark ? Colors.white : AppColors.slate900;
+    final textSecondary = isDark ? AppColors.slate300 : AppColors.slate700;
+    final textMuted = isDark ? AppColors.slate400 : AppColors.slate500;
+
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(
-        title: Text('${widget.title} History'),
-        backgroundColor: Colors.white,
+        title: Text('${widget.title} History', style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
         elevation: 0,
-        foregroundColor: AppColors.slate900,
+        foregroundColor: textPrimary,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_chart_rounded, color: AppColors.primary),
+            icon: Icon(Icons.add_chart_rounded, color: isDark ? AppColors.primaryLight : AppColors.primary),
             onPressed: () async {
               final res = await Navigator.push(
                 context,
@@ -85,16 +92,16 @@ class _HealthMetricHistoryScreenState extends State<HealthMetricHistoryScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.timeline_rounded, size: 48, color: AppColors.slate400),
+                      Icon(Icons.timeline_rounded, size: 48, color: textMuted),
                       const SizedBox(height: 12),
                       Text(
                         'No ${widget.title} Entries',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.slate700),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textPrimary),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         'Tap + above to add your first recorded measurement.',
-                        style: TextStyle(fontSize: 12, color: AppColors.slate500),
+                        style: TextStyle(fontSize: 12, color: textMuted),
                       ),
                     ],
                   ),
@@ -112,12 +119,12 @@ class _HealthMetricHistoryScreenState extends State<HealthMetricHistoryScreen> {
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: cardBg,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.slate200),
+                        border: Border.all(color: cardBorder),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.slate900.withOpacity(0.02),
+                            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
@@ -128,10 +135,10 @@ class _HealthMetricHistoryScreenState extends State<HealthMetricHistoryScreen> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: AppColors.primarySubtle,
+                              color: isDark ? AppColors.primary.withOpacity(0.2) : AppColors.primarySubtle,
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.fitness_center_rounded, color: AppColors.primary, size: 20),
+                            child: Icon(Icons.fitness_center_rounded, color: isDark ? AppColors.primaryLight : AppColors.primary, size: 20),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -140,12 +147,16 @@ class _HealthMetricHistoryScreenState extends State<HealthMetricHistoryScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    Text(
-                                      '${item.value} ${item.unit}',
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.slate900,
+                                    Flexible(
+                                      child: Text(
+                                        '${item.value} ${item.unit}',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                          color: textPrimary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -155,13 +166,13 @@ class _HealthMetricHistoryScreenState extends State<HealthMetricHistoryScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   '$dateStr  •  $timeStr',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                                  style: TextStyle(fontSize: 12, color: textMuted),
                                 ),
                                 if (item.notes != null && item.notes!.isNotEmpty) ...[
                                   const SizedBox(height: 4),
                                   Text(
                                     item.notes!,
-                                    style: const TextStyle(fontSize: 11, color: AppColors.slate600, fontStyle: FontStyle.italic),
+                                    style: TextStyle(fontSize: 11, color: textSecondary, fontStyle: FontStyle.italic),
                                   ),
                                 ],
                               ],

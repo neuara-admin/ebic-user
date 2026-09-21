@@ -533,21 +533,27 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.speed_rounded, size: 14, color: AppColors.primary),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'BMI:',
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.slate600),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${m.bmiFormatted} kg/m²',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.slate900),
-                          ),
-                        ],
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.speed_rounded, size: 14, color: AppColors.primary),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'BMI:',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.slate600),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                '${m.bmiFormatted} kg/m²',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.slate900),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       BmiHealthWidget.badge(bmi: m.bmi),
                     ],
                   ),

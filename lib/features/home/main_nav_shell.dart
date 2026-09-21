@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import 'home_screen.dart';
-import '../chef_booking/booking_type_screen.dart';
-import '../health_pass/health_pass_screen.dart';
-import '../health_pass/data/health_pass_repository.dart';
+import '../health/health_hub_screen.dart';
 import '../orders/orders_list_screen.dart';
+import '../health_pass/health_pass_screen.dart';
 import '../profile/profile_screen.dart';
 
+/// Module 20 & Specification Section 1 & 29: 5-Destination Primary Bottom Navigation
+/// [ Home (🏠) | Health (❤️) | Bookings (📋) | Health Pass (💳) | Profile (👤) ]
 class MainNavShell extends StatefulWidget {
   final int initialTab;
 
@@ -26,21 +27,25 @@ class _MainNavShellState extends State<MainNavShell> {
   }
 
   void switchTab(int index) {
-    if (index == 2) {
-      HealthPassRepository.notifyPassUpdated();
+    if (index >= 0 && index < 5) {
+      setState(() => _currentIndex = index);
     }
-    setState(() => _currentIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
     final screens = [
       HomeScreen(onNavigateTab: switchTab),
-      const BookingTypeScreen(),
-      const HealthPassScreen(),
+      const HealthHubScreen(),
       const OrdersListScreen(),
+      const HealthPassScreen(),
       const ProfileScreen(),
     ];
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final navBg = isDark ? AppColors.slate900 : Colors.white;
+    final selectedColor = isDark ? AppColors.primaryLight : AppColors.primary;
+    final unselectedColor = isDark ? AppColors.slate400 : AppColors.slate600;
 
     return Scaffold(
       body: IndexedStack(
@@ -49,9 +54,16 @@ class _MainNavShellState extends State<MainNavShell> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
+          color: navBg,
+          border: Border(
+            top: BorderSide(
+              color: isDark ? AppColors.slate800 : AppColors.slate200,
+              width: 0.8,
+            ),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withOpacity(isDark ? 0.25 : 0.05),
               blurRadius: 16,
               offset: const Offset(0, -4),
             ),
@@ -60,16 +72,15 @@ class _MainNavShellState extends State<MainNavShell> {
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) {
-            if (index == 2) {
-              HealthPassRepository.notifyPassUpdated();
-            }
             setState(() => _currentIndex = index);
           },
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: AppColors.slate400,
+          selectedItemColor: selectedColor,
+          unselectedItemColor: unselectedColor,
           selectedFontSize: 12,
           unselectedFontSize: 12,
           type: BottomNavigationBarType.fixed,
+          backgroundColor: navBg,
+          elevation: 0,
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -77,19 +88,19 @@ class _MainNavShellState extends State<MainNavShell> {
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.soup_kitchen_outlined),
-              activeIcon: Icon(Icons.soup_kitchen_rounded),
-              label: 'Meals',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.health_and_safety_outlined),
-              activeIcon: Icon(Icons.health_and_safety_rounded),
+              icon: Icon(Icons.favorite_outline_rounded),
+              activeIcon: Icon(Icons.favorite_rounded),
               label: 'Health',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.receipt_long_outlined),
               activeIcon: Icon(Icons.receipt_long_rounded),
-              label: 'Orders',
+              label: 'Bookings',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.card_membership_outlined),
+              activeIcon: Icon(Icons.card_membership_rounded),
+              label: 'Health Pass',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline_rounded),
@@ -102,3 +113,4 @@ class _MainNavShellState extends State<MainNavShell> {
     );
   }
 }
+

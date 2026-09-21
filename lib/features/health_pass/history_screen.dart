@@ -70,14 +70,21 @@ class _HealthPassHistoryScreenState extends State<HealthPassHistoryScreen> {
                   : RefreshIndicator(
                       onRefresh: _loadHistory,
                       child: ListView.builder(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(16),
                         itemCount: _history.length,
                         itemBuilder: (context, index) {
                           final item = _history[index];
                           final isActive = item.status == 'ACTIVE';
+                          final bookedStr = '${item.createdAt.day.toString().padLeft(2, '0')}/${item.createdAt.month.toString().padLeft(2, '0')}/${item.createdAt.year}';
+                          final startStr = item.startDate != null
+                              ? '${item.startDate!.day.toString().padLeft(2, '0')}/${item.startDate!.month.toString().padLeft(2, '0')}/${item.startDate!.year}'
+                              : 'Pending';
+                          final endStr = item.endDate != null
+                              ? '${item.endDate!.day.toString().padLeft(2, '0')}/${item.endDate!.month.toString().padLeft(2, '0')}/${item.endDate!.year}'
+                              : '—';
 
                           return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
+                            margin: const EdgeInsets.only(bottom: 14),
                             child: EbicCard(
                               onTap: () => _showPassDetailsModal(context, item, isDark),
                               child: Column(
@@ -116,36 +123,76 @@ class _HealthPassHistoryScreenState extends State<HealthPassHistoryScreen> {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
+                                  const SizedBox(height: 4),
                                   Text(
                                     '${item.durationLabel} • ${item.memberCount} ${item.memberCount == 1 ? 'member' : 'members'} covered',
                                     style: const TextStyle(fontSize: 12, color: AppColors.slate500),
                                   ),
-                                  const Divider(height: 16),
+                                  const Divider(height: 18),
+
+                                  // 3-Column Dates Breakdown: Booked, Start, End
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? AppColors.slate800.withOpacity(0.6) : AppColors.slate50,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: isDark ? AppColors.slate700 : AppColors.slate200,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: _dateColumn('BOOKED', bookedStr, isDark),
+                                        ),
+                                        Container(width: 1, height: 26, color: isDark ? AppColors.slate700 : AppColors.slate200),
+                                        Expanded(
+                                          child: _dateColumn('START', startStr, isDark),
+                                        ),
+                                        Container(width: 1, height: 26, color: isDark ? AppColors.slate700 : AppColors.slate200),
+                                        Expanded(
+                                          child: _dateColumn('END', endStr, isDark),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  // Bottom Row: Total Paid & Quick Action Buttons
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          const Text('VALIDITY PERIOD', style: TextStyle(fontSize: 10, color: AppColors.slate400, fontWeight: FontWeight.bold)),
-                                          const SizedBox(height: 2),
+                                          const Text(
+                                            'TOTAL PAID',
+                                            style: TextStyle(fontSize: 9.5, color: AppColors.slate400, fontWeight: FontWeight.bold),
+                                          ),
+                                          const SizedBox(height: 1),
                                           Text(
-                                            item.startDate != null && item.endDate != null
-                                                ? '${item.startDate!.day}/${item.startDate!.month}/${item.startDate!.year} – ${item.endDate!.day}/${item.endDate!.month}/${item.endDate!.year}'
-                                                : 'Purchased on ${item.createdAt.day}/${item.createdAt.month}/${item.createdAt.year}',
-                                            style: TextStyle(fontSize: 11, color: isDark ? AppColors.slate300 : AppColors.slate700),
+                                            '₹${item.finalAmount.toInt()}',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
                                           ),
                                         ],
                                       ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                      Row(
                                         children: [
-                                          const Text('TOTAL PAID', style: TextStyle(fontSize: 10, color: AppColors.slate400, fontWeight: FontWeight.bold)),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '₹${item.finalAmount.toInt()}',
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary),
+                                          OutlinedButton.icon(
+                                            style: OutlinedButton.styleFrom(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                              side: BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate300),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            icon: const Icon(Icons.receipt_long_rounded, size: 14, color: AppColors.primary),
+                                            label: const Text('Usage History', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                                            onPressed: () {
+                                              Navigator.pushNamed(
+                                                context,
+                                                AppRoutes.healthPassUsage,
+                                                arguments: {'healthPassId': item.id},
+                                              );
+                                            },
                                           ),
                                         ],
                                       ),
@@ -158,6 +205,26 @@ class _HealthPassHistoryScreenState extends State<HealthPassHistoryScreen> {
                         },
                       ),
                     ),
+    );
+  }
+
+  Widget _dateColumn(String label, String value, bool isDark) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.slate400, letterSpacing: 0.4),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : AppColors.slate800,
+          ),
+        ),
+      ],
     );
   }
 
@@ -224,10 +291,24 @@ class _HealthPassHistoryScreenState extends State<HealthPassHistoryScreen> {
                 _modalRow('Total Paid', '₹${item.finalAmount.toInt()}', isDark, isHighlight: true),
                 const SizedBox(height: 10),
                 _modalRow(
-                  'Validity Period',
-                  item.startDate != null && item.endDate != null
-                      ? '${item.startDate!.day}/${item.startDate!.month}/${item.startDate!.year} – ${item.endDate!.day}/${item.endDate!.month}/${item.endDate!.year}'
-                      : 'Pending consultation kickoff',
+                  'Booked Date',
+                  '${item.createdAt.day.toString().padLeft(2, '0')}/${item.createdAt.month.toString().padLeft(2, '0')}/${item.createdAt.year}',
+                  isDark,
+                ),
+                const SizedBox(height: 10),
+                _modalRow(
+                  'Start Date',
+                  item.startDate != null
+                      ? '${item.startDate!.day.toString().padLeft(2, '0')}/${item.startDate!.month.toString().padLeft(2, '0')}/${item.startDate!.year}'
+                      : 'Pending Consultation Kickoff',
+                  isDark,
+                ),
+                const SizedBox(height: 10),
+                _modalRow(
+                  'End Date',
+                  item.endDate != null
+                      ? '${item.endDate!.day.toString().padLeft(2, '0')}/${item.endDate!.month.toString().padLeft(2, '0')}/${item.endDate!.year}'
+                      : '—',
                   isDark,
                 ),
                 const SizedBox(height: 10),
@@ -252,7 +333,33 @@ class _HealthPassHistoryScreenState extends State<HealthPassHistoryScreen> {
                     }).toList(),
                   ),
                 ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
+
+                // View Usage History Button
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 16, color: AppColors.primary),
+                    label: const Text(
+                      'View Usage History & Entitlement Ledger',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.healthPassUsage,
+                        arguments: {'healthPassId': item.id},
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
 
                 // Action Buttons
                 if (isActive) ...[

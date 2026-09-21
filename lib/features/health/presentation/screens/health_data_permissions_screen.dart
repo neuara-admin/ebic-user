@@ -133,7 +133,7 @@ class _HealthDataPermissionsScreenState extends State<HealthDataPermissionsScree
                   const SizedBox(height: 20),
 
                   const Text(
-                    'Granular Data Permissions (Section 37)',
+                    'Granular Data Permissions',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.slate900),
                   ),
                   const SizedBox(height: 4),

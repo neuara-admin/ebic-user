@@ -219,7 +219,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Select Member (Section 91)',
+              'Select Member',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
@@ -483,7 +483,14 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Allergens / Safety Constraints:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.slate600)),
+              const Expanded(
+                child: Text(
+                  'Allergens / Safety Constraints:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.slate600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               InkWell(
                 onTap: () async {
                   await Navigator.push(

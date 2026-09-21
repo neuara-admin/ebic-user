@@ -536,21 +536,26 @@ class _ConsultationReviewScreenState extends State<ConsultationReviewScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Consultation Fee',
-                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                                  ),
-                                  Text(
-                                    _activePass != null
-                                        ? '${_activePass!.planName} • 100% Free'
-                                        : 'Covered by Health Pass',
-                                    style: const TextStyle(fontSize: 11, color: AppColors.slate500),
-                                  ),
-                                ],
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Consultation Fee',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      _activePass != null
+                                          ? '${_activePass!.planName} • 100% Free'
+                                          : 'Covered by Health Pass',
+                                      style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(

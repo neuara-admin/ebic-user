@@ -46,7 +46,9 @@ class PreparationItemModel {
   final bool optional;
   final bool preparationRequired;
   final String? preparationInstructions;
-  String status; // PENDING, READY, NOT_AVAILABLE, SUBSTITUTION_REQUESTED, REMOVED
+  final String? preparationForm;
+  final List<String> allergens;
+  String status; // PENDING, READY, NOT_AVAILABLE, SUBSTITUTION_REQUESTED, REMOVED, SUBSTITUTED
   String? note;
 
   PreparationItemModel({
@@ -60,6 +62,8 @@ class PreparationItemModel {
     this.optional = false,
     this.preparationRequired = false,
     this.preparationInstructions,
+    this.preparationForm,
+    this.allergens = const [],
     this.status = 'PENDING',
     this.note,
   });
@@ -68,6 +72,7 @@ class PreparationItemModel {
   bool get isPending => status == 'PENDING';
   bool get isUnavailable => status == 'NOT_AVAILABLE';
   bool get isSubstitutionRequested => status == 'SUBSTITUTION_REQUESTED';
+  bool get isSubstituted => status == 'SUBSTITUTED';
   bool get isRemoved => status == 'REMOVED';
 
   factory PreparationItemModel.fromJson(Map<String, dynamic> json) {
@@ -82,6 +87,8 @@ class PreparationItemModel {
       optional: json['optional'] ?? false,
       preparationRequired: json['preparationRequired'] ?? false,
       preparationInstructions: json['preparationInstructions'],
+      preparationForm: json['preparationForm'],
+      allergens: (json['allergens'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
       status: json['status'] ?? 'PENDING',
       note: json['note'],
     );

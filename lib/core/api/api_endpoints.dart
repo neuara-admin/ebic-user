@@ -97,6 +97,8 @@ class ApiEndpoints {
   static const String orders = '/orders';
   static String order(String id) => '/orders/$id';
   static String orderDetail(String id) => '/orders/$id';
+  static String orderReceipt(String id) => '/orders/$id/receipt';
+  static String orderTimeline(String id) => '/orders/$id/timeline';
   static const String ordersCookingTime = '/orders/cooking-time';
   static String orderPreparation(String id) => '/orders/$id/preparation';
   static String orderPreparationMarkAllReady(String id) =>
@@ -104,6 +106,17 @@ class ApiEndpoints {
   static String orderPayInitiate(String id) => '/orders/$id/pay/initiate';
   static String orderPayVerify(String id) => '/orders/$id/pay/verify';
   static String orderRating(String id) => '/orders/$id/rating';
+
+  // Section 255: Customer Cancellation APIs
+  static String orderCancellationEligibility(String id) =>
+      '/orders/$id/cancellation/eligibility';
+  static String orderCancellation(String id) => '/orders/$id/cancellation';
+
+  // Standalone Payments & Wallet (Module 18)
+  static const String payments = '/payments';
+  static String paymentDetail(String id) => '/payments/$id';
+  static String paymentRetry(String id) => '/payments/$id/retry';
+  static String paymentStatus(String id) => '/payments/$id/status';
 
   // Dedicated Chef Bookings aliases
   static const String chefBookings = '/chef-bookings';
@@ -118,6 +131,17 @@ class ApiEndpoints {
   static String chefBookingItems(String id) => '/chef-bookings/$id/items';
   static String chefBookingAddItems(String id) => '/chef-bookings/$id/items';
   static String chefBookingCancel(String id) => '/chef-bookings/$id/cancel';
+  static String chefBookingTracking(String id) => '/chef-bookings/$id/tracking';
+  static String chefBookingTrackingTimeline(String id) => '/chef-bookings/$id/tracking/timeline';
+
+  // Chef Add-ons (Module 16 Sections 206–289)
+  static String chefBookingAddOnsEligibility(String id) => '/chef-bookings/$id/add-ons/eligibility';
+  static String chefBookingAddOnsCatalogue(String id) => '/chef-bookings/$id/add-ons/catalogue';
+  static String chefBookingAddOnsValidate(String id) => '/chef-bookings/$id/add-ons/validate';
+  static String chefBookingAddOnsQuote(String id) => '/chef-bookings/$id/add-ons/quote';
+  static String chefBookingAddOns(String id) => '/chef-bookings/$id/add-ons';
+  static String chefBookingAddOnDetail(String bookingId, String addOnId) =>
+      '/chef-bookings/$bookingId/add-ons/$addOnId';
 
   // Dynamic Quotes
   static const String calculateQuote = '/pricing/quotes';
@@ -159,6 +183,10 @@ class ApiEndpoints {
   static String cancelConsultation(String id) => '/consultations/$id/cancel';
   static String consultationCancel(String id) => '/consultations/$id/cancel';
   static String consultationReschedule(String id) => '/consultations/$id/reschedule';
+  static String dietitianChatThread(String memberId, String dietitianId) =>
+      '/dietitians/health-pass/members/$memberId/chat/$dietitianId';
+  static String dietitianChatMessages(String threadId) =>
+      '/dietitians/chat/$threadId/messages';
   static const String todayDietPlan = '/diet-plans/today';
   static const String dietPlanToday = '/diet-plans/today';
   static const String dietPlans = '/diet-plans';
@@ -184,14 +212,51 @@ class ApiEndpoints {
   // Support
   static const String supportTickets = '/support/tickets';
   static String supportTicket(String id) => '/support/tickets/$id';
+  static String supportTicketMessages(String id) => '/support/tickets/$id/messages';
+  static String supportTicketReopen(String id) => '/support/tickets/$id/reopen';
+  static const String supportArticles = '/support/articles';
+  static String supportArticle(String id) => '/support/articles/$id';
 
   // Notifications
   static const String notifications = '/notifications';
+  static const String notificationUnreadCount = '/notifications/unread-count';
+  static String notificationRead(String id) => '/notifications/$id/read';
+  static const String notificationReadAll = '/notifications/read-all';
+  static String notificationDelete(String id) => '/notifications/$id';
+  static const String notificationPreferences = '/notifications/preferences';
+  static const String notificationDevices = '/notifications/devices';
+  static String notificationDevice(String id) => '/notifications/devices/$id';
 
   // Promotions & Coupons
+  static const String promotionsAvailable = '/promotions/available';
   static const String validatePromotion = '/promotions/validate';
   static const String promotionsValidate = '/promotions/validate';
+  static const String promotionsCampaigns = '/promotions/campaigns';
+  static const String promotionsCoupons = '/promotions/coupons';
   static const String cancellationReasons = '/cancellations/reasons';
   static const String evaluateCancellation = '/cancellation-policies/evaluate';
   static const String cancellationEvaluate = '/cancellation-policies/evaluate';
+
+  // System & App Configuration (Module 20 - Section 338)
+  static const String appConfig = '/config';
+
+  // Profile & Settings API aliases (Module 20 - Section 309)
+  static const String profile = '/profile';
+  static const String profilePhoto = '/profile/photo';
+  static const String profileSessions = '/profile/sessions';
+  static String profileSession(String id) => '/profile/sessions/$id';
+  static const String profileLogout = '/profile/logout';
+  static const String profilePreferences = '/profile/preferences';
+
+  // Home Aggregation (Section 61–63)
+  static const String home = '/home';
+
+  // Referral & Referral Rewards (V1 + V2)
+  static const String referralsMe = '/referrals/me';
+  static const String referralsCode = '/referrals/code';
+  static const String referralsHistory = '/referrals/me/history';
+  static const String referralsClaim = '/referrals/claim';
+  static const String referralsTrack = '/referrals/track';
 }
+
+

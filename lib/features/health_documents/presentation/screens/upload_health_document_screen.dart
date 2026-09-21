@@ -61,7 +61,7 @@ class _UploadHealthDocumentScreenState extends State<UploadHealthDocumentScreen>
 
   @override
   void dispose() {
-    _titleController.disposeWidget();
+    _titleController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -647,25 +647,40 @@ class _UploadHealthDocumentScreenState extends State<UploadHealthDocumentScreen>
           ),
           const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              OutlinedButton.icon(
-                onPressed: () => _pickFile(ImageSource.gallery),
-                icon: const Icon(Icons.photo_library_outlined, size: 16, color: Color(0xFF0D9488)),
-                label: const Text('Photo / Gallery', style: TextStyle(color: Color(0xFF0D9488))),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF0D9488)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickFile(ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library_outlined, size: 16, color: Color(0xFF0D9488)),
+                  label: const Text(
+                    'Gallery',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Color(0xFF0D9488), fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    side: const BorderSide(color: Color(0xFF0D9488)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () => _pickFile(ImageSource.camera),
-                icon: const Icon(Icons.camera_alt_outlined, size: 16, color: Color(0xFF0D9488)),
-                label: const Text('Scan / Camera', style: TextStyle(color: Color(0xFF0D9488))),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF0D9488)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickFile(ImageSource.camera),
+                  icon: const Icon(Icons.camera_alt_outlined, size: 16, color: Color(0xFF0D9488)),
+                  label: const Text(
+                    'Camera',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Color(0xFF0D9488), fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    side: const BorderSide(color: Color(0xFF0D9488)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ),
             ],
@@ -747,8 +762,5 @@ class _UploadHealthDocumentScreenState extends State<UploadHealthDocumentScreen>
     }
   }
 }
-extension on TextEditingController {
-  void disposeWidget() {
-    dispose();
-  }
-}
+
+

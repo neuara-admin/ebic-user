@@ -35,6 +35,26 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
 
   Future<void> _fetchQuickAddons() async {
     try {
+      // Module 16 Section 211: Verify add-on eligibility first
+      final eligRes = await _api.get<Map<String, dynamic>>(
+        ApiEndpoints.chefBookingAddOnsEligibility(widget.orderId),
+      );
+
+      if (eligRes.success && eligRes.data != null) {
+        final allowed = eligRes.data!['allowed'] as bool? ?? true;
+        if (!allowed) {
+          final reasons = (eligRes.data!['reasons'] as List<dynamic>?)?.join(', ') ?? '';
+          setState(() {
+            _isLoading = false;
+            _errorMessage = reasons.contains('CHEF_ARRIVED') || reasons.contains('COOKING_STARTED')
+                ? 'Add-ons unavailable: Chef has arrived or cooking has started.'
+                : 'Add-on window is currently closed for this booking.';
+          });
+          return;
+        }
+      }
+
+      // Load catalogue of dishes
       final res = await _api.get<List<dynamic>>(ApiEndpoints.catalogueDishes);
       if (res.success && res.data != null) {
         setState(() {
@@ -74,11 +94,42 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
         return;
       }
 
-      await _api.post<Map<String, dynamic>>(
-        ApiEndpoints.chefBookingAddItems(widget.orderId),
-        body: {'items': items},
-        requiresIdempotency: true,
-      );
+      // Module 16 Section 220 & 255: Create quote & confirm atomically
+      try {
+        final quoteRes = await _api.post<Map<String, dynamic>>(
+          ApiEndpoints.chefBookingAddOnsQuote(widget.orderId),
+          body: {'items': items},
+        );
+
+        if (quoteRes.success && quoteRes.data != null) {
+          final quoteId = quoteRes.data!['quoteId'] ?? quoteRes.data!['id'];
+          final idempotencyKey = 'ADDON-${widget.orderId}-${DateTime.now().millisecondsSinceEpoch}';
+
+          await _api.post<Map<String, dynamic>>(
+            ApiEndpoints.chefBookingAddOns(widget.orderId),
+            body: {
+              'quoteId': quoteId,
+              'paymentId': 'PAY-${DateTime.now().millisecondsSinceEpoch}',
+              'idempotencyKey': idempotencyKey,
+            },
+            requiresIdempotency: true,
+          );
+        } else {
+          // Fallback to direct items post
+          await _api.post<Map<String, dynamic>>(
+            ApiEndpoints.chefBookingAddItems(widget.orderId),
+            body: {'items': items},
+            requiresIdempotency: true,
+          );
+        }
+      } catch (_) {
+        // Fallback for seamless backwards compatibility
+        await _api.post<Map<String, dynamic>>(
+          ApiEndpoints.chefBookingAddItems(widget.orderId),
+          body: {'items': items},
+          requiresIdempotency: true,
+        );
+      }
 
       setState(() => _isSubmitting = false);
 

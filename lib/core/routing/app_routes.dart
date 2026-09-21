@@ -29,6 +29,7 @@ class AppRoutes {
   static const String bookChefQuote = '/meals/book-chef/quote';
   static const String bookChefPayment = '/meals/book-chef/payment';
   static const String bookChefConfirmation = '/meals/book-chef/confirmation';
+  static const String bookChefFailure = '/meals/book-chef/failure';
   static const String chefTracking = '/meals/book-chef/tracking';
   static const String preparationChecklist = '/meals/book-chef/preparation';
   static const String orderDetail = '/orders/detail';
@@ -50,6 +51,7 @@ class AppRoutes {
   // Dietitian & Consultations
   static const String dietitian = '/health/dietitian';
   static const String dietitianSelect = '/health/dietitian/select';
+  static const String dietitianChat = '/health/dietitian/chat';
   static const String consultationBook = '/health/consultations/book';
   static const String consultationReview = '/health/consultations/review';
   static const String consultationsList = '/health/consultations';
@@ -86,14 +88,23 @@ class AppRoutes {
   static const String preferences = '/profile/preferences';
   static const String walletCredits = '/profile/wallet';
   static const String promotions = '/promotions';
+  static const String referrals = '/referrals';
+  static const String referralHistory = '/referrals/history';
   static const String support = '/support';
   static const String supportCreateTicket = '/support/tickets/create';
   static const String supportTicketDetail = '/support/tickets/detail';
   static const String notifications = '/notifications';
   static const String privacy = '/profile/privacy';
+  static const String security = '/profile/security';
+
+  // System Screens (Module 20 Sections 313, 314, 320)
+  static const String appUpdate = '/system/update';
+  static const String notFound = '/system/404';
 
   // Backwards compatibility aliases
   static const String bookingConfirmation = bookChefConfirmation;
+  static const String bookingFailure = bookChefFailure;
   static const String videoConsultation = consultationVideo;
   static const String purchasePass = healthPassPurchase;
 }
+

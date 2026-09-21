@@ -27,12 +27,37 @@ class StatusBadge extends StatelessWidget {
   factory StatusBadge.info(String label, {IconData? icon}) =>
       StatusBadge(label: label, color: AppColors.info, icon: icon);
 
-  static String _formatStatus(String status) {
-    return status.replaceAll('_', ' ').toUpperCase();
+  static String formatStatus(String status) {
+    switch (status.toUpperCase()) {
+      case 'FAILED_NO_SUPPLY':
+      case 'NO_SUPPLY':
+        return 'NO CHEF AVAILABLE';
+      case 'CHEF_EN_ROUTE':
+      case 'EN_ROUTE':
+        return 'EN ROUTE';
+      case 'CHEF_ARRIVED':
+      case 'ARRIVED':
+        return 'ARRIVED';
+      case 'CHEF_ASSIGNED':
+      case 'ASSIGNED':
+        return 'ASSIGNED';
+      default:
+        return status.replaceAll('_', ' ').toUpperCase();
+    }
   }
 
+  static String _formatStatus(String status) => formatStatus(status);
+
   static Color _getStatusColor(String status) {
-    switch (status.toUpperCase()) {
+    final s = status.toUpperCase();
+    if (s.startsWith('CANCEL') ||
+        s.contains('FAILED') ||
+        s.contains('REJECT') ||
+        s.contains('EXPIRED') ||
+        s.contains('NO_SUPPLY')) {
+      return AppColors.danger;
+    }
+    switch (s) {
       case 'ACTIVE':
       case 'COMPLETED':
       case 'CONFIRMED':
@@ -47,11 +72,6 @@ class StatusBadge extends StatelessWidget {
       case 'CHEF_ASSIGNED':
       case 'SCHEDULED':
         return AppColors.accent;
-      case 'CANCELLED':
-      case 'FAILED':
-      case 'EXPIRED':
-      case 'REJECTED':
-        return AppColors.danger;
       default:
         return AppColors.primary;
     }

@@ -220,6 +220,16 @@ class AuthService extends ChangeNotifier {
     return res;
   }
 
+  /// Get active login sessions (Section 305)
+  Future<ApiResponse<dynamic>> getSessions() async {
+    return _api.get(ApiEndpoints.profileSessions, requiresAuth: true);
+  }
+
+  /// Revoke specific login session (Section 305)
+  Future<ApiResponse<dynamic>> revokeSession(String sessionId) async {
+    return _api.delete(ApiEndpoints.profileSession(sessionId), requiresAuth: true);
+  }
+
   /// Update in-memory current user details
   void updateCurrentUser(Map<String, dynamic> user) {
     _sessionManager.updateCurrentUser(user);
@@ -232,3 +242,4 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 }
+

@@ -48,6 +48,9 @@ class EbicCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
           onTap: onTap,
+          highlightColor: Colors.transparent,
+          focusColor: Colors.transparent,
+          splashColor: AppColors.primary.withOpacity(0.06),
           child: Padding(
             padding: padding ?? const EdgeInsets.all(16),
             child: child,

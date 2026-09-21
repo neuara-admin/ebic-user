@@ -243,7 +243,7 @@ class _AllergiesScreenState extends State<AllergiesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Clinical Safety Rule (Section 21)',
+                        'Clinical Safety Rule',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF991B1B)),
                       ),
                       const SizedBox(height: 4),

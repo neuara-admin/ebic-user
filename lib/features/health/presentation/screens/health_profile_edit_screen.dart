@@ -121,7 +121,7 @@ class _HealthProfileEditScreenState extends State<HealthProfileEditScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Profile Sections (Section 67)',
+                      'Profile Sections',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.slate900),
                     ),
                     const SizedBox(height: 4),

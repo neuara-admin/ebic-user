@@ -25,6 +25,8 @@ class ConsultationModel {
   final String? goals;
   final bool hasDietPlan;
   final String? dietPlanId;
+  final List<ConsultationAttachmentModel> documents;
+  final List<String> referencedDocumentIds;
 
   ConsultationModel({
     required this.id,
@@ -53,6 +55,8 @@ class ConsultationModel {
     this.goals,
     this.hasDietPlan = false,
     this.dietPlanId,
+    this.documents = const [],
+    this.referencedDocumentIds = const [],
   });
 
   bool get isScheduled => status == 'SCHEDULED';
@@ -73,7 +77,7 @@ class ConsultationModel {
 
     final endsAt = slot?['endsAt'] != null
         ? DateTime.tryParse(slot!['endsAt']) ?? startsAt.add(const Duration(minutes: 45))
-        : startsAt.add(const Duration(minutes: 45));
+        : (json['endsAt'] != null ? DateTime.tryParse(json['endsAt']) : startsAt.add(const Duration(minutes: 45)));
 
     final rawAdditionalNotes = json['additionalNotes'] as String?;
     final rawReason = json['reason'] as String?;
@@ -93,6 +97,26 @@ class ConsultationModel {
     String? planId;
     if (hasPlan && dietPlansList.first is Map) {
       planId = (dietPlansList.first as Map)['id']?.toString();
+    }
+
+    final rawRefDocIds = (json['referencedDocumentIds'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    final rawDocs = (json['documents'] as List<dynamic>?) ??
+        (json['healthDocuments'] as List<dynamic>?) ??
+        [];
+    List<ConsultationAttachmentModel> docs = rawDocs
+        .map((d) => ConsultationAttachmentModel.fromJson(d is Map<String, dynamic> ? d : {}))
+        .toList();
+
+    if (docs.isEmpty && rawRefDocIds.isNotEmpty) {
+      docs = rawRefDocIds.map((id) => ConsultationAttachmentModel(
+        id: id,
+        title: 'Referenced Medical Document',
+        documentType: 'Lab Report / Health Record',
+      )).toList();
     }
 
     return ConsultationModel(
@@ -123,6 +147,34 @@ class ConsultationModel {
       goals: json['goals'],
       hasDietPlan: hasPlan,
       dietPlanId: planId,
+      documents: docs,
+      referencedDocumentIds: rawRefDocIds,
+    );
+  }
+}
+
+class ConsultationAttachmentModel {
+  final String id;
+  final String title;
+  final String? documentType;
+  final String? fileUrl;
+  final DateTime? uploadedAt;
+
+  ConsultationAttachmentModel({
+    required this.id,
+    required this.title,
+    this.documentType,
+    this.fileUrl,
+    this.uploadedAt,
+  });
+
+  factory ConsultationAttachmentModel.fromJson(Map<String, dynamic> json) {
+    return ConsultationAttachmentModel(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? json['fileName']?.toString() ?? json['name']?.toString() ?? 'Medical Document',
+      documentType: json['documentType']?.toString() ?? json['type']?.toString() ?? 'Clinical Report',
+      fileUrl: json['fileUrl']?.toString() ?? json['url']?.toString(),
+      uploadedAt: DateTime.tryParse(json['createdAt']?.toString() ?? json['uploadedAt']?.toString() ?? ''),
     );
   }
 }

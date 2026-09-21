@@ -47,47 +47,65 @@ class WelcomeScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 24),
                             const Text(
-                              'Precision Nutrition,\nPrepared In Your Kitchen.',
+                              'Eat Better.\nLive Better.',
                               style: TextStyle(
-                                fontSize: 32,
+                                fontSize: 36,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
-                                height: 1.2,
+                                height: 1.15,
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
                             Text(
-                              'Book certified in-home chefs for healthy, calorie-counted meals tailored to your Health Pass dietitian plan.',
+                              'Certified in-home chefs preparing personalized nutrition plans designed around your goals.',
                               style: TextStyle(
                                 fontSize: 15,
-                                color: Colors.white.withOpacity(0.75),
+                                color: Colors.white.withOpacity(0.8),
                                 height: 1.5,
                               ),
                             ),
                             const SizedBox(height: 32),
-                            // Feature highlights
-                            _buildFeatureRow(Icons.timer_outlined, 'Instant Chef Visits & Real-Time Tracking'),
-                            const SizedBox(height: 12),
-                            _buildFeatureRow(Icons.health_and_safety_outlined, 'Clinical Dietitian Plans & Health Pass'),
-                            const SizedBox(height: 12),
-                            _buildFeatureRow(Icons.checklist_rounded, 'Automated Ingredient Preparation Checklists'),
+                            // Section 7 Feature highlights
+                            _buildFeatureRow(Icons.health_and_safety_outlined, 'Personalized nutrition'),
+                            const SizedBox(height: 14),
+                            _buildFeatureRow(Icons.restaurant_menu_rounded, 'Chef-prepared meals at home'),
+                            const SizedBox(height: 14),
+                            _buildFeatureRow(Icons.insights_rounded, 'Health tracking'),
                             const Spacer(),
                             const SizedBox(height: 24),
-                            // Action buttons per Module 2 Section 6.1
+                            // Section 9: Primary action
                             EbicButton(
-                              label: 'Create Account',
+                              label: 'Get Started',
                               onPressed: () {
                                 Navigator.pushNamed(context, AppRoutes.register);
                               },
                             ),
-                            const SizedBox(height: 12),
-                            EbicButton(
-                              label: 'Sign In with Phone / OTP',
-                              onPressed: () {
-                                Navigator.pushNamed(context, AppRoutes.login);
-                              },
-                              isOutlined: true,
-                              color: Colors.white,
+                            const SizedBox(height: 16),
+                            // Section 7 & 9: Secondary action
+                            Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Already a member? ',
+                                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      Navigator.pushNamed(context, AppRoutes.login);
+                                    },
+                                    child: const Text(
+                                      'Login',
+                                      style: TextStyle(
+                                        color: AppColors.primaryLight,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 12),
                           ],

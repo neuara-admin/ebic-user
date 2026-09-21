@@ -25,6 +25,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _auth = AuthService();
   final ApiClient _api = ApiClient();
+  bool _showVitals = false;
 
   @override
   void initState() {
@@ -394,6 +395,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(6),
@@ -415,133 +417,265 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ],
                           ),
-                          TextButton.icon(
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.primary),
-                            label: const Text(
-                              'Update Vitals',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
-                            ),
-                            onPressed: () async {
-                              final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
-                              if (updated == true && mounted) {
-                                await _refreshProfile();
-                              }
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                _showVitals = !_showVitals;
+                              });
                             },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: _showVitals ? AppColors.primarySubtle : AppColors.slate100,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: _showVitals ? AppColors.primary.withValues(alpha: 0.3) : AppColors.slate300,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _showVitals ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                    size: 14,
+                                    color: _showVitals ? AppColors.primaryDark : AppColors.slate700,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _showVitals ? 'Hide' : 'View',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: _showVitals ? AppColors.primaryDark : AppColors.slate700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
 
-                      // Measurements row: Height, Weight, DOB
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isDark ? AppColors.slate800 : AppColors.slate50,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Height', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    selfMember?.heightDisplay ?? 'Not set',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                ],
-                              ),
+                      // When hidden: show a proper UI card with a prominent action button
+                      if (!_showVitals)
+                        InkWell(
+                          onTap: () => setState(() => _showVitals = true),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isDark ? AppColors.slate800 : AppColors.slate50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
                             ),
-                            Container(width: 1, height: 28, color: AppColors.slate200),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 12),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primarySubtle,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(Icons.shield_outlined, size: 20, color: AppColors.primary),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Health Vitals & BMI Protected',
+                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.slate800),
+                                          ),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            'Height, weight, DOB and BMI are hidden for privacy.',
+                                            style: TextStyle(fontSize: 11.5, color: AppColors.slate500),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.primary.withValues(alpha: 0.25),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.visibility_outlined, size: 16, color: Colors.white),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Show Health Vitals & BMI',
+                                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else ...[
+                        // Measurements row: Height, Weight, DOB
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.slate800 : AppColors.slate50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('Weight', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
+                                    const Text('Height', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
                                     const SizedBox(height: 2),
                                     Text(
-                                      selfMember?.weightDisplay ?? 'Not set',
+                                      selfMember?.heightDisplay ?? 'Not set',
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
-                            Container(width: 1, height: 28, color: AppColors.slate200),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('DOB', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      selfMember?.dateOfBirth != null
-                                          ? '${selfMember!.formattedDob} (${selfMember.age}y)'
-                                          : 'Not set',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                              Container(width: 1, height: 28, color: AppColors.slate200),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Weight', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        selfMember?.weightDisplay ?? 'Not set',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                              ),
+                              Container(width: 1, height: 28, color: AppColors.slate200),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('DOB', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        selfMember?.dateOfBirth != null
+                                            ? '${selfMember!.formattedDob} (${selfMember.age}y)'
+                                            : 'Not set',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // BMI Visual Card / Gauge
+                        if (selfMember?.bmi != null || (selfMember?.heightCm != null && selfMember?.weightKg != null))
+                          BmiHealthWidget(
+                            bmi: selfMember?.bmi,
+                            heightCm: selfMember?.heightCm,
+                            weightKg: selfMember?.weightKg,
+                          )
+                        else
+                          InkWell(
+                            onTap: () async {
+                              final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
+                              if (updated == true && mounted) {
+                                await _refreshProfile();
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.primarySubtle.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.add_chart_rounded, size: 18, color: AppColors.primary),
+                                  SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Add height, weight and DOB to calculate BMI and receive personalized nutrition recommendations.',
+                                      style: TextStyle(fontSize: 12, color: AppColors.slate700),
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right, size: 18, color: AppColors.primary),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                        const SizedBox(height: 12),
+
+                        // Actions Row: Update Vitals & Hide
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
+                                  if (updated == true && mounted) {
+                                    await _refreshProfile();
+                                  }
+                                },
+                                icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.primary),
+                                label: const Text('Update Vitals', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: () => setState(() => _showVitals = false),
+                              icon: const Icon(Icons.visibility_off_outlined, size: 14, color: AppColors.slate600),
+                              label: const Text('Hide', style: TextStyle(fontSize: 12, color: AppColors.slate700)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: AppColors.slate300),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               ),
                             ),
                           ],
                         ),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      // BMI Visual Card / Gauge
-                      if (selfMember?.bmi != null || (selfMember?.heightCm != null && selfMember?.weightKg != null))
-                        BmiHealthWidget(
-                          bmi: selfMember?.bmi,
-                          heightCm: selfMember?.heightCm,
-                          weightKg: selfMember?.weightKg,
-                        )
-                      else
-                        InkWell(
-                          onTap: () async {
-                            final updated = await Navigator.pushNamed(context, AppRoutes.editProfile);
-                            if (updated == true && mounted) {
-                              await _refreshProfile();
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.primarySubtle.withOpacity(0.4),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.add_chart_rounded, size: 18, color: AppColors.primary),
-                                SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Add height, weight and DOB to calculate BMI and receive personalized nutrition recommendations.',
-                                    style: TextStyle(fontSize: 12, color: AppColors.slate700),
-                                  ),
-                                ),
-                                Icon(Icons.chevron_right, size: 18, color: AppColors.primary),
-                              ],
-                            ),
-                          ),
-                        ),
+                      ],
 
                       // Dietary & Health Conditions Tags
                       if (selfMember != null &&
@@ -678,6 +812,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 8),
                 _buildMenuItem(
                   isDark: isDark,
+                  icon: Icons.card_giftcard_rounded,
+                  title: 'Refer & Earn',
+                  subtitle: 'Invite friends, earn ₹250 wallet credits & track rewards',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.referrals),
+                ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
                   icon: Icons.local_offer_outlined,
                   title: 'Promotions & Coupons',
                   subtitle: 'Active discounts & referral rewards',
@@ -703,7 +845,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   subtitle: 'Member-specific health data authorization',
                   onTap: () => Navigator.pushNamed(context, AppRoutes.privacy),
                 ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.security_rounded,
+                  title: 'Account Security & Sessions',
+                  subtitle: 'Password, verified channels & active devices',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.security),
+                ),
                 const SizedBox(height: 24),
+
 
                 // Sign Out
                 EbicCard(

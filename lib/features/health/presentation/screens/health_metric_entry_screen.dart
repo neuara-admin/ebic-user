@@ -123,22 +123,30 @@ class _HealthMetricEntryScreenState extends State<HealthMetricEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? AppColors.slate900 : Colors.white;
+    final cardBorder = isDark ? AppColors.slate800 : AppColors.slate200;
+    final inputBg = isDark ? AppColors.slate800 : AppColors.slate50;
+    final textPrimary = isDark ? Colors.white : AppColors.slate900;
+    final textSecondary = isDark ? AppColors.slate300 : AppColors.slate700;
+    final textMuted = isDark ? AppColors.slate400 : AppColors.slate500;
+
     final dateStr = DateFormat('dd MMM yyyy').format(_recordedDate);
     final timeStr = _recordedTime.format(context);
 
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(
-        title: const Text('Add Measurement'),
-        backgroundColor: Colors.white,
+        title: Text('Add Measurement', style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
         elevation: 0,
-        foregroundColor: AppColors.slate900,
+        foregroundColor: textPrimary,
       ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: AppColors.slate200)),
+          color: cardBg,
+          border: Border(top: BorderSide(color: cardBorder)),
         ),
         child: SizedBox(
           height: 48,
@@ -165,32 +173,39 @@ class _HealthMetricEntryScreenState extends State<HealthMetricEntryScreen> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cardBg,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.slate200),
+            border: Border.all(color: cardBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Metric Details (Section 32)',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.slate900),
+              Text(
+                'Metric Details',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textPrimary),
               ),
               const SizedBox(height: 16),
 
               DropdownButtonFormField<String>(
                 value: _metricType,
+                dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+                style: TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
                 decoration: InputDecoration(
                   labelText: 'Metric Type',
+                  labelStyle: TextStyle(color: textSecondary),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: cardBorder),
+                  ),
                   filled: true,
-                  fillColor: AppColors.slate50,
+                  fillColor: inputBg,
                 ),
                 items: _metrics
                     .map(
                       (m) => DropdownMenuItem(
                         value: m['type'],
-                        child: Text('${m['label']} (${m['unit']})'),
+                        child: Text('${m['label']} (${m['unit']})', style: TextStyle(color: textPrimary)),
                       ),
                     )
                     .toList(),
@@ -209,14 +224,19 @@ class _HealthMetricEntryScreenState extends State<HealthMetricEntryScreen> {
                 controller: _valueCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 autofocus: true,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textPrimary),
                 decoration: InputDecoration(
                   labelText: 'Recorded Value',
+                  labelStyle: TextStyle(color: textSecondary),
                   suffixText: _unit,
-                  suffixStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.slate600),
+                  suffixStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: textSecondary),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: cardBorder),
+                  ),
                   filled: true,
-                  fillColor: AppColors.slate50,
+                  fillColor: inputBg,
                 ),
               ),
               const SizedBox(height: 16),
@@ -230,12 +250,17 @@ class _HealthMetricEntryScreenState extends State<HealthMetricEntryScreen> {
                       child: InputDecorator(
                         decoration: InputDecoration(
                           labelText: 'Date',
-                          prefixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+                          labelStyle: TextStyle(color: textSecondary),
+                          prefixIcon: Icon(Icons.calendar_today_outlined, size: 18, color: textSecondary),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: cardBorder),
+                          ),
                           filled: true,
-                          fillColor: AppColors.slate50,
+                          fillColor: inputBg,
                         ),
-                        child: Text(dateStr, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        child: Text(dateStr, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary)),
                       ),
                     ),
                   ),
@@ -247,12 +272,17 @@ class _HealthMetricEntryScreenState extends State<HealthMetricEntryScreen> {
                       child: InputDecorator(
                         decoration: InputDecoration(
                           labelText: 'Time',
-                          prefixIcon: const Icon(Icons.access_time, size: 18),
+                          labelStyle: TextStyle(color: textSecondary),
+                          prefixIcon: Icon(Icons.access_time, size: 18, color: textSecondary),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: cardBorder),
+                          ),
                           filled: true,
-                          fillColor: AppColors.slate50,
+                          fillColor: inputBg,
                         ),
-                        child: Text(timeStr, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        child: Text(timeStr, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary)),
                       ),
                     ),
                   ),
@@ -263,12 +293,19 @@ class _HealthMetricEntryScreenState extends State<HealthMetricEntryScreen> {
               TextField(
                 controller: _notesCtrl,
                 maxLines: 2,
+                style: TextStyle(color: textPrimary, fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'Notes (Optional)',
+                  labelStyle: TextStyle(color: textSecondary),
                   hintText: 'e.g. Measured before breakfast',
+                  hintStyle: TextStyle(color: textMuted, fontSize: 13),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: cardBorder),
+                  ),
                   filled: true,
-                  fillColor: AppColors.slate50,
+                  fillColor: inputBg,
                 ),
               ),
             ],

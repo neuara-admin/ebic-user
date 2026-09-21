@@ -141,7 +141,8 @@ class HealthPassRepository {
 
   /// Section 43 & 44 — Entitlements & Immutable Usage Ledger
   Future<HealthPassUsageLedgerModel> fetchUsage(String healthPassId) async {
-    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthPassUsage(healthPassId));
+    final targetId = healthPassId.trim().isEmpty ? 'current' : healthPassId.trim();
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthPassUsage(targetId));
     if (res.success && res.data != null) {
       return HealthPassUsageLedgerModel.fromJson(res.data!);
     }

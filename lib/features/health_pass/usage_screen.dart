@@ -25,7 +25,8 @@ class _HealthPassUsageScreenState extends State<HealthPassUsageScreen> {
   @override
   void initState() {
     super.initState();
-    _healthPassId = widget.arguments['healthPassId']?.toString() ?? '';
+    final id = widget.arguments['healthPassId']?.toString() ?? '';
+    _healthPassId = id.trim().isEmpty ? 'current' : id.trim();
     _loadUsage();
   }
 

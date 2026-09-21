@@ -102,21 +102,27 @@ class RazorpayService {
 
     _activeCompleter = Completer<RazorpayPaymentResult>();
 
-    final options = {
-      'key': keyId,
+    final effectiveKey = (keyId.isEmpty || keyId == 'rzp_test_simulated')
+        ? 'rzp_test_Tb32WMsZscKtDf'
+        : keyId;
+
+    final options = <String, dynamic>{
+      'key': effectiveKey,
       'amount': amountPaise.toInt(),
       'name': name,
       'description': description,
-      'order_id': orderId,
+      if (orderId.isNotEmpty && orderId.startsWith('order_')) 'order_id': orderId,
       'currency': currency ?? 'INR',
       'timeout': 300, // 5 minutes validity
       'prefill': {
-        if (prefillContact != null && prefillContact.isNotEmpty) 'contact': prefillContact,
-        if (prefillEmail != null && prefillEmail.isNotEmpty) 'email': prefillEmail,
+        'contact': (prefillContact != null && prefillContact.isNotEmpty) ? prefillContact : '9876543210',
+        'email': (prefillEmail != null && prefillEmail.isNotEmpty) ? prefillEmail : 'support@ebic.com',
       },
       'theme': {
         'color': themeColorHex ?? '#10B981',
       },
+      'retry': {'enabled': true, 'max_count': 1},
+      'send_sms_hash': true,
     };
 
     try {

@@ -119,7 +119,7 @@ class _HealthPassPlansScreenState extends State<HealthPassPlansScreen> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'Select a subscription tier to activate clinical dietitian guidance and in-home chef visit benefits.',
+                                  'Choose a plan that fits your lifestyle. Enjoy personal dietitian guidance, custom meal plans, and in-home chef visits.',
                                   style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate300 : AppColors.primaryDark, height: 1.3),
                                 ),
                               ),
@@ -186,7 +186,7 @@ class _HealthPassPlansScreenState extends State<HealthPassPlansScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
-                  'MOST POPULAR • RECOMMENDED FOR FAMILIES',
+                  'MOST POPULAR • BEST FOR FAMILIES',
                   style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                 ),
               ),
@@ -228,7 +228,7 @@ class _HealthPassPlansScreenState extends State<HealthPassPlansScreen> {
                         color: AppColors.primary,
                       ),
                     ),
-                    const Text('/month base', style: TextStyle(fontSize: 10, color: AppColors.slate500)),
+                    const Text('/ month', style: TextStyle(fontSize: 10.5, color: AppColors.slate500, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ],
@@ -238,8 +238,8 @@ class _HealthPassPlansScreenState extends State<HealthPassPlansScreen> {
             // Supported Durations Badges (Section 36)
             if (plan.durations.isNotEmpty) ...[
               const Text(
-                'AVAILABLE DURATIONS',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.slate400, letterSpacing: 0.5),
+                'CHOOSE DURATION',
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
               ),
               const SizedBox(height: 6),
               Wrap(
@@ -264,8 +264,8 @@ class _HealthPassPlansScreenState extends State<HealthPassPlansScreen> {
 
             // Key Benefits Checklist (Section 34)
             const Text(
-              'KEY INCLUDED BENEFITS',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.slate400, letterSpacing: 0.5),
+              'WHAT\'S INCLUDED',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
             ),
             const SizedBox(height: 8),
             ...plan.benefits.take(5).map((b) => Padding(
@@ -317,7 +317,7 @@ class _HealthPassPlansScreenState extends State<HealthPassPlansScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: EbicButton(
-                    label: 'Select Plan',
+                    label: 'Choose Plan',
                     onPressed: () {
                       AnalyticsService().logHealthPassPlanViewed(plan.code);
                       Navigator.pushNamed(

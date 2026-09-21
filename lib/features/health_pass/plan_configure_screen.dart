@@ -225,7 +225,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(_plan != null ? 'Configure ${_plan!.name}' : 'Configure Health Pass'),
+        title: Text(_plan != null ? 'Customize ${_plan!.name}' : 'Customize Health Pass'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -335,7 +335,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       const Text(
-                                        'WHO SHOULD BE COVERED?',
+                                        'COVERED FAMILY MEMBERS',
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.bold,
@@ -345,7 +345,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        '${_selectedMemberIds.length} of ${_plan?.maxMembers ?? 5} selected',
+                                        '${_selectedMemberIds.length} of ${_plan?.maxMembers ?? 5} members selected',
                                         style: const TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.bold),
                                       ),
                                     ],
@@ -367,8 +367,8 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'The first member is covered at base price. Additional household members receive configured family discounts.',
-                                style: TextStyle(fontSize: 11, color: isDark ? AppColors.slate400 : AppColors.slate500),
+                                'You are covered as the primary member. Additional family members can be added at special family rates.',
+                                style: TextStyle(fontSize: 11.5, color: isDark ? AppColors.slate400 : AppColors.slate600, height: 1.3),
                               ),
                               const SizedBox(height: 12),
                               _buildMembersList(isDark),
@@ -647,7 +647,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
                     children: [
                       Flexible(
                         child: Text(
-                          'Estimated Invoice Breakdown',
+                          'Price Breakdown',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -672,7 +672,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
-                    'LIVE QUOTE',
+                    'ESTIMATE',
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
@@ -690,15 +690,15 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                _priceRow('Base Subscription (${q.durationMonths} ${q.durationMonths == 1 ? 'Month' : 'Months'})', '₹${q.subtotal.toInt()}', isDark),
+                _priceRow('Plan Subscription (${q.durationMonths} ${q.durationMonths == 1 ? 'Month' : 'Months'})', '₹${q.subtotal.toInt()}', isDark),
                 if (q.memberCharges > 0)
-                  _priceRow('Additional Members (${q.memberCount - 1})', '+₹${q.memberCharges.toInt()}', isDark),
+                  _priceRow('Additional Family Members (${q.memberCount - 1})', '+₹${q.memberCharges.toInt()}', isDark),
                 if (q.memberDiscount > 0)
-                  _priceRow('Family Member Discount', '-₹${q.memberDiscount.toInt()}', isDark, color: AppColors.emerald700),
+                  _priceRow('Family Savings', '-₹${q.memberDiscount.toInt()}', isDark, color: AppColors.emerald700),
                 if (q.durationDiscount > 0)
-                  _priceRow('Duration Commitment Discount', '-₹${q.durationDiscount.toInt()}', isDark, color: AppColors.emerald700),
+                  _priceRow('Multi-Month Savings', '-₹${q.durationDiscount.toInt()}', isDark, color: AppColors.emerald700),
                 if (q.platformFee > 0)
-                  _priceRow('Platform Fee', '+₹${q.platformFee.toInt()}', isDark),
+                  _priceRow('Platform & Service Fee', '+₹${q.platformFee.toInt()}', isDark),
                 if (q.otherCharges > 0)
                   _priceRow('Other Charges', '+₹${q.otherCharges.toInt()}', isDark),
                 if (q.tax > 0)
@@ -741,7 +741,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Estimated Total',
+                        'Total Payable',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -815,7 +815,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
           const SizedBox(width: 16),
           Expanded(
             child: EbicButton(
-                label: 'Review Quote',
+              label: 'Continue to Review',
               onPressed: _liveQuote == null || _isQuoting
                   ? null
                   : () {

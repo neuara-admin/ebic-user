@@ -8,7 +8,9 @@ import '../../shared/widgets/ebic_card.dart';
 
 /// Module 3 — Sections 29, 30 & 31: Saved Delivery Kitchen Addresses Screen
 class AddressesScreen extends StatefulWidget {
-  const AddressesScreen({super.key});
+  final bool isPicker;
+
+  const AddressesScreen({super.key, this.isPicker = false});
 
   @override
   State<AddressesScreen> createState() => _AddressesScreenState();
@@ -184,12 +186,22 @@ class _AddressesScreenState extends State<AddressesScreen> {
     }
   }
 
+  Future<void> _navigateToAddAddress() async {
+    final added = await Navigator.pushNamed(context, AppRoutes.addressForm);
+    if (added == true) {
+      await _fetchAddresses();
+      if (widget.isPicker && _addresses.isNotEmpty && mounted) {
+        Navigator.pop(context, _addresses.first);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.slate50,
       appBar: AppBar(
-        title: const Text('Saved Kitchen Addresses'),
+        title: Text(widget.isPicker ? 'Select Kitchen Address' : 'Saved Kitchen Addresses'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -222,10 +234,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
                         ),
                         const SizedBox(height: 24),
                         ElevatedButton.icon(
-                          onPressed: () async {
-                            final added = await Navigator.pushNamed(context, AppRoutes.addressForm);
-                            if (added == true) _fetchAddresses();
-                          },
+                          onPressed: _navigateToAddAddress,
                           icon: const Icon(Icons.add_location_alt_outlined),
                           label: const Text('Add Kitchen Address'),
                         ),
@@ -239,10 +248,33 @@ class _AddressesScreenState extends State<AddressesScreen> {
                   child: SafeArea(
                     child: ListView.separated(
                       padding: const EdgeInsets.all(20),
-                      itemCount: _addresses.length,
+                      itemCount: _addresses.length + (widget.isPicker ? 1 : 0),
                       separatorBuilder: (_, __) => const SizedBox(height: 14),
                       itemBuilder: (ctx, idx) {
-                        final addr = _addresses[idx];
+                        if (widget.isPicker && idx == 0) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primarySubtle,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.touch_app_rounded, color: AppColors.primary, size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Tap any kitchen address to select it for your chef booking.',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primaryDark),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        final addrIdx = widget.isPicker ? idx - 1 : idx;
+                        final addr = _addresses[addrIdx];
                         return _buildAddressCard(addr);
                       },
                     ),
@@ -252,10 +284,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add_location_alt_outlined, color: Colors.white),
         label: const Text('Add Kitchen', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        onPressed: () async {
-          final added = await Navigator.pushNamed(context, AppRoutes.addressForm);
-          if (added == true) _fetchAddresses();
-        },
+        onPressed: _navigateToAddAddress,
       ),
     );
   }
@@ -264,6 +293,10 @@ class _AddressesScreenState extends State<AddressesScreen> {
     final isRechecking = _recheckingAddressId == addr.id;
 
     return EbicCard(
+      onTap: widget.isPicker ? () => Navigator.pop(context, addr) : null,
+      border: widget.isPicker && addr.isDefault
+          ? Border.all(color: AppColors.primary, width: 1.5)
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -442,6 +475,22 @@ class _AddressesScreenState extends State<AddressesScreen> {
                   ),
                 ],
               ),
+              if (widget.isPicker)
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context, addr),
+                  icon: const Icon(Icons.check_circle_outline, size: 14, color: Colors.white),
+                  label: const Text(
+                    'Select Kitchen',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
             ],
           ),
         ],

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/utils/validators.dart';
 import '../../shared/widgets/ebic_button.dart';
 
 /// Module 2 Section 20 & 31–34 — Account Recovery Screen
@@ -49,14 +48,14 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
       if (res.success) {
         final method = res.data?['method'] as String? ?? 'SMS';
         final devCode = res.data?['devCode'] as String?;
+        final returnedPhone = res.data?['phone'] as String?;
 
-        if (method == 'SMS') {
-          final cleanPhone = Validators.normalizePhone(input);
+        if (method == 'SMS' && returnedPhone != null && returnedPhone.isNotEmpty) {
           Navigator.pushNamed(
             context,
             AppRoutes.otp,
             arguments: {
-              'phone': cleanPhone.isNotEmpty ? cleanPhone : input,
+              'phone': returnedPhone,
               'purpose': 'ACCOUNT_RECOVERY',
               'devCode': devCode,
             },
@@ -64,12 +63,16 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
         } else {
           setState(() {
             _successMessage = res.data?['message'] ??
-                'Recovery instructions and identity verification link have been dispatched.';
+                'If an account matches those details, recovery instructions have been dispatched.';
           });
         }
       } else {
         setState(() {
-          _errorMessage = res.error?.message ?? 'Unable to initiate recovery. Please try again.';
+          if (res.error?.code == 'ACCOUNT_RESTRICTED') {
+            _errorMessage = 'Your account is currently restricted. Please contact customer support below.';
+          } else {
+            _errorMessage = res.error?.displayMessage ?? res.error?.message ?? 'Unable to initiate recovery. Please try again.';
+          }
         });
       }
     } catch (e) {

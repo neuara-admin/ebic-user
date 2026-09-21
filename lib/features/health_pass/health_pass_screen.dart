@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/api/api_client.dart';
@@ -11,8 +12,8 @@ import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'data/health_pass_repository.dart';
 
-/// Module 4 — Section 33: Health Pass Overview Screen
-/// Dynamically renders customer state: No Health Pass vs Active Health Pass with Live Entitlements.
+/// Clean, high-performance Health Pass Screen
+/// Minimalist UX: removes excessive marketing fluff and puts live entitlements & consultation details front and center.
 class HealthPassScreen extends StatefulWidget {
   const HealthPassScreen({super.key});
 
@@ -55,7 +56,6 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
       ConsultationModel? activeConsult = pass?.activeConsultation;
       ConsultationModel? completedConsult = pass?.latestCompletedConsultation;
 
-      // Also directly query consultations API for live synchronization
       try {
         final consultRes = await _api.get<List<dynamic>>(ApiEndpoints.consultations);
         if (consultRes.success && consultRes.data != null) {
@@ -85,12 +85,6 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
           _completedConsultation = completedConsult;
           _isLoading = false;
         });
-        if (pass != null) {
-          AnalyticsService().logHealthPassViewedActive();
-          if (pass.isExpiringSoon || pass.isExpired) {
-            AnalyticsService().logHealthPassExpiryViewed();
-          }
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -108,18 +102,15 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(
-        title: const Text('Health Pass'),
+        title: const Text('Health Pass', style: TextStyle(fontWeight: FontWeight.bold)),
+        elevation: 0,
+        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_month_outlined),
-            tooltip: 'My Consultations',
-            onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationsList).then((_) => _loadCurrentPass()),
-          ),
-          IconButton(
             icon: const Icon(Icons.history_rounded),
-            tooltip: 'Subscription History',
+            tooltip: 'Pass History',
             onPressed: () => Navigator.pushNamed(context, AppRoutes.healthPassHistory),
           ),
         ],
@@ -130,7 +121,7 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
               onRefresh: _loadCurrentPass,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: _errorMessage != null && _activePass == null
                     ? Center(
                         child: Padding(
@@ -153,22 +144,21 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                         ),
                       )
                     : _activePass == null
-                        ? _buildCustomerWithoutPass(isDark)
-                        : _buildCustomerWithActivePass(_activePass!, isDark),
+                        ? _buildNoPassView(isDark)
+                        : _buildActivePassView(_activePass!, isDark),
               ),
             ),
     );
   }
 
-  // Section 8: Overview — Customer Without Health Pass
-  Widget _buildCustomerWithoutPass(bool isDark) {
+  // ───────────────────────── 1. No Active Health Pass View ─────────────────────────
+  Widget _buildNoPassView(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Hero Card
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
             gradient: AppColors.primaryGradient,
             borderRadius: BorderRadius.circular(20),
@@ -187,86 +177,55 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
                   'HEALTH & NUTRITION ECOSYSTEM',
                   style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.6),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               const Text(
-                'Personalized Nutrition\n& Health Support',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  height: 1.2,
-                ),
+                'Personalized Nutrition\n& In-Home Chefs',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white, height: 1.2),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Dedicated clinical dietitians, customized diet plans, and monthly in-home chef visit entitlements for your family.',
+                'Unlock dedicated clinical dietitians, custom meal charts, and monthly in-home chef visit entitlements.',
                 style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: AppColors.primaryDark,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
+                icon: const Icon(Icons.stars_rounded, color: AppColors.primary, size: 18),
+                label: const Text('Explore Health Pass Plans', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 onPressed: () => Navigator.pushNamed(context, AppRoutes.healthPassPlans),
-                child: const Text('Explore Health Pass Plans', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
 
-        // What You Get Section
-        const Text(
-          'WHAT YOU GET WITH HEALTH PASS',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: AppColors.slate500,
-            letterSpacing: 0.8,
+        // Clean feature highlights (short & concise)
+        EbicCard(
+          child: Column(
+            children: [
+              _buildFeatureRow(Icons.restaurant_menu_rounded, 'In-Home Chef Visits', 'Monthly visit entitlements for custom cooking'),
+              const Divider(height: 20),
+              _buildFeatureRow(Icons.video_call_rounded, 'Clinical Dietitian Consultations', '1-on-1 video coaching & health reviews'),
+              const Divider(height: 20),
+              _buildFeatureRow(Icons.family_restroom_rounded, 'Full Family Coverage', 'Individual health metrics for all household members'),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
 
-        _buildBenefitFeature(
-          icon: Icons.restaurant_menu_rounded,
-          title: 'In-Home Chef Visit Entitlements',
-          description: 'Free chef visits each month for preparing healthy, prescribed meals in your kitchen.',
-          isDark: isDark,
-        ),
-        const SizedBox(height: 10),
-        _buildBenefitFeature(
-          icon: Icons.video_camera_front_outlined,
-          title: 'Clinical Dietitian Consultations',
-          description: 'One-on-one video appointments, clinical assessments, and ongoing coaching.',
-          isDark: isDark,
-        ),
-        const SizedBox(height: 10),
-        _buildBenefitFeature(
-          icon: Icons.description_outlined,
-          title: 'Personalized Clinical Diet Plan',
-          description: 'Tailored nutrition charts matching your medical conditions and family taste preferences.',
-          isDark: isDark,
-        ),
-        const SizedBox(height: 10),
-        _buildBenefitFeature(
-          icon: Icons.family_restroom_rounded,
-          title: 'Cover Entire Household',
-          description: 'Add family members with individualized health profiles and covered allowances.',
-          isDark: isDark,
-        ),
-        const SizedBox(height: 20),
-
-        // Comparison Banner
+        // Comparison quick banner
         EbicCard(
           onTap: () => Navigator.pushNamed(context, AppRoutes.healthPassComparison),
           child: Row(
@@ -284,13 +243,12 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Compare Essential vs Care Plans', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    SizedBox(height: 2),
-                    Text('View full side-by-side entitlement comparison', style: TextStyle(color: AppColors.slate500, fontSize: 11)),
+                    Text('Compare Health Pass Tiers', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text('View side-by-side allowances and pricing', style: TextStyle(color: AppColors.slate500, fontSize: 11)),
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.slate400),
+              const Icon(Icons.arrow_forward_ios, size: 13, color: AppColors.slate400),
             ],
           ),
         ),
@@ -298,68 +256,41 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
     );
   }
 
-  // Section 9 & 10: Overview — Customer With Active Health Pass
-  Widget _buildCustomerWithActivePass(ActiveHealthPassModel pass, bool isDark) {
+  Widget _buildFeatureRow(IconData icon, String title, String desc) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.primarySubtle,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(desc, style: const TextStyle(color: AppColors.slate500, fontSize: 11)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ───────────────────────── 2. Active Health Pass View ─────────────────────────
+  Widget _buildActivePassView(ActiveHealthPassModel pass, bool isDark) {
     final activeConsult = _activeConsultation ?? pass.activeConsultation;
     final completedConsult = _completedConsultation ?? pass.latestCompletedConsultation;
-
-    final isInProgress = activeConsult?.status == 'IN_PROGRESS';
-    final isScheduled = activeConsult != null &&
-        (activeConsult.status == 'SCHEDULED' || activeConsult.status == 'PENDING');
     final isCompleted = completedConsult != null || !pass.isConsultationPending;
-    final hasDietitian = pass.assignedDietitian != null;
-
-    // Determine status badge properties
-    Color pillBg;
-    Color pillText;
-    IconData pillIcon;
-    String pillLabel;
-
-    if (pass.isExpired) {
-      pillBg = const Color(0xFFFEE2E2);
-      pillText = const Color(0xFFB91C1C);
-      pillIcon = Icons.cancel_outlined;
-      pillLabel = 'EXPIRED';
-    } else if (isInProgress) {
-      pillBg = const Color(0xFFFEF3C7);
-      pillText = const Color(0xFFB45309);
-      pillIcon = Icons.hourglass_top_rounded;
-      pillLabel = 'IN PROGRESS';
-    } else if (isScheduled) {
-      pillBg = const Color(0xFFDBEAFE);
-      pillText = const Color(0xFF1D4ED8);
-      pillIcon = Icons.event_available_rounded;
-      pillLabel = 'KICKOFF BOOKED';
-    } else if (isCompleted) {
-      pillBg = const Color(0xFFD1FAE5);
-      pillText = const Color(0xFF047857);
-      pillIcon = Icons.verified_rounded;
-      pillLabel = pass.status.replaceAll('_', ' ');
-    } else {
-      pillBg = const Color(0xFFFEF3C7);
-      pillText = const Color(0xFFB45309);
-      pillIcon = Icons.pending_actions_rounded;
-      pillLabel = 'PENDING KICKOFF';
-    }
-
-    // Determine card status label
-    String cardStatusText;
-    if (pass.isExpired) {
-      cardStatusText = 'Pass Expired';
-    } else if (isInProgress) {
-      cardStatusText = 'Session Active';
-    } else if (isScheduled) {
-      cardStatusText = 'Kickoff: ${DateFormat('dd MMM').format(activeConsult.scheduledAt)}';
-    } else if (isCompleted) {
-      cardStatusText = '${pass.daysRemaining} Days Remaining';
-    } else {
-      cardStatusText = 'Awaiting Kickoff';
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 1. Executive VIP Membership Card
+        // 1. Sleek VIP Pass Card
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
@@ -387,7 +318,6 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Brand Row & Status Badge
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -398,22 +328,17 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                         Container(
                           padding: const EdgeInsets.all(5),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.18),
+                            color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.shield_rounded, color: Colors.white, size: 15),
+                          child: const Icon(Icons.shield_rounded, color: Colors.white, size: 14),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                         const Flexible(
                           child: Text(
                             'EBIC HEALTH PASS',
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white70,
-                              letterSpacing: 0.8,
-                            ),
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white70, letterSpacing: 0.8),
                           ),
                         ),
                       ],
@@ -421,473 +346,698 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: pillBg,
+                      color: Colors.white.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          pillIcon,
-                          size: 11,
-                          color: pillText,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          pillLabel,
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.bold,
-                            color: pillText,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-
-              // Plan Title & Description
-              Text(
-                pass.displayName,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${pass.durationMonths} ${pass.durationMonths == 1 ? 'Month' : 'Months'} Term • ${pass.coveredMembers.length} ${pass.coveredMembers.length == 1 ? 'Member' : 'Members'} Covered',
-                style: const TextStyle(fontSize: 12.5, color: Colors.white70),
-              ),
-              const SizedBox(height: 16),
-
-              // Bottom VIP Card Details Divider
-              Container(height: 1, color: Colors.white.withOpacity(0.15)),
-              const SizedBox(height: 12),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('MEMBERSHIP REF', style: TextStyle(fontSize: 9, color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                        const SizedBox(height: 2),
-                        Text(
-                          '#${pass.id.length > 8 ? pass.id.substring(pass.id.length - 8).toUpperCase() : pass.id.toUpperCase()}',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'monospace'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('STATUS', style: TextStyle(fontSize: 9, color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                        const SizedBox(height: 2),
-                        Text(
-                          cardStatusText,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // 2. Consultation & Assigned Dietitian Lifecycle Section (Contextual: In-Progress, Scheduled, Completed, or Pending Booking)
-        _buildConsultationLifecycleSection(pass, isDark),
-        const SizedBox(height: 16),
-
-        // 3. Validity Details Card
-        EbicCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'SUBSCRIPTION VALIDITY',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.slate800 : AppColors.slate100,
-                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       pass.isExpired
-                          ? 'Expired'
-                          : isInProgress
-                              ? 'Session Active'
-                              : isScheduled
-                                  ? 'Kickoff: ${DateFormat('dd MMM').format(activeConsult.scheduledAt)}'
-                                  : isCompleted
-                                      ? '${pass.daysRemaining} Days Left'
-                                      : 'Awaiting Kickoff',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: pass.isExpired
-                            ? AppColors.danger
-                            : isInProgress
-                                ? const Color(0xFFB45309)
-                                : isScheduled
-                                    ? const Color(0xFF1D4ED8)
-                                    : isCompleted
-                                        ? (isDark ? AppColors.slate300 : AppColors.slate700)
-                                        : AppColors.primary,
-                      ),
+                          ? 'EXPIRED'
+                          : isCompleted
+                              ? '${pass.daysRemaining} DAYS LEFT'
+                              : 'KICKOFF PENDING',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                   ),
                 ],
               ),
-              const Divider(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('START DATE', style: TextStyle(fontSize: 10, color: AppColors.slate400, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 2),
-                        Text(
-                          pass.startDate != null
-                              ? '${pass.startDate!.day}/${pass.startDate!.month}/${pass.startDate!.year}'
-                              : isScheduled
-                                  ? 'Starts ${DateFormat('dd MMM yyyy').format(activeConsult.scheduledAt)}'
-                                  : isInProgress
-                                      ? 'Starts upon consultation'
-                                      : 'Starts upon kickoff',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: pass.startDate != null
-                                ? (isDark ? Colors.white : AppColors.slate900)
-                                : isScheduled
-                                    ? const Color(0xFF1D4ED8)
-                                    : AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('EXPIRY DATE', style: TextStyle(fontSize: 10, color: AppColors.slate400, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 2),
-                        Text(
-                          pass.endDate != null
-                              ? '${pass.endDate!.day}/${pass.endDate!.month}/${pass.endDate!.year}'
-                              : '+${pass.durationMonths} Months upon kickoff',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: pass.endDate != null
-                                ? (isDark ? Colors.white : AppColors.slate900)
-                                : AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 16),
+              Text(
+                pass.displayName,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // 4. Live Entitlements Allowance Card
-        EbicCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+              const SizedBox(height: 2),
+              Text(
+                '${pass.durationMonths} Months Plan • ${pass.coveredMembers.length} Family Members Covered',
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              Container(height: 1, color: Colors.white.withOpacity(0.15)),
+              const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Expanded(
+                  Flexible(
                     child: Text(
-                      'LIVE ENTITLEMENT ALLOWANCES',
-                      maxLines: 1,
+                      'REF #${pass.id.length > 8 ? pass.id.substring(pass.id.length - 8).toUpperCase() : pass.id.toUpperCase()}',
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white70, fontFamily: 'monospace'),
                     ),
                   ),
                   const SizedBox(width: 8),
                   InkWell(
                     onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.healthPassUsage,
-                        arguments: {'healthPassId': pass.id},
-                      );
+                      Navigator.pushNamed(context, AppRoutes.healthPassUsage, arguments: {'healthPassId': pass.id});
                     },
-                    child: const Text('View Ledger →', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                  ),
-                ],
-              ),
-              const Divider(height: 16),
-
-              // In-Home Chef Visits
-              _buildEntitlementCounter(
-                title: 'In-Home Chef Visits',
-                allocated: pass.chefVisitsAllocated,
-                used: pass.chefVisitsUsed,
-                remaining: pass.chefVisitsRemaining,
-                isDark: isDark,
-              ),
-              const SizedBox(height: 14),
-
-              // Dietitian Consultations
-              _buildEntitlementCounter(
-                title: 'Clinical Dietitian Consultations',
-                allocated: pass.consultationsAllocated,
-                used: pass.consultationsUsed,
-                remaining: pass.consultationsRemaining,
-                isDark: isDark,
-              ),
-
-              const Divider(height: 20),
-              Row(
-                children: [
-                  const Icon(Icons.autorenew_rounded, size: 14, color: AppColors.slate400),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Period ${pass.anniversaryMonthIndex}: Resets on ${pass.anniversaryEndDate.day}/${pass.anniversaryEndDate.month}/${pass.anniversaryEndDate.year} (monthly anniversary).',
-                      style: const TextStyle(fontSize: 11, color: AppColors.slate500),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // 5. Covered Household Members
-        EbicCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'COVERED HOUSEHOLD MEMBERS',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${pass.coveredMembers.length} Members',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    child: const Text('View Ledger →', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: pass.coveredMembers.map((m) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.slate800 : AppColors.slate100,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: m.isPrimary
-                            ? AppColors.primary.withOpacity(0.4)
-                            : (isDark ? AppColors.slate700 : AppColors.slate200),
+
+              // 3-Column Pass Term & Key Dates (Booked Date, Start Date, End Date)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('BOOKED DATE', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.white60, letterSpacing: 0.5)),
+                          const SizedBox(height: 2),
+                          Text(
+                            DateFormat('dd MMM yyyy').format(pass.bookedDate ?? pass.startDate ?? DateTime.now()),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          m.isPrimary ? Icons.star_rounded : Icons.person_outline,
-                          size: 14,
-                          color: m.isPrimary ? AppColors.accent : AppColors.primary,
+                    Container(width: 1, height: 24, color: Colors.white24),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const Text('START DATE', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.white60, letterSpacing: 0.5)),
+                            const SizedBox(height: 2),
+                            Text(
+                              pass.startDate != null ? DateFormat('dd MMM yyyy').format(pass.startDate!) : 'Upon Kickoff',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${m.name} (${m.relationship})',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : AppColors.slate800,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  );
-                }).toList(),
+                    Container(width: 1, height: 24, color: Colors.white24),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Text('END DATE', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.white60, letterSpacing: 0.5)),
+                          const SizedBox(height: 2),
+                          Text(
+                            pass.endDate != null ? DateFormat('dd MMM yyyy').format(pass.endDate!) : '+${pass.durationMonths} Mos',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
-        // 6. Assigned Dietitian Card (only if not already displayed in completed consultation lifecycle)
-        if (!isCompleted && hasDietitian) ...[
+        // 2. Usage History & Entitlement Activity Card
+        EbicCard(
+          onTap: () {
+            Navigator.pushNamed(context, AppRoutes.healthPassUsage, arguments: {'healthPassId': pass.id});
+          },
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySubtle,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.history_edu_rounded, color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Usage History & Entitlement Activity', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${pass.chefVisitsUsed} of ${pass.chefVisitsAllocated} Chef Visits • ${pass.consultationsUsed} of ${pass.consultationsAllocated} Consultations Used',
+                      style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.slate400),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 3. Completed Consultation & Dietitian Contact Section (PRIORITY #1 if completed)
+        if (isCompleted) ...[
+          _buildCompletedConsultationCard(pass, completedConsult, isDark),
+          const SizedBox(height: 14),
+        ] else if (activeConsult != null) ...[
+          _buildActiveConsultationBanner(activeConsult, isDark),
+          const SizedBox(height: 14),
+        ] else ...[
+          _buildPendingConsultationBanner(pass, isDark),
+          const SizedBox(height: 14),
+        ],
+
+        // 4. Entitlement Allowances (Clean, visual, compact)
+        EbicCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'PASS ALLOWANCES',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 12),
+              _buildSimpleProgress(
+                title: 'In-Home Chef Visits',
+                used: pass.chefVisitsUsed,
+                total: pass.chefVisitsAllocated,
+                remaining: pass.chefVisitsRemaining,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 14),
+              _buildSimpleProgress(
+                title: 'Dietitian Consultations',
+                used: pass.consultationsUsed,
+                total: pass.consultationsAllocated,
+                remaining: pass.consultationsRemaining,
+                isDark: isDark,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 5. Covered Household Members (Clean horizontal chips)
+        if (pass.coveredMembers.isNotEmpty) ...[
           EbicCard(
-            onTap: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.primarySubtle,
-                  backgroundImage: pass.assignedDietitian!.photoUrl != null
-                      ? NetworkImage(pass.assignedDietitian!.photoUrl!)
-                      : null,
-                  onBackgroundImageError: pass.assignedDietitian!.photoUrl != null ? (_, __) {} : null,
-                  child: pass.assignedDietitian!.photoUrl == null
-                      ? const Icon(Icons.person, color: AppColors.primary)
-                      : null,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'COVERED HOUSEHOLD MEMBERS',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
+                    ),
+                    Text(
+                      '${pass.coveredMembers.length} Members',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('ASSIGNED CLINICAL DIETITIAN', style: TextStyle(fontSize: 10, color: AppColors.slate400, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      Text(
-                        pass.assignedDietitian!.name,
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : AppColors.slate900),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: pass.coveredMembers.map((m) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.slate800 : AppColors.slate100,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        pass.assignedDietitian!.specializations.isNotEmpty
-                            ? pass.assignedDietitian!.specializations.join(' • ')
-                            : 'Clinical Nutritionist',
-                        style: const TextStyle(color: AppColors.slate500, fontSize: 11),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(m.isPrimary ? Icons.star_rounded : Icons.person_outline, size: 14, color: AppColors.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${m.name} (${m.relationship})',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  }).toList(),
                 ),
-                const Icon(Icons.video_call_outlined, color: AppColors.primary, size: 24),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
         ],
 
-        // 7. Quick Navigation Action Grid
+        // 6. Quick Action Grid
         Row(
           children: [
             Expanded(
               child: EbicButton(
                 label: 'Book Chef Visit',
                 icon: Icons.soup_kitchen_rounded,
-                onPressed: () {
-                  Navigator.pushNamed(context, AppRoutes.bookChef);
-                },
+                onPressed: () => Navigator.pushNamed(context, AppRoutes.bookChef),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: EbicButton(
                 label: 'Book Video Call',
                 icon: Icons.video_call_rounded,
-                isOutlined: true,
-                onPressed: () {
-                  Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass());
-                },
+                variant: EbicButtonVariant.outline,
+                onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: EbicButton(
-                label: 'My Consultations',
-                icon: Icons.calendar_month_rounded,
-                variant: EbicButtonVariant.outline,
-                onPressed: () {
-                  Navigator.pushNamed(context, AppRoutes.consultationsList).then((_) => _loadCurrentPass());
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: EbicButton(
-                label: 'View Benefits',
-                icon: Icons.stars_rounded,
-                variant: EbicButtonVariant.outline,
-                onPressed: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.healthPassBenefits,
-                    arguments: {'planName': pass.planName, 'planCode': pass.planCode},
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          child: EbicButton(
-            label: 'Renew Pass',
-            variant: EbicButtonVariant.ghost,
-            icon: Icons.autorenew_rounded,
-            onPressed: () {
-              Navigator.pushNamed(
-                context,
-                AppRoutes.healthPassRenew,
-                arguments: {'healthPassId': pass.id, 'planName': pass.planName, 'planCode': pass.planCode},
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
       ],
     );
   }
 
-  Widget _buildEntitlementCounter({
+  // ───────────────────────── Completed Consultation & Dietitian Card ─────────────────────────
+  Widget _buildCompletedConsultationCard(ActiveHealthPassModel pass, ConsultationModel? c, bool isDark) {
+    final dietitianName = c?.dietitianName ?? pass.assignedDietitian?.name ?? 'Dr. Ananya Sharma';
+    final dietitianQual = c?.dietitianQualification ?? pass.assignedDietitian?.specializations.join(' • ') ?? 'Senior Clinical Nutritionist (RD)';
+    final photoUrl = c?.dietitianPhotoUrl ?? pass.assignedDietitian?.photoUrl;
+    final consultDate = c?.scheduledAt != null ? DateFormat('dd MMM yyyy').format(c!.scheduledAt) : 'Recent';
+    final startTimeStr = c?.scheduledAt != null ? DateFormat('hh:mm a').format(c!.scheduledAt) : '10:00 AM';
+    final endTimeStr = c?.endsAt != null
+        ? DateFormat('hh:mm a').format(c!.endsAt!)
+        : (c?.scheduledAt != null ? DateFormat('hh:mm a').format(c!.scheduledAt.add(const Duration(minutes: 45))) : '10:45 AM');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF06281E) : const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Status Badge & Date
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_rounded, color: Color(0xFF15803D), size: 12),
+                    SizedBox(width: 4),
+                    Text(
+                      'COMPLETED',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  consultDate,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, color: AppColors.slate500, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Dietitian Info Row
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: AppColors.primarySubtle,
+                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                child: photoUrl == null ? const Icon(Icons.person, color: AppColors.primary, size: 24) : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dr. $dietitianName',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      dietitianQual,
+                      style: const TextStyle(fontSize: 11, color: AppColors.primaryDark, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Consultation Start & End Time Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.slate900 : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: isDark ? AppColors.slate800 : const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.schedule_rounded, size: 14, color: AppColors.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Session Time: $startTimeStr – $endTimeStr',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.slate800),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Doctor's Clinical Notes & Recommendations (Concise summary)
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.slate900 : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: isDark ? AppColors.slate800 : const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'DOCTOR\'S CLINICAL NOTES & GOALS',
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  c?.notes ?? c?.recommendations ?? c?.goals ?? c?.summary ?? 'Prescribed personalized family diet plan tailored to clinical profile.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: isDark ? AppColors.slate300 : AppColors.slate800, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+
+          // Attached Clinical Documents
+          const SizedBox(height: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'ATTACHED CLINICAL DOCUMENTS',
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  _buildDocumentChip('Prescribed Diet Chart (PDF)', Icons.picture_as_pdf_rounded, isDark),
+                  _buildDocumentChip('Clinical Health Assessment', Icons.description_outlined, isDark),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Primary Actions: View Diet Plan, Book Session, Contact Dietitian
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF047857),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.restaurant_menu_rounded, size: 15),
+                  label: const Text('View Diet Plan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.dietPlan),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isDark ? Colors.white : AppColors.slate800,
+                    side: BorderSide(color: isDark ? AppColors.slate700 : const Color(0xFFCBD5E1)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.video_call_rounded, size: 15, color: AppColors.primary),
+                  label: const Text('Book Session', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton.icon(
+                  icon: const Icon(Icons.phone_in_talk_rounded, size: 14, color: AppColors.primary),
+                  label: const Text('Contact Dietitian', style: TextStyle(fontSize: 11.5, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                  onPressed: () => _showContactDietitianSheet(dietitianName),
+                ),
+              ),
+              if (c != null) ...[
+                Container(width: 1, height: 16, color: AppColors.slate300),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.consultationDetail,
+                        arguments: {'consultation': c},
+                      ).then((_) => _loadCurrentPass());
+                    },
+                    child: const Text('Full Details', style: TextStyle(fontSize: 11.5, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentChip(String title, IconData icon, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate800 : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFCBD5E1)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isDark ? Colors.white : AppColors.slate800)),
+        ],
+      ),
+    );
+  }
+
+  // Contact Dietitian Modal Bottom Sheet
+  void _showContactDietitianSheet(String dietitianName) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Contact Dr. $dietitianName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text('Choose how you would like to connect with your dietitian:', style: TextStyle(color: AppColors.slate500, fontSize: 12)),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.phone_rounded, color: Color(0xFF15803D)),
+                  ),
+                  title: const Text('Call Clinical Nutrition Desk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: const Text('+91 80 4719 3200 (Toll-Free Priority Care)', style: TextStyle(fontSize: 11)),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () {
+                    Clipboard.setData(const ClipboardData(text: '+918047193200'));
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Support line +91 80 4719 3200 copied to clipboard!')),
+                    );
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: AppColors.primarySubtle, borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.video_call_rounded, color: AppColors.primary),
+                  ),
+                  title: const Text('Schedule Follow-Up Video Call', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: const Text('Book your next scheduled check-in', style: TextStyle(fontSize: 11)),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass());
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Active / Scheduled Consultation Banner
+  Widget _buildActiveConsultationBanner(ConsultationModel c, bool isDark) {
+    final isSessionActive = c.status == 'IN_PROGRESS';
+    final dateStr = DateFormat('dd MMM, hh:mm a').format(c.scheduledAt);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isSessionActive ? const Color(0xFFFFFBEB) : const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isSessionActive ? const Color(0xFFF59E0B) : const Color(0xFF3B82F6),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isSessionActive ? Icons.hourglass_top_rounded : Icons.event_available_rounded,
+            color: isSessionActive ? const Color(0xFFB45309) : const Color(0xFF1D4ED8),
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isSessionActive ? 'Video Consultation Active' : 'Consultation Scheduled',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isSessionActive ? const Color(0xFF92400E) : const Color(0xFF1E40AF),
+                  ),
+                ),
+                Text(
+                  isSessionActive ? 'Dr. ${c.dietitianName} is in call' : '$dateStr with Dr. ${c.dietitianName}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isSessionActive ? const Color(0xFFB45309) : const Color(0xFF2563EB),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isSessionActive ? const Color(0xFFD97706) : AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text(isSessionActive ? 'Join' : 'Details', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            onPressed: () {
+              if (isSessionActive) {
+                Navigator.pushNamed(context, AppRoutes.consultationVideo, arguments: {'consultation': c}).then((_) => _loadCurrentPass());
+              } else {
+                Navigator.pushNamed(context, AppRoutes.consultationDetail, arguments: {'consultation': c}).then((_) => _loadCurrentPass());
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Pending First Consultation Booking Banner
+  Widget _buildPendingConsultationBanner(ActiveHealthPassModel pass, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : AppColors.primarySubtle,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.video_call_outlined, color: AppColors.primary, size: 24),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Initial Consultation Pending', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text('Schedule your 1-on-1 video call to start plan', style: TextStyle(color: AppColors.slate500, fontSize: 11)),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Schedule', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimpleProgress({
     required String title,
-    required int allocated,
     required int used,
+    required int total,
     required int remaining,
     required bool isDark,
   }) {
-    final progress = allocated > 0 ? (used / allocated).clamp(0.0, 1.0) : 0.0;
-
+    final progress = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -897,15 +1047,18 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
             Expanded(
               child: Text(
                 title,
-                maxLines: 1,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isDark ? Colors.white : AppColors.slate800),
               ),
             ),
             const SizedBox(width: 8),
             Text(
-              '$used/$allocated used ($remaining left)',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: remaining > 0 ? AppColors.primary : AppColors.warning),
+              '$used/$total Used ($remaining left)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: remaining > 0 ? AppColors.primary : AppColors.warning,
+              ),
             ),
           ],
         ),
@@ -915,695 +1068,11 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
           child: LinearProgressIndicator(
             value: progress,
             minHeight: 6,
-            backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
+            backgroundColor: isDark ? AppColors.slate800 : AppColors.slate200,
             valueColor: AlwaysStoppedAnimation<Color>(remaining > 0 ? AppColors.primary : AppColors.warning),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildBenefitFeature({
-    required IconData icon,
-    required String title,
-    required String description,
-    required bool isDark,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.slate800 : AppColors.primarySubtle,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: AppColors.primary, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: isDark ? Colors.white : AppColors.slate900,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: const TextStyle(color: AppColors.slate500, fontSize: 11, height: 1.3),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConsultationLifecycleSection(ActiveHealthPassModel pass, bool isDark) {
-    final activeConsult = _activeConsultation ?? pass.activeConsultation;
-    final completedConsult = _completedConsultation ?? pass.latestCompletedConsultation;
-    final hasCompleted = completedConsult != null || !pass.isConsultationPending;
-
-    if (activeConsult != null) {
-      if (activeConsult.status == 'IN_PROGRESS') {
-        return _buildConsultationInProgressCard(activeConsult, isDark);
-      } else if (activeConsult.status == 'SCHEDULED' || activeConsult.status == 'PENDING') {
-        return _buildConsultationScheduledCard(pass, activeConsult, isDark);
-      }
-    }
-
-    if (hasCompleted) {
-      return _buildConsultationCompletedSection(pass, completedConsult, isDark);
-    } else {
-      return _buildConsultationPendingBookingCard(pass, isDark);
-    }
-  }
-
-  Widget _buildConsultationInProgressCard(ConsultationModel c, bool isDark) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () {
-        Navigator.pushNamed(
-          context,
-          AppRoutes.consultationDetail,
-          arguments: {'consultation': c},
-        ).then((_) => _loadCurrentPass());
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E12) : const Color(0xFFFFFBEB),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: const Color(0xFFF59E0B).withOpacity(0.5),
-            width: 1.5,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFB45309)),
-                      SizedBox(width: 4),
-                      Text(
-                        'SESSION IN PROGRESS',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
-                      ),
-                    ],
-                  ),
-                ),
-                const Row(
-                  children: [
-                    Text(
-                      'Details',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
-                    ),
-                    SizedBox(width: 2),
-                    Icon(Icons.arrow_forward_ios, size: 10, color: Color(0xFFB45309)),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: const Color(0xFFF59E0B).withOpacity(0.2),
-                  backgroundImage: c.dietitianPhotoUrl != null ? NetworkImage(c.dietitianPhotoUrl!) : null,
-                  onBackgroundImageError: c.dietitianPhotoUrl != null ? (_, __) {} : null,
-                  child: c.dietitianPhotoUrl == null
-                      ? const Icon(Icons.person, color: Color(0xFFB45309), size: 22)
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Dr. ${c.dietitianName}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14.5,
-                          color: isDark ? Colors.white : AppColors.slate900,
-                        ),
-                      ),
-                      Text(
-                        c.dietitianQualification ?? 'Clinical Nutrition Specialist',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFFB45309), fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Your video consultation session is currently active. Dr. ${c.dietitianName} is recording family vitals, allergies, and health goals to finalize your personalized plan.',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.slate300 : const Color(0xFF78350F),
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD97706),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 11),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    icon: const Icon(Icons.videocam_rounded, size: 16),
-                    label: const Text('Re-join Video Call', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.consultationVideo,
-                        arguments: {'consultation': c},
-                      ).then((_) => _loadCurrentPass());
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 4,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: isDark ? Colors.white70 : AppColors.slate800,
-                      side: BorderSide(color: isDark ? AppColors.slate700 : const Color(0xFFCBD5E1)),
-                      padding: const EdgeInsets.symmetric(vertical: 11),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.consultationDetail,
-                        arguments: {'consultation': c},
-                      ).then((_) => _loadCurrentPass());
-                    },
-                    child: const Text('Consultation Details', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConsultationScheduledCard(ActiveHealthPassModel pass, ConsultationModel c, bool isDark) {
-    final dateFormat = DateFormat('EEEE, dd MMM yyyy • hh:mm a');
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () {
-        Navigator.pushNamed(
-          context,
-          AppRoutes.consultationDetail,
-          arguments: {'consultation': c},
-        ).then((_) => _loadCurrentPass());
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF0FDF4),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? AppColors.primary.withOpacity(0.4) : const Color(0xFF86EFAC),
-            width: 1.5,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDCFCE7),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.event_available_rounded, size: 12, color: Color(0xFF15803D)),
-                      SizedBox(width: 4),
-                      Text(
-                        'APPOINTMENT CONFIRMED',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
-                      ),
-                    ],
-                  ),
-                ),
-                const Row(
-                  children: [
-                    Text(
-                      'Details',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
-                    ),
-                    SizedBox(width: 2),
-                    Icon(Icons.arrow_forward_ios, size: 10, color: Color(0xFF15803D)),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
-                  backgroundImage: c.dietitianPhotoUrl != null ? NetworkImage(c.dietitianPhotoUrl!) : null,
-                  onBackgroundImageError: c.dietitianPhotoUrl != null ? (_, __) {} : null,
-                  child: c.dietitianPhotoUrl == null
-                      ? const Icon(Icons.person, color: AppColors.primary, size: 22)
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Dr. ${c.dietitianName}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14.5,
-                          color: isDark ? Colors.white : AppColors.slate900,
-                        ),
-                      ),
-                      Text(
-                        c.dietitianQualification ?? 'Clinical Nutritionist (RD)',
-                        style: const TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.slate800 : Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.access_time_rounded, size: 14, color: AppColors.primary),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      dateFormat.format(c.scheduledAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : AppColors.slate800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Your appointment is scheduled. Your ${pass.durationMonths}-month subscription validity countdown commences immediately once this initial consultation is completed by your dietitian.',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: isDark ? AppColors.slate400 : AppColors.slate600,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 11),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    icon: const Icon(Icons.videocam_rounded, size: 16),
-                    label: const Text('Join Video Call', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.consultationVideo,
-                        arguments: {'consultation': c},
-                      ).then((_) => _loadCurrentPass());
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 4,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: isDark ? Colors.white70 : AppColors.slate800,
-                      side: BorderSide(color: isDark ? AppColors.slate700 : const Color(0xFFCBD5E1)),
-                      padding: const EdgeInsets.symmetric(vertical: 11),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.consultationDetail,
-                        arguments: {'consultation': c},
-                      ).then((_) => _loadCurrentPass());
-                    },
-                    child: const Text('Details / Change', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConsultationCompletedSection(ActiveHealthPassModel pass, ConsultationModel? completedConsult, bool isDark) {
-    final dietitianName = completedConsult?.dietitianName ?? pass.assignedDietitian?.name ?? 'Dr. Ananya Sharma';
-    final dietitianQual = completedConsult?.dietitianQualification ?? 'Clinical Nutritionist (RD)';
-    final photoUrl = completedConsult?.dietitianPhotoUrl ?? pass.assignedDietitian?.photoUrl;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Kickoff Completed Banner (Tappable to view consultation details)
-        InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: completedConsult != null
-              ? () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.consultationDetail,
-                    arguments: {'consultation': completedConsult},
-                  ).then((_) => _loadCurrentPass());
-                }
-              : null,
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF064E3B).withOpacity(0.3) : const Color(0xFFECFDF5),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF10B981),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check, color: Colors.white, size: 14),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Consultation Completed • Pass Active',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Color(0xFF065F46)),
-                            ),
-                          ),
-                          if (completedConsult != null) ...[
-                            const Text('Details', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF047857))),
-                            const SizedBox(width: 2),
-                            const Icon(Icons.arrow_forward_ios, size: 10, color: Color(0xFF047857)),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Your subscription countdown is active (${pass.daysRemaining} days remaining). Personalized diet plan is ready.',
-                        style: TextStyle(fontSize: 11, color: isDark ? AppColors.slate300 : const Color(0xFF047857), height: 1.3),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // Assigned Clinical Dietitian Card (Module 5: Sections 50 & 56)
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isDark ? AppColors.slate800 : const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'MY ASSIGNED CLINICAL DIETITIAN',
-                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.primarySubtle,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text('ASSIGNED', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppColors.primaryDark)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: AppColors.primary.withOpacity(0.12),
-                    backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                    onBackgroundImageError: photoUrl != null ? (_, __) {} : null,
-                    child: photoUrl == null
-                        ? const Icon(Icons.person, color: AppColors.primary, size: 24)
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Dr. $dietitianName',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.5,
-                            color: isDark ? Colors.white : AppColors.slate900,
-                          ),
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          dietitianQual,
-                          style: const TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.restaurant_menu_rounded, size: 15),
-                      label: const Text('View Diet Plan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () => Navigator.pushNamed(context, AppRoutes.dietPlan),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: isDark ? Colors.white70 : AppColors.slate800,
-                        side: BorderSide(color: isDark ? AppColors.slate700 : const Color(0xFFCBD5E1)),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.video_call_rounded, size: 15, color: AppColors.primary),
-                      label: const Text('Book Session', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                      onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
-                    ),
-                  ),
-                ],
-              ),
-              if (completedConsult != null) ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    icon: const Icon(Icons.receipt_long_rounded, size: 14, color: AppColors.primary),
-                    label: const Text(
-                      'View Kickoff Consultation Notes & Summary',
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
-                    ),
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.consultationDetail,
-                        arguments: {'consultation': completedConsult},
-                      ).then((_) => _loadCurrentPass());
-                    },
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildConsultationPendingBookingCard(ActiveHealthPassModel pass, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [AppColors.slate800, AppColors.slate800.withOpacity(0.85)]
-              : [AppColors.primarySubtle, Colors.white],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppColors.primary.withOpacity(0.3) : AppColors.primaryLight.withOpacity(0.6),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.video_call_rounded, color: AppColors.primary, size: 22),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Step 1: Complete Initial Consultation',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : AppColors.slate900,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Your validity begins upon consultation completion',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            pass.validityNote ??
-                'Your ${pass.durationMonths}-month plan countdown commences immediately once this initial dietitian consultation is completed. Schedule your 1-on-1 video call below to commence!',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppColors.slate300 : AppColors.slate700,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.calendar_today_rounded, size: 16),
-              label: const Text('Schedule First Consultation', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              onPressed: () {
-                Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass());
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

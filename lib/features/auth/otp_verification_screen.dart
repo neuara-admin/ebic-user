@@ -126,6 +126,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           arguments: {'phone': widget.phone, 'code': code},
         );
       } else {
+        if (widget.purpose == 'ACCOUNT_RECOVERY') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account access restored successfully! Welcome back to EBIC.'),
+              backgroundColor: AppColors.primaryDark,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
         final dest = AppRouter.intendedDestinationRoute;
         final destArgs = AppRouter.intendedDestinationArgs;
         AppRouter.intendedDestinationRoute = null;
@@ -193,9 +202,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   String _maskPhoneNumber(String phone) {
-    if (phone.length < 8) return phone;
-    final prefix = phone.substring(0, phone.length - 4);
-    return '${prefix.substring(0, 7)} **** ${phone.substring(phone.length - 2)}';
+    final clean = phone.trim();
+    if (clean.length <= 4) return clean;
+    if (clean.length <= 8) {
+      return '${clean.substring(0, 2)} **** ${clean.substring(clean.length - 2)}';
+    }
+    final prefixEnd = clean.length > 10 ? 7 : 4;
+    final prefix = clean.substring(0, prefixEnd);
+    final suffix = clean.substring(clean.length - 2);
+    return '$prefix **** $suffix';
   }
 
   String _getTitle() {
@@ -365,22 +380,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return SizedBox(
       width: 48,
       height: 56,
-      child: RawKeyboardListener(
-        focusNode: FocusNode(),
-        onKey: (event) {
-          if (event is RawKeyDownEvent &&
+      child: Focus(
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.backspace &&
               _digitControllers[index].text.isEmpty &&
               index > 0) {
             _focusNodes[index - 1].requestFocus();
+            return KeyEventResult.handled;
           }
+          return KeyEventResult.ignored;
         },
         child: TextField(
           controller: _digitControllers[index],
           focusNode: _focusNodes[index],
           keyboardType: TextInputType.number,
           textAlign: TextAlign.center,
-          maxLength: 1,
           style: const TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -407,6 +422,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             ),
           ),
           onChanged: (val) {
+            // Support multi-digit paste
+            final digitsOnly = val.replaceAll(RegExp(r'\D'), '');
+            if (digitsOnly.length > 1) {
+              for (int i = 0; i < 6 && i < digitsOnly.length; i++) {
+                _digitControllers[i].text = digitsOnly[i];
+              }
+              setState(() {});
+              if (digitsOnly.length >= 6) {
+                _focusNodes[5].unfocus();
+                _handleVerify();
+              } else {
+                _focusNodes[digitsOnly.length].requestFocus();
+              }
+              return;
+            }
+
             setState(() {});
             if (val.isNotEmpty) {
               if (index < 5) {

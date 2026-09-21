@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -48,6 +49,26 @@ class ApiClient {
     } finally {
       _refreshFuture = null;
     }
+  }
+
+  bool _triedFallbackUrl = false;
+
+  Future<bool> _trySwitchToReverseAdbFallback() async {
+    if (_triedFallbackUrl) return false;
+    _triedFallbackUrl = true;
+    final currentUri = Uri.tryParse(AppConfig.apiBaseUrl);
+    if (currentUri != null && currentUri.host != '127.0.0.1' && currentUri.host != 'localhost') {
+      try {
+        final probeUri = Uri.parse('http://127.0.0.1:3000/v1/config');
+        final testRes = await _httpClient.get(probeUri).timeout(const Duration(seconds: 2));
+        if (testRes.statusCode >= 200 && testRes.statusCode < 500) {
+          debugPrint('🔄 [Network] Seamlessly switched base URL to USB reverse-ADB bridge: http://127.0.0.1:3000/v1');
+          AppConfig.apiBaseUrl = 'http://127.0.0.1:3000/v1';
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
   }
 
   Future<bool> _executeTokenRefresh() async {
@@ -176,21 +197,17 @@ class ApiClient {
       }
 
       return _parseResponse<T>(response, fromDataJson, method: 'GET', uri: uri);
-    } on SocketException {
-      _logApiError(method: 'GET', uri: uri, code: 'NETWORK_ERROR', message: 'Unable to connect. Please check your internet connection.');
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(
-          code: 'NETWORK_ERROR',
-          message: "Unable to connect. Please check your internet connection and try again.",
-        ),
-      );
     } catch (e) {
-      _logApiError(method: 'GET', uri: uri, code: 'CLIENT_ERROR', message: _cleanErrorMessage(e));
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(code: 'CLIENT_ERROR', message: _cleanErrorMessage(e)),
-      );
+      if (!isRetry && await _trySwitchToReverseAdbFallback()) {
+        return get<T>(
+          endpoint,
+          queryParameters: queryParameters,
+          requiresAuth: requiresAuth,
+          fromDataJson: fromDataJson,
+          isRetry: true,
+        );
+      }
+      return _handleCatchException<T>(e, 'GET', uri);
     }
   }
 
@@ -240,21 +257,20 @@ class ApiClient {
       }
 
       return _parseResponse<T>(response, fromDataJson, method: 'POST', uri: uri, requestBody: encodedBody);
-    } on SocketException {
-      _logApiError(method: 'POST', uri: uri, code: 'NETWORK_ERROR', message: 'Unable to connect. Please check your internet connection.', requestBody: body);
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(
-          code: 'NETWORK_ERROR',
-          message: "Unable to connect. Please check your internet connection and try again.",
-        ),
-      );
     } catch (e) {
-      _logApiError(method: 'POST', uri: uri, code: 'CLIENT_ERROR', message: _cleanErrorMessage(e), requestBody: body);
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(code: 'CLIENT_ERROR', message: _cleanErrorMessage(e)),
-      );
+      if (!isRetry && await _trySwitchToReverseAdbFallback()) {
+        return post<T>(
+          endpoint,
+          body: body,
+          queryParameters: queryParameters,
+          requiresAuth: requiresAuth,
+          requiresIdempotency: requiresIdempotency,
+          explicitIdempotencyKey: explicitIdempotencyKey,
+          fromDataJson: fromDataJson,
+          isRetry: true,
+        );
+      }
+      return _handleCatchException<T>(e, 'POST', uri, requestBody: body);
     }
   }
 
@@ -304,21 +320,8 @@ class ApiClient {
       }
 
       return _parseResponse<T>(response, fromDataJson, method: 'PATCH', uri: uri, requestBody: encodedBody);
-    } on SocketException {
-      _logApiError(method: 'PATCH', uri: uri, code: 'NETWORK_ERROR', message: 'Unable to connect. Please check your internet connection.', requestBody: body);
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(
-          code: 'NETWORK_ERROR',
-          message: "Unable to connect. Please check your internet connection and try again.",
-        ),
-      );
     } catch (e) {
-      _logApiError(method: 'PATCH', uri: uri, code: 'CLIENT_ERROR', message: _cleanErrorMessage(e), requestBody: body);
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(code: 'CLIENT_ERROR', message: _cleanErrorMessage(e)),
-      );
+      return _handleCatchException<T>(e, 'PATCH', uri, requestBody: body);
     }
   }
 
@@ -354,21 +357,8 @@ class ApiClient {
       }
 
       return _parseResponse<T>(response, fromDataJson, method: 'DELETE', uri: uri);
-    } on SocketException {
-      _logApiError(method: 'DELETE', uri: uri, code: 'NETWORK_ERROR', message: 'Unable to connect. Please check your internet connection.');
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(
-          code: 'NETWORK_ERROR',
-          message: "Unable to connect. Please check your internet connection and try again.",
-        ),
-      );
     } catch (e) {
-      _logApiError(method: 'DELETE', uri: uri, code: 'CLIENT_ERROR', message: _cleanErrorMessage(e));
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(code: 'CLIENT_ERROR', message: _cleanErrorMessage(e)),
-      );
+      return _handleCatchException<T>(e, 'DELETE', uri);
     }
   }
 
@@ -441,21 +431,8 @@ class ApiClient {
       }
 
       return _parseResponse<T>(response, fromDataJson, method: 'POST (multipart)', uri: uri);
-    } on SocketException {
-      _logApiError(method: 'POST (multipart)', uri: uri, code: 'NETWORK_ERROR', message: 'Unable to connect. Please check your internet connection.');
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(
-          code: 'NETWORK_ERROR',
-          message: "Unable to connect. Please check your internet connection and try again.",
-        ),
-      );
     } catch (e) {
-      _logApiError(method: 'POST (multipart)', uri: uri, code: 'CLIENT_ERROR', message: _cleanErrorMessage(e));
-      return ApiResponse<T>(
-        success: false,
-        error: ApiError(code: 'CLIENT_ERROR', message: _cleanErrorMessage(e)),
-      );
+      return _handleCatchException<T>(e, 'POST (multipart)', uri);
     }
   }
 
@@ -620,7 +597,33 @@ class ApiClient {
     );
   }
 
+  ApiResponse<T> _handleCatchException<T>(dynamic e, String method, Uri uri, {dynamic requestBody}) {
+    final code = _resolveErrorCode(e);
+    final msg = _cleanErrorMessage(e);
+    _logApiError(method: method, uri: uri, code: code, message: msg, requestBody: requestBody);
+    return ApiResponse<T>(
+      success: false,
+      error: ApiError(code: code, message: msg),
+    );
+  }
+
+  String _resolveErrorCode(dynamic e) {
+    if (e is TimeoutException) return 'NETWORK_TIMEOUT';
+    if (e is SocketException) return 'NETWORK_ERROR';
+    if (e is http.ClientException) return 'SERVER_UNREACHABLE';
+    return 'CLIENT_ERROR';
+  }
+
   String _cleanErrorMessage(dynamic e) {
+    if (e is TimeoutException) {
+      return 'Connection timed out. Please check your internet connection or server availability.';
+    }
+    if (e is SocketException) {
+      return 'Unable to connect. Please check your internet connection.';
+    }
+    if (e is http.ClientException) {
+      return 'Server is currently unreachable. Please check your network and try again.';
+    }
     if (kDebugMode) return e.toString();
     return "We couldn't complete that request. Please try again.";
   }

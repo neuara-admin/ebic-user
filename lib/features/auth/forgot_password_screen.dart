@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../shared/widgets/ebic_button.dart';
@@ -17,6 +18,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _isLoading = false;
   bool _isSent = false;
   String? _errorMessage;
+  String? _devToken;
 
   Future<void> _handleSubmit() async {
     final email = _emailController.text.trim();
@@ -31,7 +33,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _errorMessage = null;
     });
 
-    final res = await ApiClient().post(
+    final res = await ApiClient().post<Map<String, dynamic>>(
       ApiEndpoints.forgotPassword,
       body: {'email': email},
       requiresAuth: false,
@@ -39,6 +41,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => _isLoading = false);
 
     if (res.success) {
+      final devLink = res.data?['devResetLink'] as String?;
+      if (devLink != null && devLink.contains('token=')) {
+        _devToken = Uri.tryParse(devLink)?.queryParameters['token'];
+      }
       setState(() => _isSent = true);
     } else {
       setState(() => _errorMessage = res.error?.displayMessage ?? res.error?.message ?? 'Failed to send reset link.');
@@ -120,7 +126,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.slate500),
           ),
-          const SizedBox(height: 32),
+          if (_devToken != null) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.lock_reset_rounded, size: 18),
+              label: const Text('Reset Password Directly (Dev Link)'),
+              onPressed: () {
+                Navigator.pushNamed(
+                  context,
+                  AppRoutes.resetPassword,
+                  arguments: {'token': _devToken},
+                );
+              },
+            ),
+          ],
+          const SizedBox(height: 24),
           EbicButton(
             label: 'Back to Sign In',
             onPressed: () => Navigator.pop(context),

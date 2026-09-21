@@ -10,6 +10,8 @@ class DishModel {
   final int defaultServings;
   final String? preparationInstructions;
   final List<DishIngredientModel> ingredients;
+  final List<String> dietaryTags;
+  final List<String> allergens;
   final DishNutritionModel? nutrition;
 
   DishModel({
@@ -24,6 +26,8 @@ class DishModel {
     this.defaultServings = 1,
     this.preparationInstructions,
     this.ingredients = const [],
+    this.dietaryTags = const [],
+    this.allergens = const [],
     this.nutrition,
   });
 
@@ -31,7 +35,40 @@ class DishModel {
   int get cookTimeMinutes => baseCookTimeMin;
   double get basePrice => 249.0;
 
+  bool get isVegetarian {
+    if (dietaryTags.any((t) => t.toUpperCase().contains('VEG') && !t.toUpperCase().contains('NON'))) {
+      return true;
+    }
+    final lowerName = name.toLowerCase();
+    final lowerDesc = (description ?? '').toLowerCase();
+    final nonVegWords = ['chicken', 'mutton', 'fish', 'prawn', 'meat', 'egg', 'lamb', 'pork', 'beef', 'salmon'];
+    return !nonVegWords.any((w) => lowerName.contains(w) || lowerDesc.contains(w));
+  }
+
+  bool get isVegan => dietaryTags.any((t) => t.toUpperCase().contains('VEGAN'));
+  bool get isHighProtein => (nutrition?.proteinG ?? 0) >= 20 || category == 'HIGH_PROTEIN';
+  bool get isLowCalorie => (nutrition?.calories ?? 999) <= 350;
+  bool get isQuickPrep => baseCookTimeMin <= 20;
+
   factory DishModel.fromJson(Map<String, dynamic> json) {
+    // Parse dietary tags from tag relation objects or plain strings
+    final rawTags = json['dietaryTags'] as List<dynamic>? ?? [];
+    final parsedTags = rawTags.map((t) {
+      if (t is Map<String, dynamic>) {
+        return (t['dietaryTag']?['name'] ?? t['name'] ?? t['code'] ?? '').toString();
+      }
+      return t.toString();
+    }).where((t) => t.isNotEmpty).toList();
+
+    // Parse allergens
+    final rawAllergens = json['allergens'] as List<dynamic>? ?? [];
+    final parsedAllergens = rawAllergens.map((a) {
+      if (a is Map<String, dynamic>) {
+        return (a['allergen']?['name'] ?? a['name'] ?? '').toString();
+      }
+      return a.toString();
+    }).where((a) => a.isNotEmpty).toList();
+
     return DishModel(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
@@ -47,6 +84,8 @@ class DishModel {
               ?.map((e) => DishIngredientModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      dietaryTags: parsedTags,
+      allergens: parsedAllergens,
       nutrition: json['nutrition'] != null
           ? DishNutritionModel.fromJson(json['nutrition'] as Map<String, dynamic>)
           : null,

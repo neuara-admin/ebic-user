@@ -319,6 +319,7 @@ class ActiveHealthPassModel {
   final String displayName;
   final String shortDescription;
   final int durationMonths;
+  final DateTime? bookedDate;
   final DateTime? startDate;
   final DateTime? endDate;
   final int daysRemaining;
@@ -355,6 +356,7 @@ class ActiveHealthPassModel {
     required this.displayName,
     this.shortDescription = '',
     required this.durationMonths,
+    this.bookedDate,
     this.startDate,
     this.endDate,
     required this.daysRemaining,
@@ -410,6 +412,8 @@ class ActiveHealthPassModel {
         : null;
     final fin = (json['financialSnapshot'] as Map<String, dynamic>?) ?? {};
 
+    final rawCreated = json['createdAt']?.toString() ?? json['purchasedAt']?.toString() ?? json['bookingDate']?.toString();
+    final bookedDate = rawCreated != null && rawCreated.isNotEmpty ? DateTime.tryParse(rawCreated) : null;
     final rawStart = json['startDate']?.toString();
     final rawEnd = json['endDate']?.toString();
     final isPending = json['isConsultationPending'] == true || (rawStart == null || rawStart.isEmpty);
@@ -422,6 +426,7 @@ class ActiveHealthPassModel {
       displayName: plan['displayName']?.toString() ?? plan['name']?.toString() ?? json['planName']?.toString() ?? 'EBIC Care',
       shortDescription: plan['shortDescription']?.toString() ?? '',
       durationMonths: int.tryParse(json['durationMonths']?.toString() ?? duration['durationMonths']?.toString() ?? '1') ?? 1,
+      bookedDate: bookedDate,
       startDate: rawStart != null && rawStart.isNotEmpty ? DateTime.tryParse(rawStart) : null,
       endDate: rawEnd != null && rawEnd.isNotEmpty ? DateTime.tryParse(rawEnd) : null,
       daysRemaining: int.tryParse(json['daysRemaining']?.toString() ?? '0') ?? 0,

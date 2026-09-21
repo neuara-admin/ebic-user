@@ -148,7 +148,7 @@ class _LifestyleScreenState extends State<LifestyleScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Activity Level (Section 23)',
+              'Activity Level',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.slate900),
             ),
             const SizedBox(height: 4),
@@ -283,7 +283,7 @@ class _LifestyleScreenState extends State<LifestyleScreen> {
             const SizedBox(height: 24),
 
             const Text(
-              'Sleep Schedule (Section 24)',
+              'Sleep Schedule',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.slate900),
             ),
             const SizedBox(height: 4),

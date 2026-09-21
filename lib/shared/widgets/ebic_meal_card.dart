@@ -61,9 +61,12 @@ class EBICMealCard extends StatelessWidget {
               fontWeight: FontWeight.bold,
               color: AppColors.slate900,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 6),
-          Row(
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               if (portion != null) ...[
                 const Icon(Icons.scale_outlined, size: 13, color: AppColors.slate400),

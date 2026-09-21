@@ -62,13 +62,20 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? AppColors.slate900 : Colors.white;
+    final cardBorder = isDark ? AppColors.slate800 : AppColors.slate200;
+    final textPrimary = isDark ? Colors.white : AppColors.slate900;
+    final textSecondary = isDark ? AppColors.slate300 : AppColors.slate700;
+    final textMuted = isDark ? AppColors.slate400 : AppColors.slate600;
+
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(
-        title: const Text('Health Metrics & Vitals'),
-        backgroundColor: Colors.white,
+        title: Text('Health Metrics & Vitals', style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
         elevation: 0,
-        foregroundColor: AppColors.slate900,
+        foregroundColor: textPrimary,
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
@@ -91,14 +98,14 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Tracked Vitals (Section 97)',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.slate900),
+                  Text(
+                    'Tracked Vitals',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textPrimary),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Tap any metric card to view historical timeline and progress trends.',
-                    style: TextStyle(fontSize: 12, color: AppColors.slate500),
+                    style: TextStyle(fontSize: 12, color: textMuted),
                   ),
                   const SizedBox(height: 14),
 
@@ -110,21 +117,21 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
                       crossAxisCount: 2,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
-                      childAspectRatio: 1.25,
+                      childAspectRatio: 1.15,
                     ),
                     itemCount: _metricCardsConfig.length,
                     itemBuilder: (ctx, index) {
                       final cfg = _metricCardsConfig[index];
                       final latest = _getLatestForType(cfg['type']);
-                      return _buildMetricCard(cfg, latest);
+                      return _buildMetricCard(cfg, latest, isDark, cardBg, cardBorder, textPrimary, textSecondary, textMuted);
                     },
                   ),
                   const SizedBox(height: 24),
 
                   // Recent Activity Log
-                  const Text(
+                  Text(
                     'Recent Measurement Entries',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.slate900),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textPrimary),
                   ),
                   const SizedBox(height: 10),
 
@@ -133,17 +140,17 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
                       padding: const EdgeInsets.all(24),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: cardBg,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.slate200),
+                        border: Border.all(color: cardBorder),
                       ),
-                      child: const Column(
+                      child: Column(
                         children: [
-                          Icon(Icons.monitor_heart_outlined, size: 40, color: AppColors.slate400),
-                          SizedBox(height: 8),
-                          Text('No metrics recorded yet', style: TextStyle(fontWeight: FontWeight.w600)),
-                          SizedBox(height: 4),
-                          Text('Tap "Log Metric" below to record your first vital.', style: TextStyle(fontSize: 12, color: AppColors.slate500)),
+                          Icon(Icons.monitor_heart_outlined, size: 40, color: textMuted),
+                          const SizedBox(height: 8),
+                          Text('No metrics recorded yet', style: TextStyle(fontWeight: FontWeight.w600, color: textPrimary)),
+                          const SizedBox(height: 4),
+                          Text('Tap "Log Metric" below to record your first vital.', style: TextStyle(fontSize: 12, color: textMuted)),
                         ],
                       ),
                     )
@@ -161,19 +168,19 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: cardBg,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.slate200),
+                            border: Border.all(color: cardBorder),
                           ),
                           child: Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primarySubtle,
+                                  color: isDark ? AppColors.primary.withOpacity(0.2) : AppColors.primarySubtle,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: const Icon(Icons.show_chart_rounded, color: AppColors.primary, size: 18),
+                                child: Icon(Icons.show_chart_rounded, color: isDark ? AppColors.primaryLight : AppColors.primary, size: 18),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -182,10 +189,10 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
                                   children: [
                                     Text(
                                       '${entry.metricType}: ${entry.value} ${entry.unit}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textPrimary),
                                     ),
                                     const SizedBox(height: 2),
-                                    Text(dateStr, style: const TextStyle(fontSize: 11, color: AppColors.slate400)),
+                                    Text(dateStr, style: TextStyle(fontSize: 11, color: textMuted)),
                                   ],
                                 ),
                               ),
@@ -201,7 +208,16 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
     );
   }
 
-  Widget _buildMetricCard(Map<String, dynamic> cfg, HealthMetricEntryModel? latest) {
+  Widget _buildMetricCard(
+    Map<String, dynamic> cfg,
+    HealthMetricEntryModel? latest,
+    bool isDark,
+    Color cardBg,
+    Color cardBorder,
+    Color textPrimary,
+    Color textSecondary,
+    Color textMuted,
+  ) {
     final hasVal = latest != null;
     final color = cfg['color'] as Color;
 
@@ -222,12 +238,12 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cardBg,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.slate200),
+          border: Border.all(color: cardBorder),
           boxShadow: [
             BoxShadow(
-              color: AppColors.slate900.withOpacity(0.02),
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -241,15 +257,18 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
+                    color: color.withOpacity(isDark ? 0.22 : 0.14),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(cfg['icon'] as IconData, size: 18, color: color),
                 ),
+                const SizedBox(width: 6),
                 if (latest != null)
-                  ProvenanceBadge(source: latest.source, isCompact: true),
+                  Flexible(
+                    child: ProvenanceBadge(source: latest.source, isCompact: true),
+                  ),
               ],
             ),
             Column(
@@ -257,25 +276,29 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
               children: [
                 Text(
                   cfg['title'] as String,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.slate600),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary),
                 ),
                 const SizedBox(height: 2),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(
-                      hasVal ? latest.value.toStringAsFixed(1) : '--',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: hasVal ? AppColors.slate950 : AppColors.slate400,
+                    Flexible(
+                      child: Text(
+                        hasVal ? latest.value.toStringAsFixed(1) : '--',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: hasVal ? textPrimary : textMuted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       cfg['unit'] as String,
-                      style: const TextStyle(fontSize: 11, color: AppColors.slate400),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: textMuted),
                     ),
                   ],
                 ),

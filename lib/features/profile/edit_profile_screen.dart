@@ -305,8 +305,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           'dateOfBirth':
               '${_selectedDob!.year.toString().padLeft(4, '0')}-${_selectedDob!.month.toString().padLeft(2, '0')}-${_selectedDob!.day.toString().padLeft(2, '0')}',
         'avatarUrl': _avatarUrl,
-        if (height != null) 'heightCm': height,
-        if (weight != null) 'currentWeightKg': weight,
+        ...(height != null ? {'heightCm': height} : {}),
+        ...(weight != null ? {'currentWeightKg': weight} : {}),
         'dietaryPreferences': _selectedDietary,
         'allergies': _selectedAllergies.where((a) => a != 'None').toList(),
         if (_selectedGoals.isNotEmpty) 'healthGoals': _selectedGoals.join(', '),
