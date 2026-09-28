@@ -6,6 +6,12 @@ enum HealthPassStage {
   kickoffNeeded,
   consultationScheduled,
   consultationInProgress,
+  /// Video call done; the dietitian is finalizing notes (VIDEO_COMPLETED).
+  consultationAwaitingNotes,
+  /// The member missed the call (NO_SHOW) and can reschedule it.
+  consultationMissed,
+  /// The dietitian never started the call; it was cancelled and not counted.
+  consultationDietitianMissed,
   mealCurationInProgress,
   mealsAssigned,
   subscriptionActive,
@@ -28,9 +34,12 @@ class HealthJourneyStepper extends StatelessWidget {
       case HealthPassStage.noPass:
         return 0;
       case HealthPassStage.kickoffNeeded:
+      case HealthPassStage.consultationMissed:
+      case HealthPassStage.consultationDietitianMissed:
         return 1;
       case HealthPassStage.consultationScheduled:
       case HealthPassStage.consultationInProgress:
+      case HealthPassStage.consultationAwaitingNotes:
         return 2;
       case HealthPassStage.mealCurationInProgress:
         return 3;

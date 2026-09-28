@@ -169,19 +169,19 @@ class BmiHealthWidget extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
-                              Text(
+                              Flexible(child: Text(
                                 val.toStringAsFixed(1),
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                   color: category.color,
                                 ),
-                              ),
+                              )),
                               const SizedBox(width: 3),
-                              const Text(
+                              Flexible(child: const Text(
                                 'kg/m²',
                                 style: TextStyle(fontSize: 10, color: AppColors.slate500, fontWeight: FontWeight.w500),
-                              ),
+                              )),
                             ],
                           ),
                         ],

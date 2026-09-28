@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/consultation_model.dart';
@@ -28,6 +30,7 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
   ConsultationModel? _consultation;
   bool _isLoading = false;
   String? _errorMessage;
+  StreamSubscription<StandardSocketEnvelope>? _realtimeSub;
 
   @override
   void initState() {
@@ -39,6 +42,18 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
       // Re-fetch in background to get latest dietitian notes / status updates
       _fetchConsultation(silent: true);
     }
+    // Live: the dietitian starting/ending/completing this consultation
+    // updates the screen immediately.
+    _realtimeSub = RealtimeService().consultationUpdates.listen((e) {
+      final id = _consultation?.id ?? widget.consultationId;
+      if (e.data['consultationId'] == id) _fetchConsultation(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchConsultation({bool silent = false}) async {
@@ -179,7 +194,9 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
   }
 
   Future<void> _showRescheduleSheet(ConsultationModel c) async {
-    if (!_canModify(c)) {
+    // A missed consultation (NO_SHOW) can always be rescheduled — it keeps
+    // its place in the member's allowance.
+    if (!_canModify(c) && c.status != 'NO_SHOW') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Only upcoming scheduled consultations can be rescheduled.'),
@@ -322,10 +339,20 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
         border = const Color(0xFFF59E0B);
         iconColor = const Color(0xFFB45309);
         titleColor = const Color(0xFF92400E);
-        icon = Icons.hourglass_top_rounded;
-        title = 'Session Concluded / In Progress';
-        subtitle =
-            'Your clinical dietitian is currently reviewing vitals and designing your personalized nutritional plan from the portal.';
+        icon = Icons.videocam_rounded;
+        title = 'Video Call Is Live';
+        subtitle = 'Your dietitian has started the video consultation. Tap "Join Video Call" below to join.';
+        break;
+      case 'VIDEO_COMPLETED':
+        bg = const Color(0xFFE0F2FE);
+        border = const Color(0xFF0EA5E9);
+        iconColor = const Color(0xFF0369A1);
+        titleColor = const Color(0xFF0C4A6E);
+        icon = Icons.check_circle_outline_rounded;
+        title = 'Consultation Completed';
+        subtitle = c.callEndedAt != null
+            ? 'Your consultation ended ${DateFormat('d MMM, h:mm a').format(c.callEndedAt!.toLocal())}. Your dietitian\'s notes are pending.'
+            : 'Your consultation is complete. Your dietitian\'s notes are pending.';
         break;
       case 'COMPLETED':
         bg = const Color(0xFFD1FAE5);
@@ -342,10 +369,21 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
         border = const Color(0xFFEF4444);
         iconColor = const Color(0xFFB91C1C);
         titleColor = const Color(0xFF7F1D1D);
-        icon = Icons.cancel_outlined;
-        title = 'Appointment Cancelled';
+        icon = c.isDietitianNoShow ? Icons.event_busy_rounded : Icons.cancel_outlined;
+        title = c.isDietitianNoShow ? 'Your Dietitian Couldn\'t Join' : 'Appointment Cancelled';
+        subtitle = c.isDietitianNoShow
+            ? '${c.dietitianDisplayName} didn\'t start this consultation, so it was cancelled and not counted against your plan. Please book a new time.'
+            : 'This consultation has been cancelled. You can easily book a new slot anytime with your preferred dietitian.';
+        break;
+      case 'NO_SHOW':
+        bg = const Color(0xFFFEF2F2);
+        border = const Color(0xFFF87171);
+        iconColor = const Color(0xFFB91C1C);
+        titleColor = const Color(0xFF7F1D1D);
+        icon = Icons.event_busy_rounded;
+        title = 'Consultation Missed';
         subtitle =
-            'This consultation has been cancelled. You can easily book a new slot anytime with your preferred dietitian.';
+            'You weren\'t able to join this ${c.isInitial ? 'kickoff' : 'follow-up'}. Reschedule it below — it still counts as this booking, not a new one.';
         break;
       case 'SCHEDULED':
       default:
@@ -354,9 +392,9 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
         iconColor = const Color(0xFF1D4ED8);
         titleColor = const Color(0xFF1E3A8A);
         icon = Icons.event_available_rounded;
-        title = 'Appointment Confirmed & Scheduled';
+        title = c.isInitial ? 'Kickoff Consultation Scheduled' : 'Follow-up Consultation Scheduled';
         subtitle =
-            'Your 1-on-1 HD video session is reserved. Video room opens 5 minutes before scheduled start.';
+            'Your 1-on-1 HD video session is reserved. Video room opens 15 minutes before scheduled start.';
         break;
     }
 
@@ -477,29 +515,6 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                   spacing: 6,
                   runSpacing: 4,
                   children: [
-                    if (c.hubName != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.storefront_rounded, size: 11, color: AppColors.slate500),
-                            const SizedBox(width: 4),
-                            Text(
-                              c.hubName!,
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.slate600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
@@ -580,7 +595,17 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                     const Icon(Icons.check_circle, size: 11, color: Color(0xFF059669)),
                     const SizedBox(width: 4),
                     Text(
-                      c.status == 'COMPLETED' ? 'COMPLETED' : 'SCHEDULED',
+                      c.status == 'COMPLETED'
+                          ? 'COMPLETED'
+                          : c.status == 'VIDEO_COMPLETED'
+                              ? 'NOTES PENDING'
+                              : c.status == 'IN_PROGRESS'
+                                  ? 'LIVE NOW'
+                                  : c.status == 'NO_SHOW'
+                                      ? 'MISSED'
+                                      : c.status == 'CANCELLED'
+                                          ? 'CANCELLED'
+                                          : 'SCHEDULED',
                       style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -590,6 +615,21 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                c.isInitial ? Icons.flag_rounded : Icons.replay_circle_filled_rounded,
+                size: 14,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                c.kindLabel,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
               ),
             ],
           ),
@@ -654,17 +694,21 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.play_circle_fill_rounded, size: 13, color: Color(0xFF10B981)),
-                              SizedBox(width: 4),
-                              Text(
-                                'START TIME',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.slate400,
-                                  letterSpacing: 0.4,
+                              const Icon(Icons.play_circle_fill_rounded, size: 13, color: Color(0xFF10B981)),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  'START TIME',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.slate400,
+                                    letterSpacing: 0.4,
+                                  ),
                                 ),
                               ),
                             ],
@@ -687,17 +731,21 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.stop_circle_rounded, size: 13, color: Color(0xFFEF4444)),
-                              SizedBox(width: 4),
-                              Text(
-                                'END TIME',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.slate400,
-                                  letterSpacing: 0.4,
+                              const Icon(Icons.stop_circle_rounded, size: 13, color: Color(0xFFEF4444)),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  'END TIME',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.slate400,
+                                    letterSpacing: 0.4,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1066,12 +1114,14 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
             children: [
               Icon(icon, size: 14, color: AppColors.primary),
               const SizedBox(width: 6),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11.5,
-                  color: AppColors.primaryDark,
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11.5,
+                    color: AppColors.primaryDark,
+                  ),
                 ),
               ),
             ],
@@ -1370,18 +1420,25 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (isUpcoming) ...[
-              SizedBox(
-                width: double.infinity,
-                child: EbicButton(
-                  label: 'Join Video Call',
-                  icon: Icons.videocam_rounded,
-                  onPressed: () {
-                    Navigator.pushNamed(
-                      context,
-                      AppRoutes.consultationVideo,
-                      arguments: {'consultation': c},
-                    ).then((_) => _fetchConsultation(silent: true));
-                  },
+              // The customer can only join a call the dietitian has already
+              // started (status IN_PROGRESS) — never start one themselves.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.hourglass_top_rounded, size: 16, color: isDark ? AppColors.slate400 : AppColors.slate500),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your dietitian will start the video call at the scheduled time — you\'ll be able to join from here.',
+                        style: TextStyle(fontSize: 11.5, color: isDark ? AppColors.slate400 : AppColors.slate600),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (canModify) ...[
@@ -1424,7 +1481,7 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                   Expanded(
                     flex: 5,
                     child: EbicButton(
-                      label: 'Re-join Video Call',
+                      label: 'Join Video Call',
                       icon: Icons.videocam_rounded,
                       onPressed: () {
                         Navigator.pushNamed(
@@ -1438,6 +1495,51 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     flex: 3,
+                    child: EbicButton(
+                      label: 'Refresh',
+                      icon: Icons.refresh_rounded,
+                      variant: EbicButtonVariant.outline,
+                      onPressed: () => _fetchConsultation(),
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (c.status == 'NO_SHOW') ...[
+              Row(
+                children: [
+                  const Icon(Icons.event_busy_rounded, size: 18, color: AppColors.danger),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'You missed this consultation. Reschedule it — it won\'t use another one from your plan.',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.danger),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: EbicButton(
+                  label: 'Reschedule Consultation',
+                  icon: Icons.event_repeat_rounded,
+                  onPressed: () => _showRescheduleSheet(c),
+                ),
+              ),
+            ] else if (c.status == 'VIDEO_COMPLETED') ...[
+              Row(
+                children: [
+                  const Icon(Icons.pending_actions_rounded, size: 18, color: Color(0xFF0369A1)),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Consultation completed. Your dietitian\'s notes are pending.',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF0369A1)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 110,
                     child: EbicButton(
                       label: 'Refresh',
                       icon: Icons.refresh_rounded,

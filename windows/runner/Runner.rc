@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.ebic.user" "\0"
-            VALUE "FileDescription", "ebic_user" "\0"
+            VALUE "FileDescription", "Ebic" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "ebic_user" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.ebic.user. All rights reserved." "\0"
             VALUE "OriginalFilename", "ebic_user.exe" "\0"
-            VALUE "ProductName", "ebic_user" "\0"
+            VALUE "ProductName", "Ebic" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -170,37 +170,42 @@ class _HeightWeightInputWidgetState extends State<HeightWeightInputWidget> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppColors.primarySubtle,
-                    borderRadius: BorderRadius.circular(8),
+            Expanded(
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySubtle,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.height_rounded, color: AppColors.primaryDark, size: 18),
                   ),
-                  child: const Icon(Icons.height_rounded, color: AppColors.primaryDark, size: 18),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.isRequired ? 'Height *' : 'Height',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.slate900,
-                      ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.isRequired ? 'Height *' : 'Height',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.slate900,
+                          ),
+                        ),
+                        Text(
+                          _heightInFeet ? 'Range: 1\'4" – 8\'6"' : 'Range: 40 – 260 cm',
+                          style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                        ),
+                      ],
                     ),
-                    Text(
-                      _heightInFeet ? 'Range: 1\'4" – 8\'6"' : 'Range: 40 – 260 cm',
-                      style: const TextStyle(fontSize: 11, color: AppColors.slate500),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(width: 8),
             _buildSegmentedSwitch(
               leftLabel: 'cm',
               rightLabel: 'ft / in',

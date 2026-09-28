@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/auth/auth_service.dart';
@@ -37,12 +38,13 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
 
   bool _isDefault = false;
 
-  // Exact Coordinates from Map (Defaults to Jubilee Hills, Hyderabad)
+  // Exact Coordinates from Map (Defaults to Jubilee Hills, Hyderabad until GPS detected)
   double _lat = 17.4319;
   double _lng = 78.4073;
   bool _isMapSelected = false;
   String? _detectedHubName;
   bool _isServiceableAtCoords = true;
+  bool _isDetectingGps = false;
 
   bool _isSaving = false;
   String? _errorMessage;
@@ -95,8 +97,8 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
     _line1Ctrl = TextEditingController(text: a?.line1 ?? '');
     _line2Ctrl = TextEditingController(text: a?.line2 ?? '');
     _landmarkCtrl = TextEditingController(text: a?.landmark ?? '');
-    _cityCtrl = TextEditingController(text: a?.city ?? 'Hyderabad');
-    _stateCtrl = TextEditingController(text: a?.state ?? 'Telangana');
+    _cityCtrl = TextEditingController(text: a?.city ?? '');
+    _stateCtrl = TextEditingController(text: a?.state ?? '');
     _postalCtrl = TextEditingController(text: a?.postalCode ?? '500033');
 
     _isDefault = a?.isDefault ?? false;
@@ -108,7 +110,10 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
       _detectedHubName = a.hubName;
       _isServiceableAtCoords = a.isServiceable;
     } else {
-      _checkServiceabilityForCurrentCoords();
+      // Auto-detect GPS and use as initial map center for new addresses
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _tryAutoDetectGps();
+      });
     }
   }
 
@@ -124,6 +129,65 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
     _postalCtrl.dispose();
     _customLabelCtrl.dispose();
     super.dispose();
+  }
+
+  /// Silently attempt GPS detection. If successful, updates initial lat/lng
+  /// and kicks off a serviceability check — no error shown on failure.
+  Future<void> _tryAutoDetectGps() async {
+    if (!mounted) return;
+    try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return;
+      final perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return;
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _lat = pos.latitude;
+        _lng = pos.longitude;
+      });
+    } catch (_) {}
+    _checkServiceabilityForCurrentCoords();
+  }
+
+  /// Prompt GPS + open map pre-centered on detected location.
+  Future<void> _detectAndOpenMap() async {
+    if (!mounted) return;
+    setState(() => _isDetectingGps = true);
+    try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (enabled) {
+        var perm = await Geolocator.checkPermission();
+        if (perm == LocationPermission.denied) {
+          perm = await Geolocator.requestPermission();
+        }
+        if (perm != LocationPermission.denied && perm != LocationPermission.deniedForever) {
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 8),
+            ),
+          );
+          if (mounted) {
+            setState(() {
+              _lat = pos.latitude;
+              _lng = pos.longitude;
+              _isDetectingGps = false;
+            });
+            await _openMapPicker();
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isDetectingGps = false);
+    await _openMapPicker();
   }
 
   Future<void> _checkServiceabilityForCurrentCoords() async {
@@ -209,8 +273,8 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
     final payload = <String, dynamic>{
       'label': label,
       'line1': _line1Ctrl.text.trim(),
-      'city': _cityCtrl.text.trim().isNotEmpty ? _cityCtrl.text.trim() : 'Hyderabad',
-      'state': _stateCtrl.text.trim().isNotEmpty ? _stateCtrl.text.trim() : 'Telangana',
+      'city': _cityCtrl.text.trim(),
+      'state': _stateCtrl.text.trim(),
       'postalCode': _postalCtrl.text.trim(),
       'country': 'India',
       'lat': _lat,
@@ -311,8 +375,9 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Kitchen Address' : 'Add Kitchen Address'),
       ),
@@ -406,17 +471,49 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: const Icon(Icons.pin_drop, size: 16),
-                            label: Text(_isMapSelected ? 'Change Pin' : 'Pick on Map'),
-                            onPressed: _openMapPicker,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                icon: const Icon(Icons.pin_drop, size: 16),
+                                label: Text(_isMapSelected ? 'Change Pin' : 'Pick on Map'),
+                                onPressed: _openMapPicker,
+                              ),
+                              const SizedBox(height: 4),
+                              GestureDetector(
+                                onTap: _isDetectingGps ? null : _detectAndOpenMap,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_isDetectingGps)
+                                      const SizedBox(
+                                        width: 10, height: 10,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5, color: AppColors.primary,
+                                        ),
+                                      )
+                                    else
+                                      const Icon(Icons.my_location, size: 11, color: AppColors.primary),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _isDetectingGps ? 'Detecting...' : 'Use my location',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -444,7 +541,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                             Expanded(
                               child: Text(
                                 _isServiceableAtCoords
-                                    ? '✓ Serviceable by ${_detectedHubName ?? "Hyderabad Hub"} (Private chefs available)'
+                                    ? '✓ Serviceable${_detectedHubName != null ? " by $_detectedHubName" : ""} (Private chefs available)'
                                     : '⚠ Outside current active hub polygon (Tap "Pick on Map" to reposition)',
                                 style: TextStyle(
                                   fontSize: 11,

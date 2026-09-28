@@ -90,14 +90,14 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> {
                 children: [
                   Icon(Icons.lock_rounded, size: 13, color: Color(0xFF10B981)),
                   SizedBox(width: 6),
-                  Text(
+                  Flexible(child: Text(
                     'Protected Health Record • Signed Temporary Access',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF94A3B8),
                     ),
-                  ),
+                  )),
                 ],
               ),
             ),

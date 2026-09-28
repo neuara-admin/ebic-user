@@ -41,6 +41,8 @@ class StatusBadge extends StatelessWidget {
       case 'CHEF_ASSIGNED':
       case 'ASSIGNED':
         return 'ASSIGNED';
+      case 'VIDEO_COMPLETED':
+        return 'NOTES PENDING';
       default:
         return status.replaceAll('_', ' ').toUpperCase();
     }
@@ -72,6 +74,8 @@ class StatusBadge extends StatelessWidget {
       case 'CHEF_ASSIGNED':
       case 'SCHEDULED':
         return AppColors.accent;
+      case 'VIDEO_COMPLETED':
+        return AppColors.info;
       default:
         return AppColors.primary;
     }

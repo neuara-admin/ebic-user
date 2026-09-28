@@ -1,3 +1,32 @@
+class DietitianUpdateInfo {
+  final String? dietitianName;
+  final DateTime? updatedAt;
+
+  DietitianUpdateInfo({this.dietitianName, this.updatedAt});
+
+  factory DietitianUpdateInfo.fromJson(Map<String, dynamic> json) {
+    return DietitianUpdateInfo(
+      dietitianName: json['name']?.toString(),
+      updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'].toString()) : null,
+    );
+  }
+
+  String get displayText {
+    if (updatedAt == null) return 'Updated by your dietitian';
+    final now = DateTime.now();
+    final diff = now.difference(updatedAt!);
+    String when;
+    if (diff.inDays >= 1) {
+      when = '${diff.inDays}d ago';
+    } else if (diff.inHours >= 1) {
+      when = '${diff.inHours}h ago';
+    } else {
+      when = 'just now';
+    }
+    return dietitianName != null ? 'Updated by $dietitianName · $when' : 'Updated by your dietitian · $when';
+  }
+}
+
 class HouseholdMemberModel {
   final String id;
   final String name;
@@ -17,6 +46,10 @@ class HouseholdMemberModel {
   final List<String> allergies;
   final List<String> medicalConditions;
 
+  /// Non-null when a dietitian (not the customer) most recently updated this
+  /// member's clinical data, e.g. during a video consultation.
+  final DietitianUpdateInfo? lastUpdatedByDietitian;
+
   HouseholdMemberModel({
     required this.id,
     required this.name,
@@ -33,6 +66,7 @@ class HouseholdMemberModel {
     this.dietaryPreferences = const [],
     this.allergies = const [],
     this.medicalConditions = const [],
+    this.lastUpdatedByDietitian,
   });
 
   int get age {
@@ -242,6 +276,9 @@ class HouseholdMemberModel {
       dietaryPreferences: diets,
       allergies: allergs,
       medicalConditions: conditions,
+      lastUpdatedByDietitian: json['lastUpdatedByDietitian'] is Map<String, dynamic>
+          ? DietitianUpdateInfo.fromJson(json['lastUpdatedByDietitian'] as Map<String, dynamic>)
+          : null,
     );
   }
 

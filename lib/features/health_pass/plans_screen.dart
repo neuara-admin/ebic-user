@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/analytics/analytics_service.dart';
+import '../../core/auth/session_manager.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/health_pass_model.dart';
@@ -319,6 +320,10 @@ class _HealthPassPlansScreenState extends State<HealthPassPlansScreen> {
                   child: EbicButton(
                     label: 'Choose Plan',
                     onPressed: () {
+                      if (!SessionManager().isAuthenticated) {
+                        Navigator.pushNamed(context, AppRoutes.login);
+                        return;
+                      }
                       AnalyticsService().logHealthPassPlanViewed(plan.code);
                       Navigator.pushNamed(
                         context,

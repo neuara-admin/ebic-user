@@ -9,10 +9,18 @@ class ConsultationModel {
   final List<String> attendingMembers;
   final DateTime scheduledAt;
   final DateTime? endsAt;
-  final String status; // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW, RESCHEDULED
+  final String status; // SCHEDULED, IN_PROGRESS, VIDEO_COMPLETED, COMPLETED, CANCELLED, NO_SHOW, RESCHEDULED
   final String consultationType;
-  final String? hubName;
-  final String? hubCode;
+  /// INITIAL (the kickoff) or FOLLOW_UP — set by the backend at booking.
+  final String kind;
+  /// 1 for the member's first consultation, 2 for the next, … (cancelled ones don't count).
+  final int sequenceNumber;
+  /// NOT_STARTED / PENDING / SAVED / OVERDUE — the dietitian's documentation,
+  /// tracked separately from the call itself.
+  final String notesStatus;
+  /// CUSTOMER / ADMIN / DIETITIAN_NO_SHOW when status is CANCELLED.
+  final String? cancelReasonCode;
+  final DateTime? callEndedAt;
   final String? roomUrl;
   final String? meetingLink;
   final String? reason;
@@ -41,8 +49,11 @@ class ConsultationModel {
     this.endsAt,
     required this.status,
     this.consultationType = 'Video Consultation',
-    this.hubName,
-    this.hubCode,
+    this.kind = 'INITIAL',
+    this.sequenceNumber = 1,
+    this.notesStatus = 'NOT_STARTED',
+    this.cancelReasonCode,
+    this.callEndedAt,
     this.roomUrl,
     this.meetingLink,
     this.reason,
@@ -61,8 +72,29 @@ class ConsultationModel {
 
   bool get isScheduled => status == 'SCHEDULED';
   bool get isInProgress => status == 'IN_PROGRESS';
+  /// The video call is over, but the dietitian hasn't finalized the notes yet.
+  bool get isVideoCompleted => status == 'VIDEO_COMPLETED';
   bool get isCompleted => status == 'COMPLETED';
   bool get isCancelled => status == 'CANCELLED';
+  bool get isNoShow => status == 'NO_SHOW';
+  bool get isInitial => kind == 'INITIAL';
+  /// The call happened (the service was delivered), whether or not notes are saved.
+  bool get isDelivered => status == 'VIDEO_COMPLETED' || status == 'COMPLETED';
+  /// Delivered, but the dietitian hasn't saved notes yet.
+  bool get isNotesPending => status == 'VIDEO_COMPLETED';
+  /// Auto-cancelled because the dietitian never started the call — not
+  /// counted against the member's plan.
+  bool get isDietitianNoShow => status == 'CANCELLED' && cancelReasonCode == 'DIETITIAN_NO_SHOW';
+
+  /// Some dietitian names are stored with "Dr." already — never double it.
+  String get dietitianDisplayName {
+    final name = dietitianName.trim();
+    if (name.isEmpty) return 'your dietitian';
+    return RegExp(r'^dr\.?\s', caseSensitive: false).hasMatch(name) ? name : 'Dr. $name';
+  }
+
+  /// "Initial Consultation" or "Follow-up · Session 3".
+  String get kindLabel => isInitial ? 'Initial Consultation' : 'Follow-up · Session $sequenceNumber';
 
   factory ConsultationModel.fromJson(Map<String, dynamic> json) {
     final dietitian = json['dietitian'] as Map<String, dynamic>?;
@@ -123,7 +155,7 @@ class ConsultationModel {
       id: json['id'] ?? '',
       dietitianId: json['dietitianId'] ?? dietitian?['id'] ?? '',
       dietitianName: dietitianUser?['name'] ?? dietitian?['name'] ?? 'Clinical Dietitian',
-      dietitianQualification: dietitian?['qualification'] ?? 'Clinical Nutritionist (RD)',
+      dietitianQualification: dietitian?['qualification'],
       dietitianSpecialization: dietitian?['specialization'] ??
           (dietitian?['specializations'] is List ? (dietitian!['specializations'] as List).join(', ') : null),
       dietitianPhotoUrl: dietitian?['photoUrl'] ?? dietitian?['imageUrl'],
@@ -133,8 +165,11 @@ class ConsultationModel {
       endsAt: endsAt,
       status: json['status'] ?? 'SCHEDULED',
       consultationType: json['consultationType'] ?? 'Video Consultation',
-      hubName: json['hubName'] ?? dietitian?['hubName'] ?? 'Regional Care Hub',
-      hubCode: json['hubCode'] ?? dietitian?['hubCode'],
+      kind: json['kind']?.toString() ?? 'INITIAL',
+      sequenceNumber: (json['sequenceNumber'] as num?)?.toInt() ?? 1,
+      notesStatus: json['notesStatus']?.toString() ?? 'NOT_STARTED',
+      cancelReasonCode: json['cancelReasonCode']?.toString(),
+      callEndedAt: json['callEndedAt'] != null ? DateTime.tryParse(json['callEndedAt'].toString()) : null,
       roomUrl: json['roomUrl'] ?? json['meetingLink'],
       meetingLink: json['meetingLink'] ?? json['roomUrl'],
       reason: rawReason,

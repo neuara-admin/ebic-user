@@ -72,11 +72,18 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       duration: const Duration(milliseconds: 2200),
     );
 
+    _startStartupSequence();
+  }
+
+  /// Dart can start running before the Android surface is attached (e.g. a slow
+  /// cold start). Start the visible splash only once a frame is really on screen,
+  /// otherwise the minimum delay elapses while nothing is visible.
+  Future<void> _waitUntilVisible() async {
+    await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+    if (!mounted) return;
     _introController.forward();
     _progressController.forward();
-
     _cycleMilestones();
-    _startStartupSequence();
   }
 
   void _cycleMilestones() {
@@ -105,8 +112,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   Future<void> _startStartupSequence() async {
     try {
-      // 1. Minimum brand presentation delay for smooth visual transition
-      final minDelayFuture = Future.delayed(const Duration(milliseconds: 2200));
+      // 1. Minimum brand presentation delay, measured from when the splash is actually visible
+      final minDelayFuture = _waitUntilVisible()
+          .then((_) => Future.delayed(const Duration(milliseconds: 2200)));
 
       // 2. Load preferences & restore session & remote config concurrently (Section 311)
       final prefsFuture = LocalPreferences.getInstance();
@@ -284,13 +292,13 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                             animation: _pulseGlow,
                             builder: (context, child) {
                               return Container(
-                                width: 114 * _pulseGlow.value,
-                                height: 114 * _pulseGlow.value,
+                                width: 168 * _pulseGlow.value,
+                                height: 168 * _pulseGlow.value,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: AppColors.primaryLight.withOpacity(0.08),
                                   border: Border.all(
-                                    color: AppColors.primaryLight.withOpacity(0.18),
+                                    color: AppColors.primaryLight.withOpacity(0.20),
                                     width: 1.5,
                                   ),
                                 ),
@@ -298,72 +306,35 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                             },
                           ),
 
-                          // Inner Luxury Emblem Box
+                          // Inner Luxury Emblem Box with Leaf Logo
                           Container(
-                            width: 96,
-                            height: 96,
+                            width: 140,
+                            height: 140,
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFF10B981),
-                                  Color(0xFF059669),
-                                  Color(0xFF047857),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(28),
+                              color: const Color(0xFF06331E),
+                              borderRadius: BorderRadius.circular(32),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.28),
+                                color: const Color(0xFF34D399).withOpacity(0.35),
                                 width: 1.5,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppColors.primaryLight.withOpacity(0.45),
+                                  color: AppColors.primaryLight.withOpacity(0.40),
                                   blurRadius: 36,
                                   offset: const Offset(0, 14),
                                   spreadRadius: 2,
                                 ),
-                                BoxShadow(
-                                  color: AppColors.accent.withOpacity(0.2),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 4),
-                                ),
                               ],
                             ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Chef & Nutrition Combined Icon
-                                const Icon(
-                                  Icons.restaurant_menu_rounded,
-                                  color: Colors.white,
-                                  size: 46,
-                                ),
-                                // Sparkle badge top right
-                                Positioned(
-                                  top: 14,
-                                  right: 14,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(3),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.accentLight,
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.accentLight.withOpacity(0.6),
-                                          blurRadius: 6,
-                                        ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.auto_awesome,
-                                      color: AppColors.slate950,
-                                      size: 11,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(30),
+                              child: Image.asset(
+                                'assets/icon/app_icon.png',
+                                width: 140,
+                                height: 140,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _buildFallbackLogo(),
+                              ),
                             ),
                           ),
                         ],
@@ -372,12 +343,12 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
                       // Brand Wordmark
                       Text(
-                        'EBIC',
+                        'ebic',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 42,
+                          fontSize: 44,
                           fontWeight: FontWeight.w900,
                           color: Colors.white,
-                          letterSpacing: 6,
+                          letterSpacing: 3.0,
                           height: 1.0,
                           shadows: [
                             Shadow(
@@ -393,7 +364,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       Text(
                         'EVERY BITE COUNTS',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w800,
                           color: AppColors.emerald400,
                           letterSpacing: 4.5,
@@ -557,5 +528,43 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       ),
     );
   }
+
+  Widget _buildFallbackLogo() {
+    return Container(
+      width: 140,
+      height: 140,
+      decoration: const BoxDecoration(
+        gradient: RadialGradient(
+          colors: [
+            Color(0xFF0E5A35),
+            Color(0xFF063820),
+            Color(0xFF021F11),
+          ],
+          stops: [0.0, 0.65, 1.0],
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'ebic',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 34,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 2.0,
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Icon(
+            Icons.eco_rounded,
+            color: Color(0xFF34D399),
+            size: 24,
+          ),
+        ],
+      ),
+    );
+  }
 }
+
 

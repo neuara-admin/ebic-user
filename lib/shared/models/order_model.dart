@@ -36,6 +36,8 @@ class OrderModel {
   final DateTime? promisedEtaAt;
   final String? startOtp;
   final String? completionOtp;
+  /// Dish photos the chef uploaded at completion (absolute or /uploads/ URLs)
+  final List<String> completionPhotos;
   final DateTime createdAt;
   final ChefInfoModel? assignedChef;
   final OrderAddressModel? address;
@@ -60,6 +62,7 @@ class OrderModel {
     this.promisedEtaAt,
     this.startOtp,
     this.completionOtp,
+    this.completionPhotos = const [],
     required this.createdAt,
     this.assignedChef,
     this.address,
@@ -68,7 +71,7 @@ class OrderModel {
   });
 
   String? get bookingReference => id.length >= 8 ? 'EBIC-${id.substring(0, 4).toUpperCase()}' : 'EBIC-$id';
-  String? get chefName => assignedChef?.name ?? 'Executive Chef';
+  String? get chefName => assignedChef?.name;
   int get cookingTimeMinutes {
     if (visitCookTimeMin > 0) return visitCookTimeMin;
     final mealTime = meals.fold<int>(0, (sum, m) => sum + m.dishes.fold<int>(0, (dSum, d) => dSum + d.cookTimeMin));
@@ -396,7 +399,7 @@ class OrderModel {
         id: json['chefId']?.toString() ?? '',
         name: json['chefName']?.toString() ?? 'Assigned Chef',
         phone: json['chefPhone']?.toString() ?? '',
-        rating: 4.9,
+        rating: double.tryParse(json['chefRating']?.toString() ?? ''),
       );
     }
 
@@ -423,6 +426,12 @@ class OrderModel {
           : (json['scheduledAt'] != null ? DateTime.tryParse(json['scheduledAt'].toString()) : null),
       startOtp: json['startOtp']?.toString(),
       completionOtp: json['completionOtp']?.toString(),
+      completionPhotos: (json['completionPhotos'] as List<dynamic>?)
+              ?.map((e) => (e is Map ? e['url'] : e)?.toString())
+              .whereType<String>()
+              .where((u) => u.isNotEmpty)
+              .toList() ??
+          const [],
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
@@ -440,7 +449,8 @@ class ChefInfoModel {
   final String id;
   final String name;
   final String phone;
-  final double rating;
+  /// Null when the backend has no rating for the chef yet.
+  final double? rating;
   final String? photoUrl;
   final String? speciality;
 
@@ -448,7 +458,7 @@ class ChefInfoModel {
     required this.id,
     required this.name,
     required this.phone,
-    required this.rating,
+    this.rating,
     this.photoUrl,
     this.speciality,
   });
@@ -466,10 +476,10 @@ class ChefInfoModel {
       phone: json['phone']?.toString() ??
           json['phoneNumber']?.toString() ??
           userMap?['phone']?.toString() ??
-          '+91 98765 43210',
-      rating: double.tryParse(json['rating']?.toString() ?? '') ?? 4.9,
+          '',
+      rating: double.tryParse(json['rating']?.toString() ?? ''),
       photoUrl: json['photoUrl']?.toString() ?? json['profilePictureUrl']?.toString() ?? userMap?['avatarUrl']?.toString(),
-      speciality: json['speciality']?.toString() ?? json['cuisine']?.toString() ?? 'North Indian & Healthy Kitchen',
+      speciality: json['speciality']?.toString() ?? json['cuisine']?.toString(),
     );
   }
 }
@@ -482,6 +492,8 @@ class OrderAddressModel {
   final String? landmark;
   final String? city;
   final String? pincode;
+  final double? lat;
+  final double? lng;
 
   OrderAddressModel({
     required this.id,
@@ -491,6 +503,8 @@ class OrderAddressModel {
     this.landmark,
     this.city,
     this.pincode,
+    this.lat,
+    this.lng,
   });
 
   String get fullAddress {
@@ -520,6 +534,8 @@ class OrderAddressModel {
       landmark: json['landmark']?.toString(),
       city: json['city']?.toString() ?? 'Bangalore',
       pincode: json['pincode']?.toString() ?? json['postalCode']?.toString(),
+      lat: double.tryParse((json['lat'] ?? json['latitude'])?.toString() ?? ''),
+      lng: double.tryParse((json['lng'] ?? json['longitude'])?.toString() ?? ''),
     );
   }
 }

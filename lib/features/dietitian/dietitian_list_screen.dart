@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
-import '../../core/routing/app_router.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dietitian_model.dart';
-import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import 'dietitian_profile_screen.dart';
 
@@ -88,8 +86,7 @@ class _DietitianListScreenState extends State<DietitianListScreen> {
             d.name.toLowerCase().contains(query) ||
             (d.specialization ?? '').toLowerCase().contains(query) ||
             (d.qualification ?? '').toLowerCase().contains(query) ||
-            (d.languages ?? '').toLowerCase().contains(query) ||
-            (d.hubName ?? '').toLowerCase().contains(query);
+            (d.languages ?? '').toLowerCase().contains(query);
 
         // Category filter match
         bool matchesCategory = true;
@@ -467,8 +464,9 @@ class _DietitianListScreenState extends State<DietitianListScreen> {
   }
 
   Widget _buildDietitianCard(DietitianModel d, bool isDark) {
-    // Parse specializations into chips
-    final specList = (d.specialization ?? 'Clinical Nutrition, Weight Management')
+    // Parse specializations into chips (omit entirely when the dietitian's
+    // profile has none set — never show an invented specialization)
+    final specList = (d.specialization ?? '')
         .split(RegExp(r'[,•|]'))
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
@@ -579,7 +577,7 @@ class _DietitianListScreenState extends State<DietitianListScreen> {
                               const Icon(Icons.star_rounded, color: AppColors.accent, size: 14),
                               const SizedBox(width: 2),
                               Text(
-                                d.rating.toStringAsFixed(1),
+                                d.rating?.toStringAsFixed(1) ?? 'New',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -591,17 +589,19 @@ class _DietitianListScreenState extends State<DietitianListScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      d.qualification ?? 'Registered Dietitian (RD)',
-                      style: TextStyle(
-                        color: isDark ? AppColors.slate400 : AppColors.slate500,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                    if (d.qualification != null && d.qualification!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        d.qualification!,
+                        style: TextStyle(
+                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ],
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -621,27 +621,6 @@ class _DietitianListScreenState extends State<DietitianListScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        if (d.hubName != null)
-                          Expanded(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.location_on_outlined, size: 12, color: AppColors.slate400),
-                                const SizedBox(width: 2),
-                                Expanded(
-                                  child: Text(
-                                    d.hubName!,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDark ? AppColors.slate400 : AppColors.slate500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                       ],
                     ),
                   ],
@@ -678,26 +657,27 @@ class _DietitianListScreenState extends State<DietitianListScreen> {
             }).toList(),
           ),
 
-          const SizedBox(height: 10),
-
-          // Spoken Languages
-          Row(
-            children: [
-              const Icon(Icons.translate_rounded, size: 13, color: AppColors.slate400),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  'Speaks: ${d.languages ?? 'English, Hindi'}',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: isDark ? AppColors.slate400 : AppColors.slate500,
+          if (d.languages != null && d.languages!.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            // Spoken Languages
+            Row(
+              children: [
+                const Icon(Icons.translate_rounded, size: 13, color: AppColors.slate400),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    'Speaks: ${d.languages}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
 
           const SizedBox(height: 14),
           Divider(height: 1, color: isDark ? AppColors.slate800 : const Color(0xFFE2E8F0)),

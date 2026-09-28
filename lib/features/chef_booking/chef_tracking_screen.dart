@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
@@ -13,7 +11,12 @@ import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
 import 'cancel_booking_dialog.dart';
+import 'tracking/tracking_geo.dart';
+import 'tracking/tracking_markers.dart';
 
+/// Live chef dispatch tracking — full-screen Google Map with the chef's real
+/// GPS position animating along the road route to the customer's home, and a
+/// draggable status sheet (Swiggy / Uber style).
 class ChefTrackingScreen extends StatefulWidget {
   final String orderId;
 
@@ -23,32 +26,71 @@ class ChefTrackingScreen extends StatefulWidget {
   State<ChefTrackingScreen> createState() => _ChefTrackingScreenState();
 }
 
-class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
+class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProviderStateMixin {
+  static const _pollInterval = Duration(seconds: 3);
+  static const _sheetInitial = 0.42;
+  static const _sheetMin = 0.24;
+  static const _sheetMaxCap = 0.92;
+
   final ApiClient _api = ApiClient();
   Timer? _pollingTimer;
+  bool _isFetching = false;
   OrderModel? _order;
 
-  // Google Maps Controller & State
+  // Tracking telemetry (from GET /chef-bookings/:id/tracking)
+  double? _distanceKm;
+  int? _etaMins;
+  bool _isStale = false;
+  bool _isNearby = false;
+  String? _chefPhone;
+  String? _trackingChefName;
+  String? _delayReason;
+  int? _delayMins;
+  DateTime? _lastUpdatedAt;
+
+  // Live timers. Anchored to local receipt time from server-computed durations
+  // (etaSeconds / trip elapsed), so a wrong phone clock can't skew them.
+  DateTime? _etaArrivalLocal;
+  DateTime? _tripStartLocal;
+  Map<String, dynamic>? _trip;
+  String? _etaSource;
+  Timer? _clockTimer;
+  final ValueNotifier<int> _clock = ValueNotifier(0);
+
+  // Map state
   GoogleMapController? _mapController;
-  late LatLng _kitchenLocation;
-  late LatLng _chefLocation;
-  Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
+  bool _autoFollow = true;
+  LatLng? _destination;
+  String? _destinationLabel;
+  List<LatLng> _route = const [];
+  String? _routeEncoded;
 
-  // Custom marker bitmaps
-  BitmapDescriptor? _chefMarkerIcon;
-  BitmapDescriptor? _kitchenMarkerIcon;
+  // Chef marker animation between GPS fixes
+  late final AnimationController _moveController;
+  LatLng? _chefFrom;
+  LatLng? _chefTo;
+  LatLng? _chefShown;
+  double _bearingFrom = 0;
+  double _bearingTo = 0;
+  double _bearingShown = 0;
 
-  // Telemetry metrics
-  late List<LatLng> _routeCoordinates;
-  double _remainingDistanceKm = 2.8;
-  int _dynamicEtaMins = 16;
-  double _currentBearing = 45.0;
+  /// Bumped whenever map overlays change; only the map rebuilds on ticks.
+  final ValueNotifier<int> _mapTick = ValueNotifier(0);
+  final ValueNotifier<double> _sheetExtent = ValueNotifier(_sheetInitial);
+  final ValueNotifier<double> _mapBottomExtent = ValueNotifier(_sheetInitial);
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
+  Timer? _mapPaddingDebounce;
+
+  BitmapDescriptor? _chefIcon;
+  BitmapDescriptor? _homeIcon;
+  String? _homeIconLabel;
+  bool _markersLoading = false;
 
   bool _isOrderCancelled(String? status) {
     if (status == null) return false;
     final s = status.toUpperCase();
     return s.contains('CANCEL') ||
+        s == 'FAILED_NO_SUPPLY' ||
         s == 'CHEF_CANCELLED' ||
         s == 'CANCELLED_CUSTOMER' ||
         s == 'CANCELLED_NOSHOW';
@@ -57,176 +99,296 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
   @override
   void initState() {
     super.initState();
-    // Default base coordinates (Bangalore Kitchen & Chef Hub)
-    _kitchenLocation = const LatLng(12.9716, 77.5946);
-    _chefLocation = const LatLng(12.9860, 77.6150);
+    _moveController = AnimationController(vsync: this, duration: _pollInterval)
+      ..addListener(_onMoveTick);
 
-    _initSimulationRoute();
-    _loadCustomMarkers();
     _fetchOrder();
+    _pollingTimer = Timer.periodic(_pollInterval, (_) => _fetchOrder());
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) => _clock.value++);
+  }
 
-    // Background sync polling for backend status (every 10s)
-    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      _fetchOrder(isBackground: true);
-    });
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ensureMarkerIcons();
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _moveController.dispose();
     _mapController?.dispose();
+    _mapTick.dispose();
+    _clockTimer?.cancel();
+    _clock.dispose();
+    _sheetExtent.dispose();
+    _mapBottomExtent.dispose();
+    _mapPaddingDebounce?.cancel();
+    _sheetController.dispose();
     super.dispose();
   }
 
-  void _initSimulationRoute() {
-    final lat1 = _chefLocation.latitude;
-    final lng1 = _chefLocation.longitude;
-    final lat2 = _kitchenLocation.latitude;
-    final lng2 = _kitchenLocation.longitude;
+  // ---------------------------------------------------------------------------
+  // Data
+  // ---------------------------------------------------------------------------
 
-    // 40 realistic waypoints with smooth curves for continuous, non-jittery road travel
-    _routeCoordinates = List.generate(40, (i) {
-      final t = i / 39.0;
-      final curveLat = math.sin(t * math.pi) * 0.0022;
-      final curveLng = math.sin(t * math.pi * 2) * 0.0016;
-      return LatLng(
-        lat1 + (lat2 - lat1) * t + curveLat,
-        lng1 + (lng2 - lng1) * t + curveLng,
-      );
-    });
-  }
-
-  Future<void> _loadCustomMarkers() async {
+  Future<void> _fetchOrder() async {
+    if (_isFetching) return;
+    _isFetching = true;
     try {
-      _chefMarkerIcon = await _createChefMarkerBitmap();
-      _kitchenMarkerIcon = await _createKitchenMarkerBitmap();
-      if (mounted) {
-        _initMapOverlays();
+      final results = await Future.wait([
+        _api.get<Map<String, dynamic>>(ApiEndpoints.orderDetail(widget.orderId)),
+        _api.get<Map<String, dynamic>>(ApiEndpoints.chefBookingTracking(widget.orderId)),
+      ]);
+      var orderRes = results[0];
+      final trackRes = results[1];
+      if (!orderRes.success || orderRes.data == null) {
+        orderRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.chefBooking(widget.orderId));
       }
+      if (!mounted) return;
+
+      if (orderRes.success && orderRes.data != null) {
+        final parsed = OrderModel.fromJson(orderRes.data!);
+        if (_isOrderCancelled(parsed.status)) {
+          _pollingTimer?.cancel();
+          _pollingTimer = null;
+        }
+        setState(() => _order = parsed);
+        _destination ??= _addressLatLng(parsed.address);
+        _destinationLabel ??= parsed.address?.label;
+      }
+
+      if (trackRes.success && trackRes.data != null) {
+        _applyTracking(trackRes.data!);
+      }
+      _refreshOverlays();
     } catch (_) {
-      _initMapOverlays();
+      // Transient network failure — next poll retries.
+    } finally {
+      _isFetching = false;
     }
   }
 
-  Future<BitmapDescriptor> _createChefMarkerBitmap() async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    const size = 110.0;
-
-    // Outer glow / shadow
-    final shadowPaint = Paint()
-      ..color = AppColors.primary.withOpacity(0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawCircle(const Offset(size / 2, size / 2), 46, shadowPaint);
-
-    // Main Circle background
-    final bgPaint = Paint()..color = AppColors.primary;
-    canvas.drawCircle(const Offset(size / 2, size / 2), 40, bgPaint);
-
-    // Outer ring
-    final ringPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4;
-    canvas.drawCircle(const Offset(size / 2, size / 2), 40, ringPaint);
-
-    // Navigation / Chef En Route Icon
-    final textPainter = TextPainter(textDirection: TextDirection.ltr);
-    textPainter.text = TextSpan(
-      text: String.fromCharCode(Icons.navigation_rounded.codePoint),
-      style: TextStyle(
-        fontSize: 48,
-        fontFamily: Icons.navigation_rounded.fontFamily,
-        package: Icons.navigation_rounded.fontPackage,
-        color: Colors.white,
-      ),
-    );
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset((size - textPainter.width) / 2, (size - textPainter.height) / 2),
-    );
-
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(size.toInt(), size.toInt());
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+  LatLng? _addressLatLng(OrderAddressModel? address) {
+    if (address?.lat == null || address?.lng == null) return null;
+    if (address!.lat == 0 && address.lng == 0) return null;
+    return LatLng(address.lat!, address.lng!);
   }
 
-  Future<BitmapDescriptor> _createKitchenMarkerBitmap() async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    const size = 110.0;
+  void _applyTracking(Map<String, dynamic> data) {
+    final dest = data['destination'];
+    if (dest is Map) {
+      final lat = double.tryParse('${dest['latitude']}');
+      final lng = double.tryParse('${dest['longitude']}');
+      if (lat != null && lng != null && !(lat == 0 && lng == 0)) {
+        _destination = LatLng(lat, lng);
+      }
+      _destinationLabel = dest['label']?.toString() ?? _destinationLabel;
+    }
 
-    // Outer glow / shadow
-    final shadowPaint = Paint()
-      ..color = const Color(0xFF10B981).withOpacity(0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawCircle(const Offset(size / 2, size / 2), 46, shadowPaint);
+    final encoded = data['routePolyline']?.toString();
+    if (encoded != null && encoded.isNotEmpty && encoded != _routeEncoded) {
+      _routeEncoded = encoded;
+      _route = TrackingGeo.decodePolyline(encoded);
+    }
 
-    // Main Circle background (Emerald Green)
-    final bgPaint = Paint()..color = const Color(0xFF10B981);
-    canvas.drawCircle(const Offset(size / 2, size / 2), 40, bgPaint);
+    final chef = data['assignedChef'];
+    if (chef is Map) {
+      _trackingChefName = chef['name']?.toString();
+      _chefPhone = chef['phone']?.toString();
+    }
 
-    final ringPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4;
-    canvas.drawCircle(const Offset(size / 2, size / 2), 40, ringPaint);
+    final delay = data['activeDelay'];
+    _delayReason = delay is Map ? delay['reason']?.toString() : null;
+    _delayMins = delay is Map ? int.tryParse('${delay['estimatedDelayMinutes']}') : null;
 
-    // Home / Kitchen Icon
-    final textPainter = TextPainter(textDirection: TextDirection.ltr);
-    textPainter.text = TextSpan(
-      text: String.fromCharCode(Icons.home_filled.codePoint),
-      style: TextStyle(
-        fontSize: 44,
-        fontFamily: Icons.home_filled.fontFamily,
-        package: Icons.home_filled.fontPackage,
-        color: Colors.white,
-      ),
-    );
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset((size - textPainter.width) / 2, (size - textPainter.height) / 2),
-    );
+    final now = DateTime.now();
+    final etaSeconds = int.tryParse('${data['etaSeconds']}');
+    _etaArrivalLocal = etaSeconds != null ? now.add(Duration(seconds: etaSeconds)) : null;
+    _etaSource = data['etaSource']?.toString();
 
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(size.toInt(), size.toInt());
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+    final trip = data['trip'];
+    _trip = trip is Map ? Map<String, dynamic>.from(trip) : null;
+    final elapsed = int.tryParse('${_trip?['travelDurationSeconds']}');
+    _tripStartLocal = elapsed != null && _trip?['isCompleted'] != true ? now.subtract(Duration(seconds: elapsed)) : null;
+
+    setState(() {
+      _etaMins = int.tryParse('${data['etaMinutes']}') ?? _etaMins;
+      _distanceKm = double.tryParse('${data['distanceRemainingKm']}') ?? _distanceKm;
+      _isStale = data['isStale'] == true;
+      _isNearby = data['isNearby'] == true;
+      _lastUpdatedAt = DateTime.tryParse('${data['lastUpdatedAt']}')?.toLocal();
+    });
+
+    final loc = data['location'];
+    if (loc is Map) {
+      final lat = double.tryParse('${loc['latitude']}');
+      final lng = double.tryParse('${loc['longitude']}');
+      if (lat != null && lng != null) _onChefPosition(LatLng(lat, lng));
+    }
   }
 
-  void _initMapOverlays() {
-    final isCancelled = _isOrderCancelled(_order?.status);
+  // ---------------------------------------------------------------------------
+  // Chef marker animation
+  // ---------------------------------------------------------------------------
 
-    _markers = {
-      Marker(
-        markerId: const MarkerId('kitchen'),
-        position: _kitchenLocation,
-        icon: _kitchenMarkerIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        infoWindow: const InfoWindow(title: 'Your Kitchen Destination', snippet: 'Delivery & Cooking Address'),
-      ),
-      if (!isCancelled)
+  void _onChefPosition(LatLng next) {
+    if (_chefShown == null) {
+      _chefFrom = _chefTo = _chefShown = next;
+      if (_destination != null) _bearingShown = _bearingTo = TrackingGeo.bearing(next, _destination!);
+      _fitCamera();
+      return;
+    }
+    final moved = TrackingGeo.distanceMeters(_chefTo!, next);
+    if (moved < 3) return;
+
+    _chefFrom = _chefShown;
+    _chefTo = next;
+    _bearingFrom = _bearingShown;
+    _bearingTo = TrackingGeo.bearing(_chefFrom!, next);
+
+    if (moved > 2000) {
+      // GPS jump (e.g. first fix after being offline) — don't glide across the city.
+      _chefShown = next;
+      _bearingShown = _bearingTo;
+      _moveController.value = 1;
+    } else {
+      _moveController.forward(from: 0);
+    }
+    if (_autoFollow) _fitCamera();
+  }
+
+  int _lastTickMs = 0;
+  void _onMoveTick() {
+    if (_chefFrom == null || _chefTo == null) return;
+    final t = Curves.easeInOut.transform(_moveController.value);
+    _chefShown = TrackingGeo.lerp(_chefFrom!, _chefTo!, t);
+    // Turn quickly at the start of the segment, then glide.
+    _bearingShown = TrackingGeo.lerpBearing(_bearingFrom, _bearingTo, (_moveController.value * 4).clamp(0.0, 1.0));
+
+    // ~30 fps is plenty for marker updates over the platform channel.
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastTickMs >= 33 || _moveController.isCompleted) {
+      _lastTickMs = now;
+      _mapTick.value++;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Map overlays & camera
+  // ---------------------------------------------------------------------------
+
+  int get _activeIndex => _getStepIndex(_order?.status ?? 'PENDING');
+  bool get _isCancelled => _isOrderCancelled(_order?.status);
+  bool get _isEnRoute => !_isCancelled && _activeIndex == 2;
+  bool get _hasArrived => !_isCancelled && _activeIndex == 3;
+
+  String? get _homeBubbleLabel {
+    if (_isCancelled) return null;
+    if (_hasArrived) return 'Chef is here';
+    final eta = _etaMinsLive;
+    if (_isEnRoute && eta != null) return eta <= 1 ? 'Arriving now' : '$eta min';
+    return 'Your home';
+  }
+
+  Future<void> _ensureMarkerIcons() async {
+    if (_markersLoading) return;
+    final label = _homeBubbleLabel;
+    if (_chefIcon != null && _homeIcon != null && _homeIconLabel == label) return;
+    _markersLoading = true;
+    try {
+      final dpr = MediaQuery.of(context).devicePixelRatio;
+      _chefIcon ??= await TrackingMarkers.chef(dpr);
+      _homeIcon = await TrackingMarkers.home(dpr, label: label);
+      _homeIconLabel = label;
+      _mapTick.value++;
+    } catch (_) {
+      // Falls back to default Google markers.
+    } finally {
+      _markersLoading = false;
+    }
+    if (mounted && _homeIconLabel != _homeBubbleLabel) _ensureMarkerIcons();
+  }
+
+  void _refreshOverlays() {
+    if (!mounted) return;
+    _ensureMarkerIcons();
+    _mapTick.value++;
+  }
+
+  /// Chef position to show on the map for the current booking stage.
+  LatLng? get _chefDisplayPosition {
+    if (_isCancelled || _activeIndex >= 4) return null;
+    if (_hasArrived) return _destination ?? _chefShown;
+    return _isEnRoute ? _chefShown : null;
+  }
+
+  List<LatLng> get _remainingRoute {
+    final chef = _chefDisplayPosition;
+    if (!_isEnRoute || chef == null || _destination == null) return const [];
+    if (_route.length >= 2) return TrackingGeo.remainingRoute(_route, chef);
+    return [chef, _destination!];
+  }
+
+  Set<Marker> _buildMarkers() {
+    final chef = _chefDisplayPosition;
+    return {
+      if (_destination != null)
         Marker(
-          markerId: const MarkerId('chef_location'),
-          position: _chefLocation,
-          rotation: _currentBearing,
+          markerId: const MarkerId('home'),
+          position: _destination!,
+          anchor: const Offset(0.5, 1.0),
+          zIndexInt: 1,
+          icon: _homeIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          infoWindow: InfoWindow(title: _destinationLabel ?? 'Your home', snippet: _order?.address?.fullAddress),
+        ),
+      if (chef != null && !_hasArrived)
+        Marker(
+          markerId: const MarkerId('chef'),
+          position: chef,
+          rotation: _bearingShown,
+          flat: true,
           anchor: const Offset(0.5, 0.5),
-          icon: _chefMarkerIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-          infoWindow: InfoWindow(
-            title: '${_order?.chefName ?? "Executive Chef"} (En Route)',
-            snippet: 'En Route • ${_remainingDistanceKm.toStringAsFixed(1)} km (~$_dynamicEtaMins mins)',
-          ),
+          zIndexInt: 2,
+          icon: _chefIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: InfoWindow(title: _chefDisplayName),
         ),
     };
+  }
 
-    _polylines = {
+  Set<Polyline> _buildPolylines(bool isDark) {
+    final points = _remainingRoute;
+    if (points.length < 2) return const {};
+    final isRoadRoute = _route.length >= 2;
+    if (!isRoadRoute) {
+      // No road geometry yet (fallback ETA) — dashed straight line.
+      return {
+        Polyline(
+          polylineId: const PolylineId('route_direct'),
+          points: points,
+          color: AppColors.primary,
+          width: 4,
+          patterns: [PatternItem.dash(18), PatternItem.gap(10)],
+        ),
+      };
+    }
+    return {
       Polyline(
-        polylineId: const PolylineId('chef_route'),
-        points: _routeCoordinates,
-        color: isCancelled ? AppColors.slate400 : AppColors.primary,
+        polylineId: const PolylineId('route_casing'),
+        points: points,
+        color: isDark ? const Color(0xFF0B1F17) : AppColors.emerald900,
+        width: 9,
+        zIndex: 1,
+        jointType: JointType.round,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+      ),
+      Polyline(
+        polylineId: const PolylineId('route'),
+        points: points,
+        color: AppColors.primaryLight,
         width: 5,
+        zIndex: 2,
         jointType: JointType.round,
         startCap: Cap.roundCap,
         endCap: Cap.roundCap,
@@ -234,98 +396,82 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
     };
   }
 
-  void _updateChefLocationFromBackend(Map<String, dynamic>? trackingData, int activeIndex) {
-    if (_isOrderCancelled(_order?.status)) {
-      _remainingDistanceKm = 0.0;
-      _dynamicEtaMins = 0;
-      _initMapOverlays();
-      return;
-    }
-
-    if (activeIndex >= 3) {
-      // Chef arrived or in kitchen
-      _chefLocation = _kitchenLocation;
-      _remainingDistanceKm = 0.0;
-      _dynamicEtaMins = 0;
-      _initMapOverlays();
-      return;
-    }
-
-    if (trackingData != null) {
-      final loc = trackingData['location'] as Map<String, dynamic>?;
-      if (loc != null && loc['latitude'] != null && loc['longitude'] != null) {
-        final lat = double.tryParse(loc['latitude'].toString());
-        final lng = double.tryParse(loc['longitude'].toString());
-        if (lat != null && lng != null) {
-          final newPos = LatLng(lat, lng);
-          final dLat = newPos.latitude - _chefLocation.latitude;
-          final dLng = newPos.longitude - _chefLocation.longitude;
-          // Only update and rotate if the vehicle actually moved
-          if (dLat.abs() > 0.00008 || dLng.abs() > 0.00008) {
-            _currentBearing = (math.atan2(dLng, dLat) * 180 / math.pi) % 360;
-            _chefLocation = newPos;
-          }
-        }
-      }
-
-      if (trackingData['distanceRemainingKm'] != null) {
-        _remainingDistanceKm = double.tryParse(trackingData['distanceRemainingKm'].toString()) ?? _remainingDistanceKm;
-      }
-      if (trackingData['etaMinutes'] != null) {
-        _dynamicEtaMins = int.tryParse(trackingData['etaMinutes'].toString()) ?? _dynamicEtaMins;
-      }
-    }
-    _initMapOverlays();
+  Set<Circle> _buildCircles() {
+    final chef = _chefDisplayPosition;
+    return {
+      if (chef != null && _isEnRoute)
+        Circle(
+          circleId: const CircleId('chef_halo'),
+          center: chef,
+          radius: 45,
+          fillColor: AppColors.primary.withValues(alpha: 0.14),
+          strokeWidth: 0,
+        ),
+      if (_destination != null && !_isEnRoute && !_isCancelled)
+        Circle(
+          circleId: const CircleId('home_halo'),
+          center: _destination!,
+          radius: 90,
+          fillColor: AppColors.accent.withValues(alpha: 0.12),
+          strokeColor: AppColors.accent.withValues(alpha: 0.35),
+          strokeWidth: 1,
+        ),
+    };
   }
 
-  void _recenterMap() {
-    if (_mapController == null) return;
-    final southwestLat = _kitchenLocation.latitude < _chefLocation.latitude ? _kitchenLocation.latitude : _chefLocation.latitude;
-    final southwestLng = _kitchenLocation.longitude < _chefLocation.longitude ? _kitchenLocation.longitude : _chefLocation.longitude;
-    final northeastLat = _kitchenLocation.latitude > _chefLocation.latitude ? _kitchenLocation.latitude : _chefLocation.latitude;
-    final northeastLng = _kitchenLocation.longitude > _chefLocation.longitude ? _kitchenLocation.longitude : _chefLocation.longitude;
+  void _fitCamera() {
+    final controller = _mapController;
+    if (controller == null) return;
+    final points = <LatLng>[
+      ?_chefDisplayPosition,
+      ?_destination,
+      ..._remainingRoute,
+    ];
+    if (points.isEmpty) return;
 
-    final bounds = LatLngBounds(
-      southwest: LatLng(southwestLat - 0.004, southwestLng - 0.004),
-      northeast: LatLng(northeastLat + 0.004, northeastLng + 0.004),
-    );
-
-    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+    final span = points.length > 1 ? TrackingGeo.distanceMeters(points.first, points[1]) : 0.0;
+    if (points.length == 1 || span < 150) {
+      controller.animateCamera(CameraUpdate.newLatLngZoom(points.first, 16));
+    } else {
+      controller.animateCamera(CameraUpdate.newLatLngBounds(TrackingGeo.boundsOf(points), 56));
+    }
   }
 
-  Future<void> _fetchOrder({bool isBackground = false}) async {
-    try {
-      var orderRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.orderDetail(widget.orderId));
-      if (!orderRes.success || orderRes.data == null) {
-        orderRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.chefBooking(widget.orderId));
-      }
+  void _recenter() {
+    setState(() => _autoFollow = true);
+    _fitCamera();
+  }
 
-      Map<String, dynamic>? trackingData;
-      try {
-        final trackRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.chefBookingTracking(widget.orderId));
-        if (trackRes.success && trackRes.data != null) {
-          trackingData = trackRes.data;
-        }
-      } catch (_) {}
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
 
-      if (orderRes.success && orderRes.data != null && mounted) {
-        final parsed = OrderModel.fromJson(orderRes.data!);
-        final isCancelled = _isOrderCancelled(parsed.status);
+  String get _chefDisplayName {
+    final name = _trackingChefName ?? _order?.assignedChef?.name;
+    if (name == null || name.trim().isEmpty) return 'Your chef';
+    return name.toLowerCase().startsWith('chef') ? name : 'Chef $name';
+  }
 
-        if (isCancelled) {
-          _pollingTimer?.cancel();
-          _pollingTimer = null;
-        }
+  Future<void> _callChef() async {
+    final phone = _chefPhone;
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chef contact will be available once the chef is assigned.')),
+      );
+      return;
+    }
+    final ok = await launchUrl(Uri(scheme: 'tel', path: phone));
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unable to call $phone')));
+    }
+  }
 
-        final activeIndex = _getStepIndex(parsed.status);
-
-        setState(() {
-          _order = parsed;
-        });
-
-        _updateChefLocationFromBackend(trackingData, activeIndex);
-      }
-    } catch (_) {}
+  String _lastUpdatedText() {
+    final at = _lastUpdatedAt;
+    if (at == null) return 'a while ago';
+    final mins = DateTime.now().difference(at).inMinutes;
+    if (mins < 1) return 'just now';
+    return '$mins min ago';
   }
 
   final List<Map<String, dynamic>> _steps = [
@@ -343,15 +489,20 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
       case 'DRAFT':
       case 'PENDING':
       case 'CONFIRMED':
+      case 'CREATED':
+      case 'SEARCHING':
+      case 'SEARCHING_REPLACEMENT':
         return 0;
       case 'CHEF_ASSIGNED':
       case 'ACCEPTED':
+      case 'ASSIGNED':
         return 1;
       case 'CHEF_EN_ROUTE':
       case 'EN_ROUTE':
         return 2;
       case 'CHEF_ARRIVED':
       case 'ARRIVED':
+      case 'WAITING_CUSTOMER':
         return 3;
       case 'IN_PROGRESS':
       case 'COOKING':
@@ -361,15 +512,929 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
       case 'COMPLETED':
         return 6;
       default:
-        return 2;
+        // Unknown status: never claim the chef is en route without evidence.
+        return 0;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------------------
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final media = MediaQuery.of(context);
+    final screenH = media.size.height;
+    final sheetMax = _sheetMaxFor(context);
+
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
+      body: Stack(
+        children: [
+          // 1. Full-screen live map. Its bottom padding follows the sheet only once
+          // the sheet settles — resizing the native map on every drag frame is
+          // what made the sheet stutter and drop flings.
+          Positioned.fill(
+            child: RepaintBoundary(
+            child: ValueListenableBuilder<double>(
+              valueListenable: _mapBottomExtent,
+              builder: (context, extent, _) {
+                return ValueListenableBuilder<int>(
+                  valueListenable: _mapTick,
+                  builder: (context, _, __) {
+                    return Listener(
+                      onPointerDown: (_) {
+                        if (_autoFollow) setState(() => _autoFollow = false);
+                      },
+                      child: GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: _destination ?? _chefShown ?? const LatLng(12.9716, 77.5946),
+                          zoom: 14.5,
+                        ),
+                        style: isDark ? TrackingMapStyles.dark : TrackingMapStyles.light,
+                        padding: EdgeInsets.only(
+                          top: media.padding.top + 64,
+                          bottom: screenH * extent.clamp(_sheetMin, 0.55),
+                        ),
+                        markers: _buildMarkers(),
+                        polylines: _buildPolylines(isDark),
+                        circles: _buildCircles(),
+                        zoomControlsEnabled: false,
+                        myLocationButtonEnabled: false,
+                        compassEnabled: false,
+                        mapToolbarEnabled: false,
+                        rotateGesturesEnabled: false,
+                        tiltGesturesEnabled: false,
+                        buildingsEnabled: false,
+                        onMapCreated: (controller) {
+                          _mapController = controller;
+                          Future.delayed(const Duration(milliseconds: 300), _fitCamera);
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+            ),
+          ),
+
+          // 2. Top bar
+          Positioned(
+            top: media.padding.top + 8,
+            left: 14,
+            right: 14,
+            child: _buildTopBar(isDark),
+          ),
+
+          // 3. Recenter button, floating above the sheet
+          ValueListenableBuilder<double>(
+            valueListenable: _sheetExtent,
+            builder: (context, extent, _) {
+              if (extent > 0.6) return const SizedBox.shrink();
+              return Positioned(
+                right: 14,
+                bottom: screenH * extent + 14,
+                child: AnimatedScale(
+                  scale: _autoFollow ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: FloatingActionButton.small(
+                    heroTag: 'recenter_tracking_map',
+                    backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+                    foregroundColor: AppColors.primary,
+                    elevation: 4,
+                    onPressed: _recenter,
+                    child: const Icon(Icons.my_location_rounded, size: 20),
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // 4. Draggable status sheet
+          NotificationListener<DraggableScrollableNotification>(
+            onNotification: (n) {
+              _sheetExtent.value = n.extent; // cheap: only the Flutter FAB listens per frame
+              _mapPaddingDebounce?.cancel();
+              _mapPaddingDebounce = Timer(const Duration(milliseconds: 180), () {
+                if (mounted) _mapBottomExtent.value = n.extent.clamp(_sheetMin, 0.55);
+              });
+              return false;
+            },
+            child: DraggableScrollableSheet(
+              controller: _sheetController,
+              initialChildSize: _sheetInitial,
+              minChildSize: _sheetMin,
+              maxChildSize: sheetMax,
+              snap: true,
+              snapSizes: const [_sheetInitial],
+              snapAnimationDuration: const Duration(milliseconds: 220),
+              builder: (context, scrollController) =>
+                  RepaintBoundary(child: _buildSheet(isDark, scrollController)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopBar(bool isDark) {
+    final surface = isDark ? AppColors.slate900.withValues(alpha: 0.95) : Colors.white;
+    final shadow = [BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 12, offset: const Offset(0, 3))];
+
+    return Row(
+      children: [
+        Container(
+          decoration: BoxDecoration(color: surface, shape: BoxShape.circle, boxShadow: shadow),
+          child: IconButton(
+            icon: Icon(Icons.arrow_back_rounded, color: isDark ? Colors.white : AppColors.slate800, size: 22),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(24), boxShadow: shadow),
+            child: Row(
+              children: [
+                _LiveDot(active: _isEnRoute && !_isStale),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _order?.bookingReference ?? 'Chef visit',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : AppColors.slate900,
+                        ),
+                      ),
+                      Text(
+                        _isCancelled
+                            ? 'Booking cancelled'
+                            : _isEnRoute
+                                ? (_isStale ? 'Live location paused' : 'Live tracking')
+                                : _steps[_activeIndex]['label'],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _isCancelled ? AppColors.danger : AppColors.slate500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.support),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Text('Help', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Fully expanded, the sheet stops just below the top bar (back button + order pill).
+  double _sheetMaxFor(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final topBarBottom = media.padding.top + 8 + 56 + 10;
+    return (1 - topBarBottom / media.size.height).clamp(_sheetInitial + 0.1, _sheetMaxCap);
+  }
+
+  void _toggleSheet() {
+    if (!_sheetController.isAttached) return;
+    final max = _sheetMaxFor(context);
+    final target = _sheetController.size < (_sheetInitial + max) / 2 ? max : _sheetInitial;
+    _sheetController.animateTo(target, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+  }
+
+  Widget _buildSheet(bool isDark, ScrollController scrollController) {
+    final activeIndex = _activeIndex;
+    final currentStatus = _order?.status ?? 'PENDING';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.16), blurRadius: 18, offset: const Offset(0, -4))],
+      ),
+      child: ListView(
+        controller: scrollController,
+        physics: const ClampingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        children: [
+          // Drag handle — also tap to expand / collapse
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleSheet,
+            child: SizedBox(
+              height: 26,
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.slate700 : AppColors.slate300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          if (_isCancelled) ...[
+            _buildCancelledBanner(),
+            const SizedBox(height: 16),
+          ] else ...[
+            _buildEtaHeader(isDark, currentStatus),
+            const SizedBox(height: 16),
+            _buildStageProgress(isDark, activeIndex),
+            if (_isEnRoute && _isStale) ...[
+              const SizedBox(height: 12),
+              _buildInfoChip(
+                icon: Icons.gps_off_rounded,
+                color: AppColors.warning,
+                text: "Chef's live location paused — last updated ${_lastUpdatedText()}",
+              ),
+            ],
+            if (_delayReason != null) ...[
+              const SizedBox(height: 10),
+              _buildInfoChip(
+                icon: Icons.schedule_rounded,
+                color: AppColors.warning,
+                text: 'Running late${_delayMins != null ? ' by ~$_delayMins min' : ''} • ${_delayReason!.replaceAll('_', ' ').toLowerCase()}',
+              ),
+            ],
+            const SizedBox(height: 16),
+          ],
+
+          _buildChefCard(isDark),
+          const SizedBox(height: 14),
+
+          if (!_isCancelled) ..._buildOtpCards(activeIndex),
+
+          if (_order?.address != null) ...[
+            _buildAddressRow(isDark),
+            const SizedBox(height: 14),
+          ],
+
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryDark,
+                side: const BorderSide(color: AppColors.primary, width: 1.2),
+                padding: const EdgeInsets.symmetric(vertical: 11),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.timeline_rounded, size: 18),
+              label: const Text(
+                'View Complete Status & Dispatch Milestones',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+              ),
+              onPressed: () => _showCompleteStatusSheet(context),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: EbicButton(
+              label: 'Ingredient Checklist',
+              icon: Icons.checklist_rtl_rounded,
+              onPressed: () => Navigator.pushNamed(
+                context,
+                AppRoutes.preparationChecklist,
+                arguments: {'orderId': widget.orderId},
+              ),
+            ),
+          ),
+
+          if (!_isCancelled && activeIndex < 4) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton.icon(
+                icon: const Icon(Icons.cancel_outlined, color: AppColors.danger, size: 16),
+                label: const Text('Cancel Booking',
+                    style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 13)),
+                onPressed: () => CancelBookingDialog.show(
+                  context,
+                  orderId: widget.orderId,
+                  onCancelled: () => _fetchOrder(),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Seconds until the estimated arrival, counting down locally between polls.
+  int? get _etaSecondsLive {
+    final at = _etaArrivalLocal;
+    if (at == null) return null;
+    final s = at.difference(DateTime.now()).inSeconds;
+    return s < 0 ? 0 : s;
+  }
+
+  /// Remaining road distance measured along the route from the chef's live
+  /// (animated) position; falls back to the backend's last calculated value.
+  double? get _liveDistanceKm {
+    if (_route.length >= 2 && _isEnRoute && _chefShown != null) {
+      final remaining = _remainingRoute;
+      var meters = 0.0;
+      for (var i = 0; i < remaining.length - 1; i++) {
+        meters += TrackingGeo.distanceMeters(remaining[i], remaining[i + 1]);
+      }
+      return meters / 1000;
+    }
+    return _distanceKm;
+  }
+
+  int? get _etaMinsLive {
+    final s = _etaSecondsLive;
+    return s == null ? _etaMins : (s / 60).ceil();
+  }
+
+  static String _fmtClock(int totalSeconds) {
+    final h = totalSeconds ~/ 3600;
+    final m = (totalSeconds % 3600) ~/ 60;
+    final s = totalSeconds % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+
+  static String _fmtDuration(int totalSeconds) {
+    final h = totalSeconds ~/ 3600;
+    final m = (totalSeconds % 3600) ~/ 60;
+    final s = totalSeconds % 60;
+    if (h > 0) return '$h h ${m.toString().padLeft(2, '0')} min';
+    if (m > 0) return s > 0 ? '$m min $s s' : '$m min';
+    return '$s s';
+  }
+
+  Widget _buildEtaHeader(bool isDark, String currentStatus) {
+    // Rebuilds every second for the live countdown / elapsed timers.
+    return ValueListenableBuilder<int>(
+      valueListenable: _clock,
+      builder: (context, _, __) => _buildEtaHeaderContent(isDark, currentStatus),
+    );
+  }
+
+  Widget _buildEtaHeaderContent(bool isDark, String currentStatus) {
+    final String title;
+    final String subtitle;
+    final etaMins = _etaMinsLive;
+    if (_order == null) {
+      title = 'Loading your booking…';
+      subtitle = 'Fetching live status';
+    } else if (_isEnRoute) {
+      if (_chefShown == null) {
+        title = 'Chef is on the way';
+        subtitle = 'Connecting to live location…';
+      } else if (_isNearby || (etaMins != null && etaMins <= 2)) {
+        title = 'Arriving now';
+        subtitle = '$_chefDisplayName is almost at your door';
+      } else {
+        title = etaMins != null ? 'Arriving in $etaMins min' : 'Chef is on the way';
+        final km = _liveDistanceKm;
+        subtitle = km != null
+            ? '$_chefDisplayName is ${km.toStringAsFixed(1)} km away'
+            : '$_chefDisplayName is heading to your home';
+      }
+    } else if (_hasArrived) {
+      title = 'Chef has arrived';
+      subtitle = 'Share the start OTP with $_chefDisplayName';
+    } else if (_activeIndex >= 6) {
+      title = 'Service completed';
+      subtitle = 'Hope you enjoyed your meal!';
+    } else if (_activeIndex >= 4) {
+      title = _activeIndex == 5 ? 'Plating your meal' : 'Cooking in progress';
+      subtitle = '$_chefDisplayName is cooking in your kitchen';
+    } else if (_activeIndex == 1) {
+      title = 'Chef assigned';
+      subtitle = 'Live tracking starts when $_chefDisplayName leaves';
+    } else {
+      title = 'Booking confirmed';
+      subtitle = "We're assigning a verified chef";
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.3,
+                      color: isDark ? Colors.white : AppColors.slate900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(fontSize: 13, color: AppColors.slate500, height: 1.3)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            StatusBadge(status: currentStatus),
+          ],
+        ),
+        if (_isEnRoute && _chefShown != null) ...[
+          const SizedBox(height: 12),
+          _buildLiveTimers(isDark),
+        ],
+        if (!_isEnRoute && _trip?['isCompleted'] == true) ...[
+          const SizedBox(height: 12),
+          _buildTripSummary(isDark),
+        ],
+      ],
+    );
+  }
+
+  /// Swiggy/Uber-style live timers: ETA countdown + arrival clock time, and
+  /// how long the chef has been on the way.
+  Widget _buildLiveTimers(bool isDark) {
+    final etaSecs = _etaSecondsLive;
+    final arrival = _etaArrivalLocal;
+    final elapsed = _tripStartLocal != null ? DateTime.now().difference(_tripStartLocal!).inSeconds : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            if (etaSecs != null)
+              Expanded(
+                child: _timerTile(
+                  isDark,
+                  icon: Icons.timer_outlined,
+                  value: _fmtClock(etaSecs),
+                  label: arrival != null ? 'ETA · by ${TimeOfDay.fromDateTime(arrival).format(context)}' : 'ETA',
+                  highlight: true,
+                ),
+              ),
+            if (etaSecs != null && elapsed != null) const SizedBox(width: 10),
+            if (elapsed != null)
+              Expanded(
+                child: _timerTile(
+                  isDark,
+                  icon: Icons.two_wheeler_rounded,
+                  value: _fmtClock(elapsed < 0 ? 0 : elapsed),
+                  label: 'On the way${_trip?['travelledDistanceKm'] != null ? ' · ${_trip!['travelledDistanceKm']} km' : ''}',
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Icon(
+              _etaSource == 'FALLBACK_ROUTING' ? Icons.info_outline_rounded : Icons.traffic_rounded,
+              size: 13,
+              color: AppColors.slate400,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                _etaSource == 'FALLBACK_ROUTING'
+                    ? 'Approximate ETA — live traffic unavailable right now.'
+                    : 'Google Maps ETA with live traffic · updates as the chef moves.',
+                style: const TextStyle(fontSize: 10.5, color: AppColors.slate400),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _timerTile(bool isDark,
+      {required IconData icon, required String value, required String label, bool highlight = false}) {
+    final accent = highlight ? AppColors.primary : AppColors.slate500;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: highlight
+            ? AppColors.primary.withValues(alpha: isDark ? 0.18 : 0.08)
+            : (isDark ? AppColors.slate800 : AppColors.slate100),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: highlight ? AppColors.primaryDark : (isDark ? Colors.white : AppColors.slate800),
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.slate500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Actual journey once the chef has arrived, with the planned estimate for comparison.
+  Widget _buildTripSummary(bool isDark) {
+    final secs = int.tryParse('${_trip?['travelDurationSeconds']}');
+    final km = _trip?['travelledDistanceKm'];
+    final plannedM = double.tryParse('${_trip?['plannedDistanceMeters']}');
+    final plannedS = int.tryParse('${_trip?['plannedDurationSeconds']}');
+    final planned = [
+      if (plannedS != null) 'est. ${_fmtDuration(plannedS)}',
+      if (plannedM != null) '${(plannedM / 1000).toStringAsFixed(1)} km',
+    ].join(' · ');
+
+    return _buildInfoChip(
+      icon: Icons.flag_rounded,
+      color: AppColors.primary,
+      text: [
+        'Reached in ${secs != null ? _fmtDuration(secs) : '—'}',
+        if (km != null) '$km km travelled',
+        if (planned.isNotEmpty) '($planned)',
+      ].join(' · '),
+    );
+  }
+
+  Widget _buildStageProgress(bool isDark, int activeIndex) {
+    const stages = [
+      (Icons.check_circle_rounded, 'Confirmed'),
+      (Icons.person_rounded, 'Assigned'),
+      (Icons.two_wheeler_rounded, 'On the way'),
+      (Icons.home_rounded, 'Arrived'),
+      (Icons.soup_kitchen_rounded, 'Cooking'),
+    ];
+    final idle = isDark ? AppColors.slate700 : AppColors.slate200;
+
+    return Row(
+      children: List.generate(stages.length * 2 - 1, (i) {
+        if (i.isOdd) {
+          final done = activeIndex > i ~/ 2;
+          return Expanded(
+            child: Container(
+              height: 3,
+              margin: const EdgeInsets.only(bottom: 18),
+              decoration: BoxDecoration(
+                color: done ? AppColors.primary : idle,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          );
+        }
+        final idx = i ~/ 2;
+        final done = activeIndex >= idx;
+        final current = activeIndex == idx || (idx == 4 && activeIndex > 4);
+        return Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: current ? 34 : 28,
+              height: current ? 34 : 28,
+              decoration: BoxDecoration(
+                color: done ? AppColors.primary : idle,
+                shape: BoxShape.circle,
+                boxShadow: current
+                    ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.35), blurRadius: 10)]
+                    : null,
+              ),
+              child: Icon(stages[idx].$1, size: current ? 18 : 15, color: done ? Colors.white : AppColors.slate400),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              stages[idx].$2,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+                color: done ? (isDark ? Colors.white : AppColors.slate800) : AppColors.slate400,
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildInfoChip({required IconData icon, required Color color, required String text}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChefCard(bool isDark) {
+    return EbicCard(
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: AppColors.primarySubtle,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.person_pin_rounded, color: AppColors.primary, size: 28),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _chefDisplayName,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.verified, color: AppColors.primary, size: 14),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Certified EBIC Executive Chef',
+                  style: TextStyle(color: AppColors.slate500, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          Material(
+            color: AppColors.primarySubtle,
+            shape: const CircleBorder(),
+            child: IconButton(
+              icon: const Icon(Icons.call_rounded, color: AppColors.primary),
+              tooltip: 'Call chef',
+              onPressed: _callChef,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddressRow(bool isDark) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: AppColors.accentSubtle, borderRadius: BorderRadius.circular(10)),
+          child: const Icon(Icons.home_rounded, color: AppColors.amber700, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _destinationLabel ?? _order!.address!.label ?? 'Home',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _order!.address!.fullAddress,
+                style: const TextStyle(fontSize: 12, color: AppColors.slate500, height: 1.3),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildOtpCards(int activeIndex) {
+    return [
+      if (activeIndex < 4 && _order?.startOtp != null) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFECFDF5),
+            border: Border.all(color: const Color(0xFF10B981)),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.key_rounded, color: Color(0xFF047857), size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'START OTP',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF047857), letterSpacing: 0.8),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 2),
+                    Text('Share code with chef upon arrival', style: TextStyle(fontSize: 11, color: Color(0xFF065F46))),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF059669), width: 1.5),
+                ),
+                child: Text(
+                  _order!.startOtp!,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 4, color: Color(0xFF065F46)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+      ],
+      if (activeIndex >= 4 && _order?.completionOtp != null) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFAF5FF), Color(0xFFF3E8FF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: const Color(0xFFA855F7), width: 1.5),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.verified_rounded, color: Color(0xFF9333EA), size: 14),
+                        SizedBox(width: 6),
+                        Text(
+                          'COMPLETION OTP',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 11, color: Color(0xFF7E22CE), letterSpacing: 0.8),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Share code with chef once meal is cooked & plated to complete service',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF6B21A8), height: 1.2),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF9333EA), width: 1.8),
+                ),
+                child: Text(
+                  _order!.completionOtp!,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 4, color: Color(0xFF7E22CE)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+      ],
+    ];
+  }
+
+  Widget _buildCancelledBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.cancel_rounded, color: AppColors.danger, size: 22),
+              SizedBox(width: 8),
+              Text('BOOKING CANCELLED',
+                  style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'This chef booking has been cancelled. Live tracking and dispatch are stopped.',
+            style: TextStyle(fontSize: 12, color: AppColors.slate700, height: 1.3),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                  label: const Text('View Bookings', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.slate700,
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.support_agent_rounded, size: 16),
+                  label: const Text('Support', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.support),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   void _showCompleteStatusSheet(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currentStatus = _order?.status ?? 'CHEF_EN_ROUTE';
-    final isCancelled = _isOrderCancelled(currentStatus);
-    final activeIndex = _getStepIndex(currentStatus);
+    final isCancelled = _isCancelled;
+    final activeIndex = _activeIndex;
 
     showModalBottomSheet(
       context: context,
@@ -402,20 +1467,15 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Complete Dispatch Status',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                        const Text('Complete Dispatch Status', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         Text(
-                          _order?.bookingReference ?? 'Booking Ref: EBIC-${widget.orderId.substring(0, 6).toUpperCase()}',
+                          _order?.bookingReference ??
+                              'Booking Ref: EBIC-${widget.orderId.substring(0, 6).toUpperCase()}',
                           style: const TextStyle(fontSize: 12, color: AppColors.slate500),
                         ),
                       ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
+                    IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
                   ],
                 ),
               ),
@@ -425,81 +1485,24 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   children: [
                     if (isCancelled) ...[
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.danger.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.danger.withOpacity(0.3)),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.cancel_rounded, color: AppColors.danger, size: 28),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'BOOKING CANCELLED',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.danger),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'This chef visit has been cancelled. Dispatch tracking is stopped.',
-                                    style: TextStyle(fontSize: 11.5, color: AppColors.slate600),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                      _buildInfoChip(
+                        icon: Icons.cancel_rounded,
+                        color: AppColors.danger,
+                        text: 'This chef visit has been cancelled. Dispatch tracking is stopped.',
                       ),
                       const SizedBox(height: 16),
-                    ] else ...[
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          gradient: AppColors.primaryGradient,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.navigation_rounded, color: Colors.white, size: 24),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'LIVE CHEF DISPATCH ACTIVE',
-                                    style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.8),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Chef ${_order?.chefName ?? "Vikram"} is en route to your kitchen',
-                                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                                  ),
-                                  Text(
-                                    '${_remainingDistanceKm.toStringAsFixed(1)} km away • Arriving in ~$_dynamicEtaMins mins',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                    ] else if (_isEnRoute) ...[
+                      _buildInfoChip(
+                        icon: Icons.navigation_rounded,
+                        color: AppColors.primary,
+                        text: [
+                          '$_chefDisplayName is en route',
+                          if (_distanceKm != null) '${_distanceKm!.toStringAsFixed(1)} km away',
+                          if (_etaMins != null) 'arriving in ~$_etaMins min',
+                        ].join(' • '),
                       ),
                       const SizedBox(height: 18),
                     ],
-
                     ...List.generate(_steps.length, (idx) {
                       final step = _steps[idx];
                       final isDone = !isCancelled && idx <= activeIndex;
@@ -517,9 +1520,13 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
                                 decoration: BoxDecoration(
                                   color: isCurrent
                                       ? AppColors.primary
-                                      : (isDone ? AppColors.primarySubtle : (isDark ? AppColors.slate800 : AppColors.slate200)),
+                                      : (isDone
+                                          ? AppColors.primarySubtle
+                                          : (isDark ? AppColors.slate800 : AppColors.slate200)),
                                   border: Border.all(
-                                    color: isCurrent ? AppColors.primaryDark : (isDone ? AppColors.primary : Colors.transparent),
+                                    color: isCurrent
+                                        ? AppColors.primaryDark
+                                        : (isDone ? AppColors.primary : Colors.transparent),
                                     width: 1.5,
                                   ),
                                   shape: BoxShape.circle,
@@ -529,14 +1536,18 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
                                       ? const Icon(Icons.navigation_rounded, size: 14, color: Colors.white)
                                       : (isDone
                                           ? const Icon(Icons.check, size: 14, color: AppColors.primary)
-                                          : Text('${idx + 1}', style: const TextStyle(fontSize: 11, color: AppColors.slate500, fontWeight: FontWeight.bold))),
+                                          : Text('${idx + 1}',
+                                              style: const TextStyle(
+                                                  fontSize: 11, color: AppColors.slate500, fontWeight: FontWeight.bold))),
                                 ),
                               ),
                               if (!isLast)
                                 Container(
                                   width: 2,
                                   height: 42,
-                                  color: isDone && idx < activeIndex ? AppColors.primary : (isDark ? AppColors.slate800 : AppColors.slate200),
+                                  color: isDone && idx < activeIndex
+                                      ? AppColors.primary
+                                      : (isDark ? AppColors.slate800 : AppColors.slate200),
                                 ),
                             ],
                           ),
@@ -550,12 +1561,18 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        step['label'],
-                                        style: TextStyle(
-                                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
-                                          fontSize: 14,
-                                          color: isCurrent ? AppColors.primaryDark : (isDone ? (isDark ? Colors.white : AppColors.slate900) : AppColors.slate400),
+                                      Flexible(
+                                        child: Text(
+                                          step['label'],
+                                          style: TextStyle(
+                                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+                                            fontSize: 14,
+                                            color: isCurrent
+                                                ? AppColors.primaryDark
+                                                : (isDone
+                                                    ? (isDark ? Colors.white : AppColors.slate900)
+                                                    : AppColors.slate400),
+                                          ),
                                         ),
                                       ),
                                       if (isCurrent)
@@ -566,15 +1583,15 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
                                             borderRadius: BorderRadius.circular(6),
                                             border: Border.all(color: const Color(0xFF10B981), width: 0.8),
                                           ),
-                                          child: const Text('CURRENT STAGE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF047857))),
+                                          child: const Text('CURRENT STAGE',
+                                              style: TextStyle(
+                                                  fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF047857))),
                                         ),
                                     ],
                                   ),
                                   const SizedBox(height: 3),
-                                  Text(
-                                    step['desc'],
-                                    style: const TextStyle(fontSize: 12, color: AppColors.slate500, height: 1.3),
-                                  ),
+                                  Text(step['desc'],
+                                      style: const TextStyle(fontSize: 12, color: AppColors.slate500, height: 1.3)),
                                 ],
                               ),
                             ),
@@ -587,31 +1604,9 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: EbicButton(
-                        label: 'Ingredient Checklist',
-                        icon: Icons.checklist_rtl_rounded,
-                        variant: EbicButtonVariant.outline,
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          Navigator.pushNamed(
-                            context,
-                            AppRoutes.preparationChecklist,
-                            arguments: {'orderId': widget.orderId},
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: EbicButton(
-                        label: 'Close Status',
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ),
-                  ],
+                child: SizedBox(
+                  width: double.infinity,
+                  child: EbicButton(label: 'Close Status', onPressed: () => Navigator.pop(ctx)),
                 ),
               ),
             ],
@@ -620,570 +1615,50 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> {
       },
     );
   }
+}
+
+/// Pulsing "live" indicator dot.
+class _LiveDot extends StatefulWidget {
+  final bool active;
+  const _LiveDot({required this.active});
+
+  @override
+  State<_LiveDot> createState() => _LiveDotState();
+}
+
+class _LiveDotState extends State<_LiveDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currentStatus = _order?.status ?? 'CHEF_EN_ROUTE';
-    final isCancelled = _isOrderCancelled(currentStatus);
-    final activeIndex = _getStepIndex(currentStatus);
-
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
-      body: Stack(
-        children: [
-          // 1. Google Maps (or Static Route if cancelled)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: MediaQuery.of(context).size.height * 0.46,
-            child: Stack(
-              children: [
-                GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _chefLocation,
-                    zoom: 14.8,
-                  ),
-                  markers: _markers,
-                  polylines: _polylines,
-                  zoomControlsEnabled: false,
-                  myLocationButtonEnabled: false,
-                  compassEnabled: true,
-                  mapToolbarEnabled: false,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                    _recenterMap();
-                  },
-                ),
-                Positioned(
-                  bottom: 14,
-                  right: 14,
-                  child: FloatingActionButton.small(
-                    heroTag: 'recenter_tracking_map',
-                    backgroundColor: isDark ? AppColors.slate900 : Colors.white,
-                    foregroundColor: AppColors.primary,
-                    elevation: 4,
-                    onPressed: _recenterMap,
-                    child: const Icon(Icons.my_location_rounded, size: 20),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // 2. Top Header Overlay (Back Button + Live GPS Bike Pill + Complete Status Link)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 14,
-            right: 14,
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: isDark ? AppColors.slate900.withOpacity(0.92) : Colors.white.withOpacity(0.95),
-                  radius: 20,
-                  child: IconButton(
-                    icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : AppColors.slate800, size: 20),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => _showCompleteStatusSheet(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.slate900.withOpacity(0.94) : Colors.white.withOpacity(0.96),
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.12),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: isCancelled ? AppColors.danger.withOpacity(0.15) : AppColors.primarySubtle,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isCancelled ? Icons.cancel_rounded : Icons.navigation_rounded,
-                              size: 15,
-                              color: isCancelled ? AppColors.danger : AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  isCancelled
-                                      ? 'Booking Cancelled'
-                                      : activeIndex >= 3
-                                          ? 'Chef Arrived at Doorstep'
-                                          : 'Chef En Route • ~$_dynamicEtaMins mins',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: isCancelled ? AppColors.danger : (isDark ? Colors.white : AppColors.slate900),
-                                  ),
-                                ),
-                                const SizedBox(height: 1),
-                                Text(
-                                  isCancelled ? 'Tap to view details' : 'View Complete Status →',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: isCancelled ? AppColors.danger : AppColors.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.refresh_rounded, size: 18, color: AppColors.primary),
-                            onPressed: () => _fetchOrder(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // 3. Bottom Sheet Content Overlay
-          Positioned(
-            top: MediaQuery.of(context).size.height * 0.42,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.slate900 : Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.12),
-                    blurRadius: 16,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Drag Handle
-                      Center(
-                        child: Container(
-                          width: 38,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: isDark ? AppColors.slate700 : AppColors.slate300,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // If Cancelled, show dedicated cancellation banner
-                      if (isCancelled) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEF2F2),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFFECACA)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.cancel_rounded, color: AppColors.danger, size: 22),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'BOOKING CANCELLED',
-                                    style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'This chef booking has been cancelled. Live tracking and dispatch are stopped.',
-                                style: TextStyle(fontSize: 12, color: AppColors.slate700, height: 1.3),
-                              ),
-                              const SizedBox(height: 14),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primary,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                      icon: const Icon(Icons.receipt_long_rounded, size: 16),
-                                      label: const Text('View Bookings', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                      onPressed: () => Navigator.pop(context),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppColors.slate700,
-                                        side: const BorderSide(color: Color(0xFFCBD5E1)),
-                                        padding: const EdgeInsets.symmetric(vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                      icon: const Icon(Icons.support_agent_rounded, size: 16),
-                                      label: const Text('Support', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                      onPressed: () => Navigator.pushNamed(context, AppRoutes.support),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ] else ...[
-                        // Active ETA & Status Hero Card
-                        GestureDetector(
-                          onTap: () => _showCompleteStatusSheet(context),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.navigation_rounded, size: 15, color: Colors.white70),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            activeIndex >= 3
-                                                ? 'CHEF AT KITCHEN'
-                                                : 'CHEF EN ROUTE • ${_remainingDistanceKm.toStringAsFixed(1)} KM',
-                                            style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        activeIndex >= 3
-                                            ? 'Ready to Start Cooking'
-                                            : 'Arriving in ~$_dynamicEtaMins mins',
-                                        style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(color: Colors.white.withOpacity(0.35)),
-                                        ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.timeline_rounded, size: 13, color: Colors.white),
-                                            SizedBox(width: 5),
-                                            Text(
-                                              'Tap to View Complete Status',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                letterSpacing: 0.2,
-                                              ),
-                                            ),
-                                            SizedBox(width: 4),
-                                            Icon(Icons.arrow_forward_ios_rounded, size: 9, color: Colors.white),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                StatusBadge(status: currentStatus),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Start OTP Card
-                        if (_order?.startOtp != null && activeIndex < 5) ...[
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFECFDF5),
-                              border: Border.all(color: const Color(0xFF10B981)),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.key_rounded, color: Color(0xFF047857), size: 16),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            'START OTP',
-                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF047857), letterSpacing: 0.8),
-                                          ),
-                                        ],
-                                      ),
-                                      SizedBox(height: 2),
-                                      Text(
-                                        'Share code with chef upon arrival',
-                                        style: TextStyle(fontSize: 11, color: Color(0xFF065F46)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: const Color(0xFF059669), width: 1.5),
-                                  ),
-                                  child: Text(
-                                    _order!.startOtp!,
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 4,
-                                      color: Color(0xFF065F46),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                        ],
-                      ],
-
-                      // Assigned Chef Card
-                      EbicCard(
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: AppColors.primarySubtle,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: const Icon(Icons.person_pin_rounded, color: AppColors.primary, size: 28),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          _order?.chefName ?? 'Chef Vikram Rathore',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      const Icon(Icons.verified, color: AppColors.primary, size: 14),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  const Text(
-                                    'Certified EBIC Executive Chef • 4.9 ★',
-                                    style: TextStyle(color: AppColors.slate500, fontSize: 11),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.phone_rounded, color: AppColors.primary),
-                              tooltip: 'Call Chef',
-                              onPressed: () {
-                                Clipboard.setData(const ClipboardData(text: '+919876543210'));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Chef contact +91 98765 43210 copied!')),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Quick Actions
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.primaryDark,
-                            side: const BorderSide(color: AppColors.primary, width: 1.2),
-                            padding: const EdgeInsets.symmetric(vertical: 11),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          icon: const Icon(Icons.timeline_rounded, size: 18),
-                          label: const Text(
-                            'View Complete Status & Dispatch Milestones',
-                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
-                          ),
-                          onPressed: () => _showCompleteStatusSheet(context),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: EbicButton(
-                          label: 'Ingredient Checklist',
-                          icon: Icons.checklist_rtl_rounded,
-                          onPressed: () {
-                            Navigator.pushNamed(
-                              context,
-                              AppRoutes.preparationChecklist,
-                              arguments: {'orderId': widget.orderId},
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Dispatch Timeline
-                      const Text(
-                        'Live Dispatch Timeline',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 12),
-
-                      ...List.generate(_steps.length, (idx) {
-                        final step = _steps[idx];
-                        final isDone = !isCancelled && idx <= activeIndex;
-                        final isCurrent = !isCancelled && idx == activeIndex;
-                        final isLast = idx == _steps.length - 1;
-
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Column(
-                              children: [
-                                Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: isDone ? AppColors.primary : (isDark ? AppColors.slate800 : AppColors.slate200),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Center(
-                                    child: isDone
-                                        ? const Icon(Icons.check, size: 12, color: Colors.white)
-                                        : Text(
-                                            '${idx + 1}',
-                                            style: const TextStyle(fontSize: 10, color: AppColors.slate500, fontWeight: FontWeight.bold),
-                                          ),
-                                  ),
-                                ),
-                                if (!isLast)
-                                  Container(
-                                    width: 2,
-                                    height: 30,
-                                    color: isDone && idx < activeIndex ? AppColors.primary : (isDark ? AppColors.slate800 : AppColors.slate200),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      step['label'],
-                                      style: TextStyle(
-                                        fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
-                                        fontSize: 13,
-                                        color: isCurrent
-                                            ? AppColors.primaryDark
-                                            : (isDone ? (isDark ? Colors.white : AppColors.slate900) : AppColors.slate400),
-                                      ),
-                                    ),
-                                    Text(
-                                      step['desc'],
-                                      style: const TextStyle(fontSize: 11, color: AppColors.slate500),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }),
-
-                      if (!isCancelled && activeIndex < 4) ...[
-                        Center(
-                          child: TextButton.icon(
-                            icon: const Icon(Icons.cancel_outlined, color: AppColors.danger, size: 16),
-                            label: const Text('Cancel Booking', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 13)),
-                            onPressed: () {
-                              CancelBookingDialog.show(
-                                context,
-                                orderId: widget.orderId,
-                                onCancelled: () => _fetchOrder(),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+    final color = widget.active ? AppColors.primaryLight : AppColors.slate400;
+    return SizedBox(
+      width: 18,
+      height: 18,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) => Stack(
+          alignment: Alignment.center,
+          children: [
+            if (widget.active)
+              Container(
+                width: 8 + 10 * _c.value,
+                height: 8 + 10 * _c.value,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.4 * (1 - _c.value)),
                 ),
               ),
-            ),
-          ),
-        ],
+            Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: color)),
+          ],
+        ),
       ),
     );
   }

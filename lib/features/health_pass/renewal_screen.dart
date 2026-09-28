@@ -148,8 +148,8 @@ class _HealthPassRenewalScreenState extends State<HealthPassRenewalScreen> {
         gatewayPaymentId = checkoutRes.paymentId!;
         gatewaySignature = checkoutRes.signature!;
       } else {
-        gatewayPaymentId = 'pay_sim_${DateTime.now().millisecondsSinceEpoch}';
-        gatewaySignature = 'sig_sim_verified';
+        // The backend did not open a payment — never fabricate a payment result.
+        throw Exception('Payment could not be started. Please try again.');
       }
 
       // Verify payment & activate renewed pass

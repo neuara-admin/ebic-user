@@ -115,63 +115,49 @@ class _HealthPassQuoteReviewScreenState extends State<HealthPassQuoteReviewScree
     });
 
     try {
-      if (_draftPassId == null) {
-        final idempotencyKey = 'hp_pur_${DateTime.now().millisecondsSinceEpoch}';
-        final draft = await _repository.purchaseDraft(
-          planCode: _plan.code,
-          durationMonths: _durationMonths,
-          memberIds: _memberIds,
-          idempotencyKey: idempotencyKey,
-        );
-        _draftPassId = draft['id']?.toString();
+      // Authoritatively recalculate quote with coupon from backend
+      final newQuote = await _repository.getQuote(
+        planCode: _plan.code,
+        durationMonths: _durationMonths,
+        memberIds: _memberIds,
+        couponCode: code,
+      );
+
+      if (newQuote.promotionDiscount <= 0) {
+        throw Exception('Coupon "$code" is not eligible or has expired.');
       }
 
+      // Also attach to draft purchase if exists
       if (_draftPassId != null) {
-        final res = await _repository.applyCoupon(_draftPassId!, code);
-        final pb = (res['priceBreakdown'] as Map<String, dynamic>?) ?? res;
-        final serverDisc = double.tryParse(pb['promotionDiscount']?.toString() ?? res['promotionDiscount']?.toString() ?? '0') ?? 0.0;
-        final serverFinal = double.tryParse(pb['finalAmount']?.toString() ?? res['finalAmount']?.toString() ?? '0') ?? _quote.finalAmount;
-        final serverTax = double.tryParse(pb['tax']?.toString() ?? res['tax']?.toString() ?? '0') ?? _quote.tax;
+        try {
+          await _repository.applyCoupon(_draftPassId!, code);
+        } catch (_) {}
+      }
 
-        if (serverDisc <= 0) {
-          throw Exception('Coupon "$code" is not eligible or has expired.');
-        }
+      setState(() {
+        _appliedCoupon = code;
+        _couponDiscount = newQuote.promotionDiscount;
+        _recalculatedQuote = newQuote;
+        _isApplyingCoupon = false;
+      });
 
-        setState(() {
-          _appliedCoupon = code;
-          _couponDiscount = serverDisc;
-          _recalculatedQuote = HealthPassQuoteModel(
-            planCode: _quote.planCode,
-            memberCount: _quote.memberCount,
-            durationMonths: _quote.durationMonths,
-            subtotal: _quote.subtotal,
-            memberCharges: _quote.memberCharges,
-            memberDiscount: _quote.memberDiscount,
-            durationDiscount: _quote.durationDiscount,
-            promotionDiscount: serverDisc,
-            platformFee: _quote.platformFee,
-            otherCharges: _quote.otherCharges,
-            gstPercent: _quote.gstPercent,
-            tax: serverTax,
-            finalAmount: serverFinal,
-          );
-          _isApplyingCoupon = false;
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppColors.primaryDark,
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Text('Coupon "$code" applied! Saved ₹${serverDisc.toInt()} on your pass.'),
-                ],
-              ),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.primaryDark,
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Coupon "$code" applied! Saved ₹${newQuote.promotionDiscount.toInt()} on your pass.',
+                  ),
+                ),
+              ],
             ),
-          );
-        }
+          ),
+        );
       }
     } catch (e) {
       final msg = e.toString().replaceAll('Exception:', '').trim();
@@ -191,17 +177,34 @@ class _HealthPassQuoteReviewScreenState extends State<HealthPassQuoteReviewScree
   }
 
   Future<void> _removeCoupon() async {
+    setState(() => _isApplyingCoupon = true);
     if (_draftPassId != null) {
       try {
         await _repository.removeCoupon(_draftPassId!);
       } catch (_) {}
     }
-    setState(() {
-      _appliedCoupon = null;
-      _couponDiscount = 0.0;
-      _recalculatedQuote = null;
-      _couponController.clear();
-    });
+    try {
+      final freshQuote = await _repository.getQuote(
+        planCode: _plan.code,
+        durationMonths: _durationMonths,
+        memberIds: _memberIds,
+      );
+      setState(() {
+        _appliedCoupon = null;
+        _couponDiscount = 0.0;
+        _recalculatedQuote = freshQuote;
+        _couponController.clear();
+        _isApplyingCoupon = false;
+      });
+    } catch (_) {
+      setState(() {
+        _appliedCoupon = null;
+        _couponDiscount = 0.0;
+        _recalculatedQuote = null;
+        _couponController.clear();
+        _isApplyingCoupon = false;
+      });
+    }
   }
 
   Future<void> _submitPurchase() async {
@@ -267,9 +270,8 @@ class _HealthPassQuoteReviewScreenState extends State<HealthPassQuoteReviewScree
         gatewayPaymentId = checkoutRes.paymentId!;
         gatewaySignature = checkoutRes.signature!;
       } else {
-        // Fallback simulation for local offline dev
-        gatewayPaymentId = 'pay_sim_${DateTime.now().millisecondsSinceEpoch}';
-        gatewaySignature = 'sig_sim_verified';
+        // The backend did not open a payment — never fabricate a payment result.
+        throw Exception('Payment could not be started. Please try again.');
       }
 
       // Step 3: Authoritative Backend Payment Verification & Activation

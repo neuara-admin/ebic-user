@@ -14,7 +14,6 @@ import '../../features/auth/account_recovery_screen.dart';
 import '../../features/profile/account_deactivation_screen.dart';
 import '../../features/profile/account_deletion_screen.dart';
 import '../auth/session_manager.dart';
-import '../storage/token_storage.dart';
 
 // Home & Shell
 import '../../features/home/main_nav_shell.dart';
@@ -71,6 +70,8 @@ import '../../features/health_documents/presentation/screens/upload_health_docum
 import '../../features/health_documents/presentation/screens/document_details_screen.dart';
 import '../../features/health_documents/presentation/screens/document_preview_screen.dart';
 import '../../features/health_documents/domain/entities/health_document_entity.dart';
+import '../../features/health/presentation/screens/connected_sources_screen.dart';
+import '../../features/health/presentation/screens/health_metric_detail_screen.dart';
 
 // Orders
 import '../../features/orders/order_detail_screen.dart';
@@ -83,6 +84,7 @@ import '../../features/profile/addresses_screen.dart';
 import '../../features/profile/address_form_screen.dart';
 import '../../features/profile/preferences_screen.dart';
 import '../../features/profile/wallet_credits_screen.dart';
+import '../../features/profile/credit_transaction_detail_screen.dart';
 import '../../features/profile/promotions_screen.dart';
 import '../../features/profile/support_screen.dart';
 import '../../features/profile/notifications_screen.dart';
@@ -101,7 +103,7 @@ import '../../shared/models/address_model.dart';
 import '../../shared/models/order_model.dart';
 
 class AppRouter {
-  /// Section 62 — Centralized Route Guard public routes
+  /// Section 62 — Centralized Route Guard public routes (accessible by guests without login/signup)
   static final Set<String> _publicRoutes = {
     AppRoutes.splash,
     AppRoutes.onboarding,
@@ -114,6 +116,17 @@ class AppRouter {
     AppRoutes.accountRecovery,
     AppRoutes.appUpdate,
     AppRoutes.notFound,
+    AppRoutes.mainShell,
+    AppRoutes.home,
+    AppRoutes.meals,
+    AppRoutes.health,
+    AppRoutes.orders,
+    AppRoutes.profile,
+    AppRoutes.healthPass,
+    AppRoutes.healthPassPlans,
+    AppRoutes.healthPassComparison,
+    AppRoutes.healthPassBenefits,
+    AppRoutes.bookChefCatalogue,
   };
 
   /// Saved route and args for session-aware return navigation (Section 63)
@@ -125,7 +138,7 @@ class AppRouter {
     final args = settings.arguments;
 
     // Centralized Authentication Guard (Section 62)
-    final isAuthed = SessionManager().isAuthenticated || TokenStorage.hasCachedSession;
+    final isAuthed = SessionManager().isAuthenticated;
     if (!_publicRoutes.contains(routeName) && !isAuthed) {
       intendedDestinationRoute = routeName;
       intendedDestinationArgs = args;
@@ -149,10 +162,12 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const RegisterScreen());
       case AppRoutes.otp:
         final phone = (args is Map ? args['phone'] : null) ?? '';
-        final purpose = (args is Map ? args['purpose'] : null) as String? ?? 'LOGIN';
+        final purpose =
+            (args is Map ? args['purpose'] : null) as String? ?? 'LOGIN';
         final name = (args is Map ? args['name'] : null) as String?;
         final email = (args is Map ? args['email'] : null) as String?;
-        final referralCode = (args is Map ? args['referralCode'] : null) as String?;
+        final referralCode =
+            (args is Map ? args['referralCode'] : null) as String?;
         final devCode = (args is Map ? args['devCode'] : null) as String?;
         return MaterialPageRoute(
           builder: (_) => OtpVerificationScreen(
@@ -169,11 +184,15 @@ class AppRouter {
       case AppRoutes.resetPassword:
         final token = (args is Map ? args['token'] : null) as String?;
         final phone = (args is Map ? args['phone'] : null) as String?;
-        return MaterialPageRoute(builder: (_) => ResetPasswordScreen(token: token, phone: phone));
+        return MaterialPageRoute(
+          builder: (_) => ResetPasswordScreen(token: token, phone: phone),
+        );
       case AppRoutes.accountRecovery:
         return MaterialPageRoute(builder: (_) => const AccountRecoveryScreen());
       case AppRoutes.accountDeactivation:
-        return MaterialPageRoute(builder: (_) => const AccountDeactivationScreen());
+        return MaterialPageRoute(
+          builder: (_) => const AccountDeactivationScreen(),
+        );
       case AppRoutes.accountDeletion:
         return MaterialPageRoute(builder: (_) => const AccountDeletionScreen());
 
@@ -182,15 +201,25 @@ class AppRouter {
         final tab = (args is int) ? args : 0;
         return MaterialPageRoute(builder: (_) => MainNavShell(initialTab: tab));
       case AppRoutes.home:
-        return MaterialPageRoute(builder: (_) => const MainNavShell(initialTab: 0));
+        return MaterialPageRoute(
+          builder: (_) => const MainNavShell(initialTab: 0),
+        );
       case AppRoutes.meals:
-        return MaterialPageRoute(builder: (_) => const MainNavShell(initialTab: 1));
+        return MaterialPageRoute(
+          builder: (_) => const MainNavShell(initialTab: 1),
+        );
       case AppRoutes.health:
-        return MaterialPageRoute(builder: (_) => const MainNavShell(initialTab: 2));
+        return MaterialPageRoute(
+          builder: (_) => const MainNavShell(initialTab: 2),
+        );
       case AppRoutes.orders:
-        return MaterialPageRoute(builder: (_) => const MainNavShell(initialTab: 3));
+        return MaterialPageRoute(
+          builder: (_) => const MainNavShell(initialTab: 3),
+        );
       case AppRoutes.profile:
-        return MaterialPageRoute(builder: (_) => const MainNavShell(initialTab: 4));
+        return MaterialPageRoute(
+          builder: (_) => const MainNavShell(initialTab: 4),
+        );
 
       // Chef Booking
       case AppRoutes.bookChef:
@@ -200,27 +229,55 @@ class AppRouter {
       case AppRoutes.bookChefCatalogue:
         return MaterialPageRoute(builder: (_) => const CatalogueScreen());
       case AppRoutes.bookChefQuote:
-        final config = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => QuoteReviewScreen(bookingConfig: config));
+        final config = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => QuoteReviewScreen(bookingConfig: config),
+        );
       case AppRoutes.bookChefPayment:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => PaymentCheckoutScreen(checkoutData: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => PaymentCheckoutScreen(checkoutData: data),
+        );
       case AppRoutes.bookChefConfirmation:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => BookingConfirmationScreen(confirmationData: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => BookingConfirmationScreen(confirmationData: data),
+        );
       case AppRoutes.bookChefFailure:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => BookingFailureScreen(failureData: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => BookingFailureScreen(failureData: data),
+        );
       case AppRoutes.chefTracking:
-        final orderId = (args is Map ? args['orderId'] : args)?.toString() ?? '';
-        return MaterialPageRoute(builder: (_) => ChefTrackingScreen(orderId: orderId));
+        final orderId =
+            (args is Map ? args['orderId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(
+          builder: (_) => ChefTrackingScreen(orderId: orderId),
+        );
       case AppRoutes.preparationChecklist:
-        final orderId = (args is Map ? args['orderId'] : args)?.toString() ?? '';
-        return MaterialPageRoute(builder: (_) => PreparationChecklistScreen(orderId: orderId));
+        final orderId =
+            (args is Map ? args['orderId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(
+          builder: (_) => PreparationChecklistScreen(orderId: orderId),
+        );
       case AppRoutes.orderDetail:
-        final orderId = (args is Map ? args['orderId'] : args)?.toString() ?? '';
-        final initialOrder = (args is Map && args['order'] is OrderModel) ? args['order'] as OrderModel : null;
-        return MaterialPageRoute(builder: (_) => OrderDetailScreen(orderId: orderId, initialOrder: initialOrder));
+        final orderId =
+            (args is Map ? args['orderId'] : args)?.toString() ?? '';
+        final initialOrder = (args is Map && args['order'] is OrderModel)
+            ? args['order'] as OrderModel
+            : null;
+        return MaterialPageRoute(
+          builder: (_) =>
+              OrderDetailScreen(orderId: orderId, initialOrder: initialOrder),
+        );
 
       // Health Pass (Module 4 Sections 33–49)
       case AppRoutes.healthPass:
@@ -228,49 +285,92 @@ class AppRouter {
       case AppRoutes.healthPassPlans:
         return MaterialPageRoute(builder: (_) => const HealthPassPlansScreen());
       case AppRoutes.healthPassComparison:
-        return MaterialPageRoute(builder: (_) => const HealthPassComparisonScreen());
+        return MaterialPageRoute(
+          builder: (_) => const HealthPassComparisonScreen(),
+        );
       case AppRoutes.healthPassConfigure:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => HealthPassConfigureScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => HealthPassConfigureScreen(arguments: data),
+        );
       case AppRoutes.healthPassReview:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => hp_review.HealthPassQuoteReviewScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) =>
+              hp_review.HealthPassQuoteReviewScreen(arguments: data),
+        );
       case AppRoutes.healthPassPayment:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => HealthPassPaymentScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => HealthPassPaymentScreen(arguments: data),
+        );
       case AppRoutes.healthPassActivation:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => HealthPassActivationScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => HealthPassActivationScreen(arguments: data),
+        );
       case AppRoutes.healthPassBenefits:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => HealthPassBenefitsScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => HealthPassBenefitsScreen(arguments: data),
+        );
       case AppRoutes.healthPassUsage:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => HealthPassUsageScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => HealthPassUsageScreen(arguments: data),
+        );
       case AppRoutes.healthPassRenew:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => HealthPassRenewalScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => HealthPassRenewalScreen(arguments: data),
+        );
       case AppRoutes.healthPassHistory:
-        return MaterialPageRoute(builder: (_) => const HealthPassHistoryScreen());
+        return MaterialPageRoute(
+          builder: (_) => const HealthPassHistoryScreen(),
+        );
       case AppRoutes.healthPassPurchase:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => PurchasePassScreen(purchaseData: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => PurchasePassScreen(purchaseData: data),
+        );
 
       // Dietitian & Consultations
       case AppRoutes.dietitian:
         return MaterialPageRoute(builder: (_) => const DietitianListScreen());
       case AppRoutes.dietitianChat:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
         DietitianModel dietitian;
         if (data['dietitian'] is DietitianModel) {
           dietitian = data['dietitian'] as DietitianModel;
         } else if (data['dietitian'] is Map<String, dynamic>) {
-          dietitian = DietitianModel.fromJson(data['dietitian'] as Map<String, dynamic>);
+          dietitian = DietitianModel.fromJson(
+            data['dietitian'] as Map<String, dynamic>,
+          );
         } else {
           dietitian = DietitianModel(
             id: data['dietitianId']?.toString() ?? 'dietitian_primary',
             name: data['dietitianName']?.toString() ?? 'Clinical Dietitian',
-            qualification: data['dietitianQualification']?.toString() ?? 'Clinical Nutritionist (RD)',
+            qualification:
+                data['dietitianQualification']?.toString() ??
+                'Clinical Nutritionist (RD)',
           );
         }
         final activePass = data['activePass'] as ActiveHealthPassModel?;
@@ -283,55 +383,59 @@ class AppRouter {
           ),
         );
       case AppRoutes.consultationBook:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => BookConsultationScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => BookConsultationScreen(arguments: data),
+        );
       case AppRoutes.consultationReview:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
-        return MaterialPageRoute(builder: (_) => ConsultationReviewScreen(arguments: data));
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => ConsultationReviewScreen(arguments: data),
+        );
       case AppRoutes.consultationsList:
-        return MaterialPageRoute(builder: (_) => const ConsultationListScreen());
+        return MaterialPageRoute(
+          builder: (_) => const ConsultationListScreen(),
+        );
       case AppRoutes.consultationDetail:
-        final consultModel = (args is Map ? args['consultation'] : (args is ConsultationModel ? args : null));
-        final consultId = (args is Map ? args['id'] ?? args['consultationId'] : (args is String ? args : null));
+        final consultModel = (args is Map
+            ? args['consultation']
+            : (args is ConsultationModel ? args : null));
+        final consultId = (args is Map
+            ? args['id'] ?? args['consultationId']
+            : (args is String ? args : null));
         return MaterialPageRoute(
           builder: (_) => ConsultationDetailScreen(
-            initialConsultation: consultModel is ConsultationModel ? consultModel : null,
+            initialConsultation: consultModel is ConsultationModel
+                ? consultModel
+                : null,
             consultationId: consultId?.toString(),
           ),
         );
       case AppRoutes.consultationVideo:
         final data = (args is Map ? args['consultation'] : null);
         if (data is ConsultationModel) {
-          return MaterialPageRoute(builder: (_) => VideoConsultationScreen(consultation: data));
+          return MaterialPageRoute(
+            builder: (_) => VideoConsultationScreen(consultation: data),
+          );
         }
+        // Opened without a consultation — show the real list instead of a placeholder.
         return MaterialPageRoute(
-          builder: (_) => VideoConsultationScreen(
-            consultation: ConsultationModel(
-              id: 'c_preview',
-              dietitianId: 'd_1',
-              dietitianName: 'Dr. Ananya Sharma',
-              memberName: 'Self',
-              scheduledAt: DateTime.now(),
-              status: 'SCHEDULED',
-            ),
-          ),
+          builder: (_) => const ConsultationListScreen(),
         );
       case AppRoutes.consultationSummary:
         final data = (args is Map ? args['consultation'] : null);
         if (data is ConsultationModel) {
-          return MaterialPageRoute(builder: (_) => ConsultationSummaryScreen(consultation: data));
+          return MaterialPageRoute(
+            builder: (_) => ConsultationSummaryScreen(consultation: data),
+          );
         }
+        // Opened without a consultation — show the real list instead of a placeholder.
         return MaterialPageRoute(
-          builder: (_) => ConsultationSummaryScreen(
-            consultation: ConsultationModel(
-              id: 'c_preview',
-              dietitianId: 'd_1',
-              dietitianName: 'Dr. Ananya Sharma',
-              memberName: 'Self',
-              scheduledAt: DateTime.now(),
-              status: 'COMPLETED',
-            ),
-          ),
+          builder: (_) => const ConsultationListScreen(),
         );
 
       // Diet Plan & Health
@@ -340,29 +444,52 @@ class AppRouter {
       case AppRoutes.healthProfile:
         return MaterialPageRoute(builder: (_) => const HealthProfileScreen());
       case AppRoutes.healthGoals:
-        final memberId = (args is Map ? args['memberId'] : args)?.toString() ?? '';
-        return MaterialPageRoute(builder: (_) => HealthGoalsScreen(memberId: memberId));
+        final memberId =
+            (args is Map ? args['memberId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(
+          builder: (_) => HealthGoalsScreen(memberId: memberId),
+        );
       case AppRoutes.healthAllergies:
-        final memberId = (args is Map ? args['memberId'] : args)?.toString() ?? '';
-        return MaterialPageRoute(builder: (_) => AllergiesScreen(memberId: memberId));
+        final memberId =
+            (args is Map ? args['memberId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(
+          builder: (_) => AllergiesScreen(memberId: memberId),
+        );
       case AppRoutes.healthMetrics:
-        final memberId = (args is Map ? args['memberId'] : args)?.toString() ?? '';
-        return MaterialPageRoute(builder: (_) => HealthMetricsScreen(memberId: memberId));
+        final memberId =
+            (args is Map ? args['memberId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(
+          builder: (_) => HealthMetricsScreen(memberId: memberId),
+        );
       case AppRoutes.healthPermissions:
-        final memberId = (args is Map ? args['memberId'] : args)?.toString() ?? '';
-        return MaterialPageRoute(builder: (_) => HealthDataPermissionsScreen(memberId: memberId));
+        final memberId =
+            (args is Map ? args['memberId'] : args)?.toString() ?? '';
+        return MaterialPageRoute(
+          builder: (_) => HealthDataPermissionsScreen(memberId: memberId),
+        );
       case AppRoutes.healthProgress:
         final memberId = (args is Map ? args['memberId'] : args)?.toString();
         return MaterialPageRoute(
           builder: (_) => HealthProgressScreen(initialMemberId: memberId),
         );
       case AppRoutes.progressTimeline:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
         return MaterialPageRoute(
           builder: (_) => ProgressTimelineScreen(
             memberId: data['memberId']?.toString() ?? '',
             memberName: data['memberName']?.toString() ?? 'Member',
           ),
+        );
+      case AppRoutes.connectedSources:
+        return MaterialPageRoute(
+          builder: (_) => const ConnectedSourcesScreen(),
+        );
+      case AppRoutes.healthMetricDetail:
+        final metricType = (args is Map ? args['type'] : args)?.toString() ?? 'steps';
+        return MaterialPageRoute(
+          builder: (_) => HealthMetricDetailScreen(metricType: metricType),
         );
       case AppRoutes.healthDocuments:
         final memberId = (args is Map ? args['memberId'] : args)?.toString();
@@ -370,19 +497,24 @@ class AppRouter {
           builder: (_) => HealthDocumentsScreen(initialMemberId: memberId),
         );
       case AppRoutes.healthDocumentUpload:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
         return MaterialPageRoute(
           builder: (_) => UploadHealthDocumentScreen(
             memberId: data['memberId']?.toString() ?? '',
             memberName: data['memberName']?.toString() ?? 'Member',
-            availableCategories: (data['categories'] as List<dynamic>?)
+            availableCategories:
+                (data['categories'] as List<dynamic>?)
                     ?.whereType<DocumentCategoryItem>()
                     .toList() ??
                 const [],
           ),
         );
       case AppRoutes.healthDocumentDetail:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
         return MaterialPageRoute(
           builder: (_) => DocumentDetailsScreen(
             documentId: data['documentId']?.toString() ?? '',
@@ -390,7 +522,9 @@ class AppRouter {
           ),
         );
       case AppRoutes.healthDocumentPreview:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
         return MaterialPageRoute(
           builder: (_) => DocumentPreviewScreen(
             documentId: data['documentId']?.toString() ?? '',
@@ -407,17 +541,30 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const HouseholdScreen());
       case AppRoutes.memberForm:
         final member = args is HouseholdMemberModel ? args : null;
-        return MaterialPageRoute(builder: (_) => MemberFormScreen(memberToEdit: member));
+        return MaterialPageRoute(
+          builder: (_) => MemberFormScreen(memberToEdit: member),
+        );
       case AppRoutes.addresses:
-        final isPicker = args is bool ? args : (args is Map ? args['isPicker'] == true : false);
-        return MaterialPageRoute(builder: (_) => AddressesScreen(isPicker: isPicker));
+        final isPicker = args is bool
+            ? args
+            : (args is Map ? args['isPicker'] == true : false);
+        return MaterialPageRoute(
+          builder: (_) => AddressesScreen(isPicker: isPicker),
+        );
       case AppRoutes.addressForm:
         final address = args is AddressModel ? args : null;
-        return MaterialPageRoute(builder: (_) => AddressFormScreen(addressToEdit: address));
+        return MaterialPageRoute(
+          builder: (_) => AddressFormScreen(addressToEdit: address),
+        );
       case AppRoutes.preferences:
         return MaterialPageRoute(builder: (_) => const PreferencesScreen());
       case AppRoutes.walletCredits:
         return MaterialPageRoute(builder: (_) => const WalletCreditsScreen());
+      case AppRoutes.creditTransactionDetail:
+        final tx = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        return MaterialPageRoute(
+          builder: (_) => CreditTransactionDetailScreen(transaction: tx),
+        );
       case AppRoutes.promotions:
         return MaterialPageRoute(builder: (_) => const PromotionsScreen());
       case AppRoutes.referrals:
@@ -433,7 +580,9 @@ class AppRouter {
       case AppRoutes.security:
         return MaterialPageRoute(builder: (_) => const SecurityScreen());
       case AppRoutes.appUpdate:
-        final data = (args is Map<String, dynamic>) ? args : <String, dynamic>{};
+        final data = (args is Map<String, dynamic>)
+            ? args
+            : <String, dynamic>{};
         return MaterialPageRoute(
           builder: (_) => AppUpdateScreen(
             isForced: data['isForced'] == true,
@@ -443,7 +592,9 @@ class AppRouter {
         );
       case AppRoutes.notFound:
         final message = args is String ? args : null;
-        return MaterialPageRoute(builder: (_) => NotFoundScreen(message: message));
+        return MaterialPageRoute(
+          builder: (_) => NotFoundScreen(message: message),
+        );
 
       default:
         return MaterialPageRoute(

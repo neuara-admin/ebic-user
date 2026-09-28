@@ -163,20 +163,20 @@ class HealthPassActivationScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
+                  Expanded(child: Row(
                     children: [
                       const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 18),
                       const SizedBox(width: 8),
-                      Text(
+                      Flexible(child: Text(
                         'Tax Invoice Receipt',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                           color: isDark ? Colors.white : AppColors.slate900,
                         ),
-                      ),
+                      )),
                     ],
-                  ),
+                  )),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
@@ -339,10 +339,10 @@ class HealthPassActivationScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Flexible(child: const Text(
                     'MEMBERSHIP SUMMARY',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
-                  ),
+                  )),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                     decoration: BoxDecoration(

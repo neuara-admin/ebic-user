@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'app/bootstrap/app_bootstrap.dart';
+import 'core/realtime/realtime_notification_banner.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/app_routes.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
+import 'shared/widgets/responsive_app_frame.dart';
 
 void main() async {
   await AppBootstrap.initialize();
@@ -28,7 +30,9 @@ class EbicCustomerApp extends StatelessWidget {
       listenable: themeController,
       builder: (context, _) {
         return MaterialApp(
-          title: 'Every Bite Counts (EBIC)',
+          navigatorKey: AppKeys.navigatorKey,
+          scaffoldMessengerKey: AppKeys.scaffoldMessengerKey,
+          title: 'Ebic',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
@@ -41,6 +45,8 @@ class EbicCustomerApp extends StatelessWidget {
                 }
               : null,
           onGenerateRoute: AppRouter.onGenerateRoute,
+          // Font-size cap + tablet width cap for every screen, dialog and sheet
+          builder: (context, child) => ResponsiveAppFrame(child: child),
         );
       },
     );

@@ -117,8 +117,11 @@ class ApiClient {
   }
 
   Future<void> _handleSessionFailure() async {
+    final hadSession = TokenStorage.hasCachedSession || (await TokenStorage.getAccessToken()) != null;
     await TokenStorage.clear();
-    onSessionExpired?.call();
+    if (hadSession) {
+      onSessionExpired?.call();
+    }
   }
 
   Future<Map<String, String>> _buildHeaders({
@@ -327,6 +330,7 @@ class ApiClient {
 
   Future<ApiResponse<T>> delete<T>(
     String endpoint, {
+    dynamic body,
     Map<String, dynamic>? queryParameters,
     bool requiresAuth = true,
     T Function(dynamic)? fromDataJson,
@@ -335,19 +339,21 @@ class ApiClient {
     final uri = _resolveUri(endpoint, queryParameters);
     try {
       final headers = await _buildHeaders(requiresAuth: requiresAuth);
+      final encodedBody = body != null ? jsonEncode(body) : null;
 
       if (mockAdapter != null) {
-        final mockResponse = await mockAdapter!.handle('DELETE', uri, headers: headers);
-        if (mockResponse != null) return _parseResponse<T>(mockResponse, fromDataJson, method: 'DELETE', uri: uri);
+        final mockResponse = await mockAdapter!.handle('DELETE', uri, headers: headers, body: encodedBody);
+        if (mockResponse != null) return _parseResponse<T>(mockResponse, fromDataJson, method: 'DELETE', uri: uri, requestBody: encodedBody);
       }
 
-      final response = await _httpClient.delete(uri, headers: headers).timeout(AppConfig.connectTimeout);
+      final response = await _httpClient.delete(uri, headers: headers, body: encodedBody).timeout(AppConfig.connectTimeout);
 
       if (response.statusCode == 401 && requiresAuth && !isRetry) {
         final refreshed = await _coordinatedRefreshToken();
         if (refreshed) {
           return delete<T>(
             endpoint,
+            body: body,
             queryParameters: queryParameters,
             requiresAuth: requiresAuth,
             fromDataJson: fromDataJson,
@@ -356,9 +362,9 @@ class ApiClient {
         }
       }
 
-      return _parseResponse<T>(response, fromDataJson, method: 'DELETE', uri: uri);
+      return _parseResponse<T>(response, fromDataJson, method: 'DELETE', uri: uri, requestBody: encodedBody);
     } catch (e) {
-      return _handleCatchException<T>(e, 'DELETE', uri);
+      return _handleCatchException<T>(e, 'DELETE', uri, requestBody: body);
     }
   }
 
@@ -433,6 +439,34 @@ class ApiClient {
       return _parseResponse<T>(response, fromDataJson, method: 'POST (multipart)', uri: uri);
     } catch (e) {
       return _handleCatchException<T>(e, 'POST (multipart)', uri);
+    }
+  }
+
+  /// For endpoints that return a raw binary file (e.g. a generated invoice
+  /// PDF) rather than the standard JSON envelope — same auth/refresh
+  /// handling as [get], but returns raw bytes instead of parsing JSON.
+  Future<({bool success, List<int>? bytes, String? error})> downloadBinary(
+    String endpoint, {
+    bool isRetry = false,
+  }) async {
+    final uri = _resolveUri(endpoint);
+    try {
+      final headers = await _buildHeaders(requiresAuth: true);
+      final response = await _httpClient.get(uri, headers: headers).timeout(AppConfig.connectTimeout);
+
+      if (response.statusCode == 401 && !isRetry) {
+        final refreshed = await _coordinatedRefreshToken();
+        if (refreshed) {
+          return downloadBinary(endpoint, isRetry: true);
+        }
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return (success: true, bytes: response.bodyBytes, error: null);
+      }
+      return (success: false, bytes: null, error: 'Failed to download file (${response.statusCode}).');
+    } catch (e) {
+      return (success: false, bytes: null, error: _cleanErrorMessage(e));
     }
   }
 

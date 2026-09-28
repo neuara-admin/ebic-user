@@ -75,7 +75,10 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: isDark ? AppColors.slate900 : Colors.white,
-            child: Row(
+            // Scrolls sideways when the filter chips don't fit (small phones, large text)
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
               children: _filters.map((filter) {
                 final isSelected = _selectedFilter == filter;
                 return Padding(
@@ -99,6 +102,7 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen> {
                   ),
                 );
               }).toList(),
+            ),
             ),
           ),
           const Divider(height: 1),

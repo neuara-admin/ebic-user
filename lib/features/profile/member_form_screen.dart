@@ -569,6 +569,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
 
                       // Relationship Dropdown
                       DropdownButtonFormField<String>(
+                        isExpanded: true, // fit the field width; long options don't overflow
                         value: _availableRelationships.any((r) => r['code'] == _selectedRelationship)
                             ? _selectedRelationship
                             : (_availableRelationships.isNotEmpty ? _availableRelationships.first['code'] : 'OTHER'),

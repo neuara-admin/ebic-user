@@ -161,6 +161,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.slate900, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainShell, (route) => false);
+            },
+            child: const Text(
+              'Skip to Home',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -327,6 +343,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton.icon(
+                  onPressed: () {
+                    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainShell, (route) => false);
+                  },
+                  icon: const Icon(Icons.explore_outlined, size: 16, color: AppColors.slate600),
+                  label: const Text(
+                    'Explore App as Guest',
+                    style: TextStyle(
+                      color: AppColors.slate600,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),

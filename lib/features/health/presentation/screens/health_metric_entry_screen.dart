@@ -187,6 +187,7 @@ class _HealthMetricEntryScreenState extends State<HealthMetricEntryScreen> {
               const SizedBox(height: 16),
 
               DropdownButtonFormField<String>(
+                isExpanded: true, // fit the field width; long options don't overflow
                 value: _metricType,
                 dropdownColor: isDark ? AppColors.slate800 : Colors.white,
                 style: TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w500),

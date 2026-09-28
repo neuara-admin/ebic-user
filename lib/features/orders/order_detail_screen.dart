@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/order_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
+import '../../shared/services/invoice_download_service.dart';
 import '../chef_booking/cancel_booking_dialog.dart';
 import 'rate_order_dialog.dart';
 
@@ -194,9 +196,21 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 _buildHeroStatusCard(context, order, isActive, isDark, dateFormat),
                 const SizedBox(height: 14),
 
-                // 2. Start OTP Card (if active and available)
+                // 2. Start OTP Card (if active and waiting for chef to arrive/start)
                 if (order.startOtp != null && isActive && order.statusStepIndex < 4) ...[
                   _buildOtpCard(context, order.startOtp!, isDark),
+                  const SizedBox(height: 14),
+                ],
+
+                // 2b. Completion OTP Card (when cooking, plating, or completed)
+                if (order.statusStepIndex >= 4 && order.completionOtp != null) ...[
+                  _buildCompletionOtpCard(context, order.completionOtp!, isDark),
+                  const SizedBox(height: 14),
+                ],
+
+                // 2c. Dish photos the chef uploaded at completion
+                if (order.completionPhotos.isNotEmpty) ...[
+                  _buildCompletionPhotos(context, order.completionPhotos, isDark),
                   const SizedBox(height: 14),
                 ],
 
@@ -384,7 +398,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 children: [
                   Icon(Icons.timeline_rounded, size: 13, color: Colors.white),
                   SizedBox(width: 5),
-                  Text(
+                  Flexible(child: Text(
                     'View Complete Status & Milestones',
                     style: TextStyle(
                       color: Colors.white,
@@ -392,7 +406,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.2,
                     ),
-                  ),
+                  )),
                   SizedBox(width: 4),
                   Icon(Icons.arrow_forward_ios_rounded, size: 9, color: Colors.white),
                 ],
@@ -717,6 +731,166 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     );
   }
 
+  Widget _buildCompletionPhotos(BuildContext context, List<String> photos, bool isDark) {
+    final urls = photos.map((u) => AppConfig.resolveMediaUrl(u) ?? u).toList();
+    final thumbPx = (96 * MediaQuery.devicePixelRatioOf(context)).round();
+    return EbicCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.photo_camera_rounded, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('Your dishes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ),
+              Text(
+                '${urls.length} photo${urls.length == 1 ? '' : 's'}',
+                style: const TextStyle(fontSize: 11.5, color: AppColors.slate500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Photographed by your chef when the meal was plated',
+            style: TextStyle(fontSize: 11.5, color: AppColors.slate500),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 96,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: urls.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) => GestureDetector(
+                onTap: () => _openPhotoViewer(context, urls, i),
+                child: Hero(
+                  tag: 'completion-photo-${urls[i]}',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      urls[i],
+                      width: 96,
+                      height: 96,
+                      fit: BoxFit.cover,
+                      cacheWidth: thumbPx,
+                      loadingBuilder: (context, child, progress) => progress == null
+                          ? child
+                          : Container(
+                              width: 96,
+                              height: 96,
+                              color: isDark ? AppColors.slate800 : AppColors.slate100,
+                            ),
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 96,
+                        height: 96,
+                        color: isDark ? AppColors.slate800 : AppColors.slate100,
+                        child: const Icon(Icons.broken_image_outlined, color: AppColors.slate400),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openPhotoViewer(BuildContext context, List<String> urls, int initialIndex) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black,
+        pageBuilder: (context, _, __) => _CompletionPhotoViewer(urls: urls, initialIndex: initialIndex),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
+  Widget _buildCompletionOtpCard(BuildContext context, String otp, bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFAF5FF), Color(0xFFF3E8FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFA855F7), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFA855F7).withOpacity(0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF9333EA),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.verified_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'SERVICE COMPLETION OTP',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF7E22CE),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  otp,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF6B21A8),
+                    letterSpacing: 3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Share with chef once food is cooked & plated to finish service',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF7E22CE), height: 1.2),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy_rounded, color: Color(0xFF7E22CE), size: 20),
+            tooltip: 'Copy OTP',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: otp));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Completion OTP copied to clipboard'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChefProfileCard(BuildContext context, OrderModel order, bool isDark) {
     return EbicCard(
       child: Column(
@@ -786,7 +960,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            order.chefName ?? 'Executive Culinary Specialist',
+                            order.chefName ?? 'Chef being assigned',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -799,20 +973,23 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 2),
-                    const Row(
-                      children: [
-                        Icon(Icons.star_rounded, size: 15, color: Color(0xFFF59E0B)),
-                        SizedBox(width: 2),
-                        Text(
-                          '4.9 ★ • 200+ Visits • Clean Kit',
-                          style: TextStyle(fontSize: 11.5, color: AppColors.slate500),
-                        ),
-                      ],
-                    ),
+                    if (order.assignedChef?.rating != null)
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded, size: 15, color: Color(0xFFF59E0B)),
+                          const SizedBox(width: 2),
+                          Flexible(
+                            child: Text(
+                              order.assignedChef!.rating!.toStringAsFixed(1),
+                              style: const TextStyle(fontSize: 11.5, color: AppColors.slate500),
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ),
-              IconButton(
+              if (order.assignedChef?.phone.isNotEmpty == true) IconButton(
                 icon: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -823,10 +1000,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 ),
                 tooltip: 'Call Chef',
                 onPressed: () {
-                  Clipboard.setData(const ClipboardData(text: '+919876543210'));
+                  final phone = order.assignedChef!.phone;
+                  Clipboard.setData(ClipboardData(text: phone));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Chef contact +91 98765 43210 copied!'),
+                    SnackBar(
+                      content: Text('Chef contact $phone copied!'),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -1710,6 +1888,24 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => InvoiceDownloadService.downloadAndShare(
+                context,
+                endpoint: ApiEndpoints.orderInvoicePdf(order.id),
+                fileName: 'EBIC-Invoice-${order.bookingReference ?? order.id.substring(0, 8)}.pdf',
+              ),
+              icon: const Icon(Icons.receipt_long_rounded, size: 16),
+              label: const Text('Download / Share Invoice', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                foregroundColor: AppColors.primaryDark,
+                side: BorderSide(color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1741,7 +1937,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 context: context,
                 builder: (_) => RateOrderDialog(
                   orderId: order.id,
-                  chefName: order.chefName ?? 'Executive Chef',
+                  chefName: order.chefName ?? 'your chef',
                 ),
               );
             },
@@ -1823,6 +2019,60 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Full-screen, swipeable, pinch-to-zoom viewer for completion photos.
+class _CompletionPhotoViewer extends StatefulWidget {
+  final List<String> urls;
+  final int initialIndex;
+
+  const _CompletionPhotoViewer({required this.urls, required this.initialIndex});
+
+  @override
+  State<_CompletionPhotoViewer> createState() => _CompletionPhotoViewerState();
+}
+
+class _CompletionPhotoViewerState extends State<_CompletionPhotoViewer> {
+  late final PageController _page = PageController(initialPage: widget.initialIndex);
+  late int _index = widget.initialIndex;
+
+  @override
+  void dispose() {
+    _page.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_index + 1} / ${widget.urls.length}', style: const TextStyle(fontSize: 15)),
+      ),
+      body: PageView.builder(
+        controller: _page,
+        itemCount: widget.urls.length,
+        onPageChanged: (i) => setState(() => _index = i),
+        itemBuilder: (context, i) => InteractiveViewer(
+          minScale: 1,
+          maxScale: 4,
+          child: Center(
+            child: Hero(
+              tag: 'completion-photo-${widget.urls[i]}',
+              child: Image.network(
+                widget.urls[i],
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
@@ -19,16 +21,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String? _errorMessage;
   String _selectedFilter = 'ALL'; // 'ALL', 'UNREAD', 'BOOKINGS', 'HEALTH', 'PAYMENTS'
   List<Map<String, dynamic>> _notifications = [];
+  StreamSubscription<StandardSocketEnvelope>? _realtimeSub;
 
   @override
   void initState() {
     super.initState();
     _fetchNotifications();
+    // New notifications appear in the list as they arrive.
+    _realtimeSub = RealtimeService().notifications.listen((_) => _fetchNotifications(silent: true));
   }
 
-  Future<void> _fetchNotifications() async {
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchNotifications({bool silent = false}) async {
+    if (!mounted) return;
     setState(() {
-      _isLoading = true;
+      if (!silent) _isLoading = true;
       _errorMessage = null;
     });
 
@@ -247,11 +259,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         case 'UNREAD':
           return !isRead;
         case 'BOOKINGS':
-          return cat == 'CHEF_BOOKING' || cat == 'ORDER' || cat == 'CHEF_TRACKING';
-        case 'HEALTH':
-          return cat == 'HEALTH_PASS' || cat == 'DIET_PLAN' || cat == 'CONSULTATION' || cat == 'DIETITIAN';
+          return cat == 'BOOKINGS' || cat == 'CHEF_BOOKING' || cat == 'ORDER' || cat == 'CHEF_TRACKING';
         case 'PAYMENTS':
-          return cat == 'PAYMENT' || cat == 'REFUND';
+          return cat == 'PAYMENTS' || cat == 'PAYMENT' || cat == 'REFUND';
+        case 'HEALTH':
+          return cat == 'HEALTH' || cat == 'HEALTH_PASS' || cat == 'DIET_PLAN';
+        case 'CONSULTATIONS':
+          return cat == 'CONSULTATIONS' || cat == 'CONSULTATION' || cat == 'DIETITIAN';
+        case 'PROMOTIONS':
+          return cat == 'PROMOTIONS' || cat == 'PROMOTION' || cat == 'MARKETING';
+        case 'SYSTEM':
+          return cat == 'SYSTEM' || cat == 'ACCOUNT' || cat == 'SECURITY';
         case 'ALL':
         default:
           return true;
@@ -307,7 +325,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Filter Bar
+            // Filter Bar (Section 20 Notification Center categories)
             Container(
               color: isDark ? AppColors.slate900 : Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -321,9 +339,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     const SizedBox(width: 8),
                     _buildFilterChip('BOOKINGS', 'Bookings', isDark),
                     const SizedBox(width: 8),
-                    _buildFilterChip('HEALTH', 'Health & Diet', isDark),
-                    const SizedBox(width: 8),
                     _buildFilterChip('PAYMENTS', 'Payments', isDark),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('HEALTH', 'Health', isDark),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('CONSULTATIONS', 'Consultations', isDark),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('PROMOTIONS', 'Promotions', isDark),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('SYSTEM', 'System', isDark),
                   ],
                 ),
               ),

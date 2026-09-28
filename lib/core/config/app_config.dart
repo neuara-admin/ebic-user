@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
-  static const String appName = 'Every Bite Counts';
+  static const String appName = 'Ebic';
   static const String appTagline = 'Personalized Nutrition & In-Home Chefs';
-  static const String appVersion = '1.0.0 (V1 Instant)';
+  static const String appVersion = '1.0.0';
 
   // Override at build/run time for a physical device on the same Wi-Fi,
   // e.g. flutter run --dart-define=API_BASE_URL=http://192.168.1.5:3000/v1

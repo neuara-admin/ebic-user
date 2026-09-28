@@ -1,7 +1,7 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/auth/auth_service.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/app_environment.dart';
 import '../../core/config/feature_flag_service.dart';
@@ -9,6 +9,8 @@ import '../../core/config/remote_config_service.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/analytics/crash_reporting_service.dart';
 import '../../core/lifecycle/app_lifecycle_manager.dart';
+import '../../core/realtime/realtime_notification_banner.dart';
+import '../../core/realtime/realtime_service.dart';
 import '../../core/theme/theme_controller.dart';
 
 /// Deterministic Application Bootstrap sequence.
@@ -30,6 +32,13 @@ class AppBootstrap {
   }) async {
     // 1. Initialize Flutter bindings
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Phones are portrait-only (like Swiggy / Uber); tablets may rotate — their
+    // content is width-capped by ResponsiveAppFrame.
+    final view = WidgetsBinding.instance.platformDispatcher.views.first;
+    if (view.physicalSize.shortestSide / view.devicePixelRatio < 600) {
+      unawaited(SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]));
+    }
 
     // System overlay styling
     SystemChrome.setSystemUIOverlayStyle(
@@ -54,7 +63,7 @@ class AppBootstrap {
 
     // 4. Initialize analytics
     final analytics = AnalyticsService();
-    await analytics.logAppOpened();
+    unawaited(analytics.logAppOpened());
 
     // 5. Initialize feature flags & remote config
     FeatureFlagService();
@@ -63,11 +72,16 @@ class AppBootstrap {
     // 6. Initialize lifecycle observer
     AppLifecycleManager().initialize();
 
-    // 7. Restore session & auth boundary (Section 15)
-    final authService = AuthService();
-    await authService.initialize();
+    // 7. Session restore (network-bound, Section 15) is performed by
+    //    SplashScreen so it never blocks the first frame.
 
     // 8. Restore theme preferences
     await ThemeController().initialize();
+
+    // 9. Live updates: the socket follows the session (connects once the
+    //    splash screen restores it / the user logs in), and new
+    //    notifications pop up as an in-app banner on any screen.
+    RealtimeService().bindToSession();
+    RealtimeNotificationBanner.start();
   }
 }

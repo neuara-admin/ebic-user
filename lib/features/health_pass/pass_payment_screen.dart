@@ -95,9 +95,8 @@ class _HealthPassPaymentScreenState extends State<HealthPassPaymentScreen> {
         gatewayPaymentId = checkoutRes.paymentId!;
         gatewaySignature = checkoutRes.signature!;
       } else {
-        // Fallback for offline or local dev simulation
-        gatewayPaymentId = 'pay_sim_${DateTime.now().millisecondsSinceEpoch}';
-        gatewaySignature = 'sig_sim_verified';
+        // The backend did not open a payment — never fabricate a payment result.
+        throw Exception('Payment could not be started. Please try again.');
       }
 
       // Step 3: Authoritative Backend Payment Verification & Activation

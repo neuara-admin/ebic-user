@@ -34,25 +34,51 @@ class WelcomeScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Spacer(),
-                            // Icon badge
+                            // EBIC App Icon Badge
                             Container(
-                              width: 64,
-                              height: 64,
+                              width: 72,
+                              height: 72,
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: AppColors.primaryLight.withOpacity(0.3)),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(0xFF34D399).withOpacity(0.4),
+                                  width: 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primaryLight.withOpacity(0.35),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
                               ),
-                              child: const Icon(Icons.soup_kitchen_rounded, color: AppColors.primaryLight, size: 36),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: Image.asset(
+                                  'assets/icon/app_icon.png',
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 20),
                             const Text(
-                              'Eat Better.\nLive Better.',
+                              'ebic',
                               style: TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 44,
+                                fontWeight: FontWeight.w900,
                                 color: Colors.white,
-                                height: 1.15,
+                                letterSpacing: 2.0,
+                                height: 1.1,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'EVERY BITE COUNTS',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF34D399),
+                                letterSpacing: 4.0,
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -100,11 +126,41 @@ class WelcomeScreen extends StatelessWidget {
                                         color: AppColors.primaryLight,
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
-                                        decoration: TextDecoration.underline,
                                       ),
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            // App Store / Play Store Requirement: Guest Access without login or signup
+                            Center(
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.pushNamedAndRemoveUntil(
+                                    context,
+                                    AppRoutes.mainShell,
+                                    (route) => false,
+                                  );
+                                },
+                                icon: const Icon(Icons.explore_outlined, color: Colors.white70, size: 18),
+                                label: const Text(
+                                  'Explore as Guest',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  backgroundColor: Colors.white.withOpacity(0.08),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 12),

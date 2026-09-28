@@ -1,6 +1,6 @@
 {
-    "name": "ebic_user",
-    "short_name": "ebic_user",
+    "name": "Ebic",
+    "short_name": "Ebic",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

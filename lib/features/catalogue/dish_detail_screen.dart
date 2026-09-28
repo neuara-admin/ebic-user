@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/auth/session_manager.dart';
+import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dish_model.dart';
 import '../../shared/widgets/ebic_card.dart';
@@ -153,8 +155,19 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
                   const SizedBox(width: 14),
                   Expanded(
                     child: EbicButton(
-                      label: 'Add to Booking',
+                      label: SessionManager().isAuthenticated ? 'Add to Booking' : 'Sign in to Add',
+                      icon: SessionManager().isAuthenticated ? Icons.add_rounded : Icons.login_rounded,
                       onPressed: () {
+                        if (!SessionManager().isAuthenticated) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please sign in to add dishes to your chef booking.'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          Navigator.pushNamed(context, AppRoutes.login);
+                          return;
+                        }
                         CartService().addDish(dish, servings: _servings);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(

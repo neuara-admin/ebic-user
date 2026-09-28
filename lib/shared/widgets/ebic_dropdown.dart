@@ -44,6 +44,7 @@ class EBICDropdown<T> extends StatelessWidget {
           const SizedBox(height: DesignTokens.spaceXS),
         ],
         DropdownButtonFormField<T>(
+          isExpanded: true, // fit the field width; long options don't overflow
           value: value,
           items: items,
           onChanged: onChanged,

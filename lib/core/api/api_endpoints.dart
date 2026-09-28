@@ -26,9 +26,12 @@ class ApiEndpoints {
   static const String customerAddresses = '/me/addresses';
   static String address(String id) => '/me/addresses/$id';
   static String customerAddressDetail(String id) => '/me/addresses/$id';
-  static String customerAddressSetDefault(String id) => '/me/addresses/$id/default';
-  static String addressServiceabilityCheck(String id) => '/me/addresses/$id/serviceability-check';
+  static String customerAddressSetDefault(String id) =>
+      '/me/addresses/$id/default';
+  static String addressServiceabilityCheck(String id) =>
+      '/me/addresses/$id/serviceability-check';
   static const String serviceabilityCheck = '/serviceability/check';
+  static const String serviceabilityHubs = '/serviceability/hubs';
 
   // Maps (server-side geocoding — no client API key needed)
   static const String mapsGeocode = '/maps/geocode';
@@ -39,17 +42,22 @@ class ApiEndpoints {
   static const String householdMembers = '/household/members';
   static String householdMember(String id) => '/household/members/$id';
   static String householdMemberDetail(String id) => '/household/members/$id';
-  static String householdMemberAvatar(String id) => '/household/members/$id/avatar';
+  static String householdMemberAvatar(String id) =>
+      '/household/members/$id/avatar';
 
   // Member Health & Documents (Module 8 & Module 9)
   static const String healthDocuments = '/health/documents';
   static const String healthDocumentCategories = '/health/documents/categories';
-  static const String healthDocumentUploadSession = '/health/documents/upload-session';
+  static const String healthDocumentUploadSession =
+      '/health/documents/upload-session';
   static const String healthDocumentUploadDirect = '/health/documents/upload';
-  static String healthDocumentComplete(String id) => '/health/documents/$id/complete';
+  static String healthDocumentComplete(String id) =>
+      '/health/documents/$id/complete';
   static String healthDocumentDetail(String id) => '/health/documents/$id';
-  static String healthDocumentAccess(String id) => '/health/documents/$id/access';
-  static String healthDocumentPermissions(String id) => '/health/documents/$id/permissions';
+  static String healthDocumentAccess(String id) =>
+      '/health/documents/$id/access';
+  static String healthDocumentPermissions(String id) =>
+      '/health/documents/$id/permissions';
   static String healthDocumentPermission(String id, String permId) =>
       '/health/documents/$id/permissions/$permId';
 
@@ -65,17 +73,42 @@ class ApiEndpoints {
   static const String healthGoals = '/health/goals';
   static String healthGoalDetail(String id) => '/health/goals/$id';
   static const String healthDietaryPreferences = '/health/dietary-preferences';
-  static const String healthProfileDietaryPreferences = '/health/profile/dietary-preferences';
+  static const String healthProfileDietaryPreferences =
+      '/health/profile/dietary-preferences';
   static const String healthAllergies = '/health/allergies';
-  static String healthAllergyDetail(String allergenId) => '/health/allergies/$allergenId';
+  static String healthAllergyDetail(String allergenId) =>
+      '/health/allergies/$allergenId';
   static const String healthMetrics = '/health/metrics';
-  static String healthMetricHistory(String metricType) => '/health/metrics/$metricType/history';
+  static String healthMetricHistory(String metricType) =>
+      '/health/metrics/$metricType/history';
   static const String healthPermissions = '/health/permissions';
-  static String healthPermissionDetail(String dataType) => '/health/permissions/$dataType';
+  static String healthPermissionDetail(String dataType) =>
+      '/health/permissions/$dataType';
+
+  // Health Platform & Provider Integration (Specification V1.0)
+  static const String healthProviders = '/health/providers';
+  static const String healthConnections = '/health/connections';
+  static String healthConnectionDetail(String id) => '/health/connections/$id';
+  static const String healthPermissionsCheck = '/health/permissions/check';
+  static const String healthSync = '/health/sync';
+  static const String healthSyncStatus = '/health/sync/status';
+  static const String healthOverview = '/health/overview';
+  static const String healthSummary = '/health/summary';
+  static const String healthActivity = '/health/activity';
+  static const String healthSleep = '/health/sleep';
+  static const String healthHeart = '/health/heart';
+  static const String healthBody = '/health/body';
+  static const String healthNutrition = '/health/nutrition';
+  static const String healthHydration = '/health/hydration';
+  static const String healthExercise = '/health/exercise';
+  static const String healthBlood = '/health/blood';
+  static const String healthDataDelete = '/health/data';
+  static const String healthConsents = '/health/consents';
 
   // Health Progress & Insights (Module 10)
   static const String healthProgressDashboard = '/health/progress/dashboard';
-  static String healthProgressMetric(String type) => '/health/progress/metrics/$type';
+  static String healthProgressMetric(String type) =>
+      '/health/progress/metrics/$type';
   static const String healthProgressGoals = '/health/progress/goals';
   static const String healthProgressHydration = '/health/progress/hydration';
   static const String healthProgressAdherence = '/health/progress/adherence';
@@ -98,6 +131,7 @@ class ApiEndpoints {
   static String order(String id) => '/orders/$id';
   static String orderDetail(String id) => '/orders/$id';
   static String orderReceipt(String id) => '/orders/$id/receipt';
+  static String orderInvoicePdf(String id) => '/orders/$id/invoice.pdf';
   static String orderTimeline(String id) => '/orders/$id/timeline';
   static const String ordersCookingTime = '/orders/cooking-time';
   static String orderPreparation(String id) => '/orders/$id/preparation';
@@ -122,34 +156,51 @@ class ApiEndpoints {
   static const String chefBookings = '/chef-bookings';
   static String chefBooking(String id) => '/chef-bookings/$id';
   static const String chefBookingsQuote = '/chef-bookings/quote';
-  static const String chefBookingsServiceability = '/chef-bookings/serviceability';
+  static const String chefBookingsServiceability =
+      '/chef-bookings/serviceability';
   static const String chefBookingsCookingTime = '/chef-bookings/cooking-time';
   static String chefBookingTimeline(String id) => '/chef-bookings/$id/timeline';
-  static String chefBookingPreparation(String id) => '/chef-bookings/$id/preparation';
+  static String chefBookingPreparation(String id) =>
+      '/chef-bookings/$id/preparation';
   static String chefBookingMarkAllReady(String id) =>
       '/chef-bookings/$id/preparation/mark-all-ready';
   static String chefBookingItems(String id) => '/chef-bookings/$id/items';
   static String chefBookingAddItems(String id) => '/chef-bookings/$id/items';
   static String chefBookingCancel(String id) => '/chef-bookings/$id/cancel';
   static String chefBookingTracking(String id) => '/chef-bookings/$id/tracking';
-  static String chefBookingTrackingTimeline(String id) => '/chef-bookings/$id/tracking/timeline';
+  static String chefBookingTrackingTimeline(String id) =>
+      '/chef-bookings/$id/tracking/timeline';
 
   // Chef Add-ons (Module 16 Sections 206–289)
-  static String chefBookingAddOnsEligibility(String id) => '/chef-bookings/$id/add-ons/eligibility';
-  static String chefBookingAddOnsCatalogue(String id) => '/chef-bookings/$id/add-ons/catalogue';
-  static String chefBookingAddOnsValidate(String id) => '/chef-bookings/$id/add-ons/validate';
-  static String chefBookingAddOnsQuote(String id) => '/chef-bookings/$id/add-ons/quote';
+  static String chefBookingAddOnsEligibility(String id) =>
+      '/chef-bookings/$id/add-ons/eligibility';
+  static String chefBookingAddOnsCatalogue(String id) =>
+      '/chef-bookings/$id/add-ons/catalogue';
+  static String chefBookingAddOnsValidate(String id) =>
+      '/chef-bookings/$id/add-ons/validate';
+  static String chefBookingAddOnsQuote(String id) =>
+      '/chef-bookings/$id/add-ons/quote';
   static String chefBookingAddOns(String id) => '/chef-bookings/$id/add-ons';
   static String chefBookingAddOnDetail(String bookingId, String addOnId) =>
       '/chef-bookings/$bookingId/add-ons/$addOnId';
 
   // Dynamic Quotes
   static const String calculateQuote = '/pricing/quotes';
-  static String recalculateQuote(String id) => '/pricing/quotes/$id/recalculate';
+  static String recalculateQuote(String id) =>
+      '/pricing/quotes/$id/recalculate';
+
+  // Persistent Cloud Cart
+  static const String cart = '/cart';
+  static const String cartItems = '/cart/items';
+  static String cartItem(String id) => '/cart/items/$id';
+  static String cartDish(String dishId) => '/cart/dish/$dishId';
+  static const String cartSync = '/cart/sync';
+  static const String cartOccasion = '/cart/occasion';
 
   // Health Pass (Module 4 Sections 33–49)
   static const String healthPassPlans = '/health-pass/plans';
-  static const String healthPassPlansComparison = '/health-pass/plans/comparison';
+  static const String healthPassPlansComparison =
+      '/health-pass/plans/comparison';
   static String healthPassPlanDetail(String id) => '/health-pass/plans/$id';
   static const String myHealthPass = '/health-pass/my';
   static const String healthPassCurrent = '/health-pass/current';
@@ -157,32 +208,42 @@ class ApiEndpoints {
   static const String healthPassQuote = '/health-pass/quote';
   static const String healthPassPurchase = '/health-pass/purchase';
   static String healthPassDetail(String id) => '/health-pass/$id';
+  static String healthPassInvoicePdf(String id) => '/health-pass/$id/invoice.pdf';
   static String healthPassUsage(String id) => '/health-pass/$id/usage';
-  static String healthPassRenewQuote(String id) => '/health-pass/$id/renew/quote';
+  static String healthPassRenewQuote(String id) =>
+      '/health-pass/$id/renew/quote';
   static String healthPassRenew(String id) => '/health-pass/$id/renew';
-  static String healthPassPayInitiate(String id) => '/health-pass/$id/pay/initiate';
+  static String healthPassPayInitiate(String id) =>
+      '/health-pass/$id/pay/initiate';
   static String healthPassPayVerify(String id) => '/health-pass/$id/pay/verify';
 
   // Health Pass Chef Booking (Module 12 Sections 49–51)
-  static const String healthPassChefEligibility = '/health-pass/chef-booking/eligibility';
-  static const String healthPassChefEntitlements = '/health-pass/chef-booking/entitlements';
-  static const String healthPassChefQuoteContext = '/health-pass/chef-booking/quote-context';
+  static const String healthPassChefEligibility =
+      '/health-pass/chef-booking/eligibility';
+  static const String healthPassChefEntitlements =
+      '/health-pass/chef-booking/entitlements';
+  static const String healthPassChefQuoteContext =
+      '/health-pass/chef-booking/quote-context';
 
   // Dietitian & Consultations
   static const String dietitians = '/dietitians';
   static String dietitian(String id) => '/dietitians/$id';
-  static String dietitianAvailability(String id) => '/dietitians/$id/availability';
+  static String dietitianAvailability(String id) =>
+      '/dietitians/$id/availability';
   static const String consultations = '/consultations';
   static String consultation(String id) => '/consultations/$id';
   static const String consultationEligibility = '/consultations/eligibility';
   static const String consultationTypes = '/consultations/types';
-  static const String consultationAvailabilityDates = '/consultations/availability/dates';
-  static const String consultationAvailabilitySlots = '/consultations/availability/slots';
+  static const String consultationAvailabilityDates =
+      '/consultations/availability/dates';
+  static const String consultationAvailabilitySlots =
+      '/consultations/availability/slots';
   static const String consultationHistory = '/consultations/history';
   static String consultationJoin(String id) => '/consultations/$id/join';
   static String cancelConsultation(String id) => '/consultations/$id/cancel';
   static String consultationCancel(String id) => '/consultations/$id/cancel';
-  static String consultationReschedule(String id) => '/consultations/$id/reschedule';
+  static String consultationReschedule(String id) =>
+      '/consultations/$id/reschedule';
   static String dietitianChatThread(String memberId, String dietitianId) =>
       '/dietitians/health-pass/members/$memberId/chat/$dietitianId';
   static String dietitianChatMessages(String threadId) =>
@@ -212,7 +273,8 @@ class ApiEndpoints {
   // Support
   static const String supportTickets = '/support/tickets';
   static String supportTicket(String id) => '/support/tickets/$id';
-  static String supportTicketMessages(String id) => '/support/tickets/$id/messages';
+  static String supportTicketMessages(String id) =>
+      '/support/tickets/$id/messages';
   static String supportTicketReopen(String id) => '/support/tickets/$id/reopen';
   static const String supportArticles = '/support/articles';
   static String supportArticle(String id) => '/support/articles/$id';
@@ -258,5 +320,3 @@ class ApiEndpoints {
   static const String referralsClaim = '/referrals/claim';
   static const String referralsTrack = '/referrals/track';
 }
-
-

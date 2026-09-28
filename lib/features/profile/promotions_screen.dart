@@ -25,73 +25,6 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
   String _selectedCategory = 'ALL';
   List<Map<String, dynamic>> _offers = [];
 
-  static final List<Map<String, dynamic>> _fallbackOffers = [
-    {
-      'id': 'promo-firstchef',
-      'code': 'FIRSTCHEF',
-      'title': 'First Chef Dispatch Offer',
-      'name': 'First Chef Dispatch Offer',
-      'desc': 'Get 50% discount up to ₹400 on your first instant culinary visit.',
-      'description': 'Get 50% discount up to ₹400 on your first instant culinary visit.',
-      'terms': 'Valid on bookings above ₹499 • Max discount ₹400',
-      'expiry': 'Valid until 31 Dec 2026',
-      'formattedDiscount': '50% OFF',
-      'discountType': 'PERCENTAGE',
-      'discountValue': 50,
-      'category': 'CHEF',
-      'bannerImageUrl':
-          'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80',
-    },
-    {
-      'id': 'promo-healthpass25',
-      'code': 'HEALTHPASS25',
-      'title': 'Annual Health Pass Savings',
-      'name': 'Annual Health Pass Savings',
-      'desc': 'Flat ₹500 discount on 12-month EBIC Care & Essential clinical subscriptions.',
-      'description': 'Flat ₹500 discount on 12-month EBIC Care & Essential clinical subscriptions.',
-      'terms': 'Valid on bookings above ₹1999 • Once per household',
-      'expiry': 'Valid until 31 Dec 2026',
-      'formattedDiscount': '₹500 OFF',
-      'discountType': 'FIXED_AMOUNT',
-      'discountValue': 500,
-      'category': 'HEALTH_PASS',
-      'bannerImageUrl':
-          'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=1200&q=80',
-    },
-    {
-      'id': 'promo-nutritionfest',
-      'code': 'NUTRITIONFEST',
-      'title': 'Nutrition Fest Clinical Review',
-      'name': 'Nutrition Fest Clinical Review',
-      'desc': 'Complimentary 30-minute metabolic diet check with top RD + 20% off meals.',
-      'description': 'Complimentary 30-minute metabolic diet check with top RD + 20% off meals.',
-      'terms': 'Valid on bookings above ₹399 • Max discount ₹300',
-      'expiry': 'Valid until 31 Dec 2026',
-      'formattedDiscount': '20% OFF',
-      'discountType': 'PERCENTAGE',
-      'discountValue': 20,
-      'category': 'NUTRITION',
-      'bannerImageUrl':
-          'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80',
-    },
-    {
-      'id': 'promo-launch2026',
-      'code': 'LAUNCH2026',
-      'title': 'EBIC Launch Special',
-      'name': 'EBIC Launch Special',
-      'desc': 'Platform celebration offer: Flat ₹200 off across all operational hubs.',
-      'description': 'Platform celebration offer: Flat ₹200 off across all operational hubs.',
-      'terms': 'Valid on bookings above ₹599 • All active hubs',
-      'expiry': 'Valid until 31 Dec 2026',
-      'formattedDiscount': '₹200 OFF',
-      'discountType': 'FIXED_AMOUNT',
-      'discountValue': 200,
-      'category': 'SPECIAL',
-      'bannerImageUrl':
-          'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1200&q=80',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -130,12 +63,12 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
       }
 
       setState(() {
-        _offers = List.from(_fallbackOffers);
+        _offers = [];
         _isLoading = false;
       });
     } catch (_) {
       setState(() {
-        _offers = List.from(_fallbackOffers);
+        _offers = [];
         _isLoading = false;
       });
     }
@@ -571,16 +504,16 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
+                        Expanded(child: Row(
                           children: [
                             const Icon(Icons.confirmation_number_outlined, size: 16, color: AppColors.primary),
                             const SizedBox(width: 8),
-                            Text(
+                            Flexible(child: Text(
                               code,
                               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.8, color: AppColors.slate900),
-                            ),
+                            )),
                           ],
-                        ),
+                        )),
                         Row(
                           children: [
                             TextButton.icon(

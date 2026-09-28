@@ -99,6 +99,7 @@ class _HealthGoalsScreenState extends State<HealthGoalsScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
+                  isExpanded: true, // fit the field width; long options don't overflow
                   value: selectedType,
                   decoration: InputDecoration(
                     labelText: 'Goal Category',

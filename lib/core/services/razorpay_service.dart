@@ -113,16 +113,16 @@ class RazorpayService {
       'description': description,
       if (orderId.isNotEmpty && orderId.startsWith('order_')) 'order_id': orderId,
       'currency': currency ?? 'INR',
-      'timeout': 300, // 5 minutes validity
       'prefill': {
-        'contact': (prefillContact != null && prefillContact.isNotEmpty) ? prefillContact : '9876543210',
-        'email': (prefillEmail != null && prefillEmail.isNotEmpty) ? prefillEmail : 'support@ebic.com',
+        if (prefillContact != null && prefillContact.isNotEmpty)
+          'contact': prefillContact,
+        if (prefillEmail != null && prefillEmail.isNotEmpty)
+          'email': prefillEmail,
       },
       'theme': {
         'color': themeColorHex ?? '#10B981',
       },
       'retry': {'enabled': true, 'max_count': 1},
-      'send_sms_hash': true,
     };
 
     try {

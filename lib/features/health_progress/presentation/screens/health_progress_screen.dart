@@ -743,7 +743,7 @@ class _HealthProgressScreenState extends State<HealthProgressScreen> {
           // Quick Logging Pills (Section 21: +250ml, +500ml, +750ml)
           Row(
             children: [
-              const Text('Quick Log:', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
+              Flexible(child: const Text('Quick Log:', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B)))),
               const SizedBox(width: 8),
               _buildQuickWaterButton('+250 ml', 0.25),
               const SizedBox(width: 6),

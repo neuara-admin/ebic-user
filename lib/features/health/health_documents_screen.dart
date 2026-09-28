@@ -128,6 +128,7 @@ class _HealthDocumentsScreenState extends State<HealthDocumentsScreen> {
               const SizedBox(height: 14),
 
               DropdownButtonFormField<String>(
+                isExpanded: true, // fit the field width; long options don't overflow
                 value: selectedCat,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),

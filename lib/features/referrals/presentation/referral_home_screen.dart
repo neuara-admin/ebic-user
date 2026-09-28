@@ -263,7 +263,7 @@ class _ReferralHomeScreenState extends State<ReferralHomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
+                Flexible(child: Text(
                   code,
                   style: const TextStyle(
                     fontSize: 20,
@@ -271,7 +271,7 @@ class _ReferralHomeScreenState extends State<ReferralHomeScreen> {
                     letterSpacing: 1.5,
                     color: AppColors.primary,
                   ),
-                ),
+                )),
                 Row(
                   children: [
                     IconButton(

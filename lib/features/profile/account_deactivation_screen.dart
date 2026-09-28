@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../shared/widgets/fill_scroll_view.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -96,7 +97,7 @@ class _AccountDeactivationScreenState extends State<AccountDeactivationScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: FillScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

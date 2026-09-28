@@ -180,4 +180,102 @@ class HealthRemoteDataSource {
     }
     return {};
   }
+
+  // ───────────────────────── Health Integration Platform (Specification V1.0) ─────────────────────────
+
+  Future<Map<String, dynamic>?> getHealthOverview() async {
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthOverview);
+    if (res.success && res.data != null) {
+      return res.data!;
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> getHealthSummary([String? date]) async {
+    final url = date != null ? '${ApiEndpoints.healthSummary}?date=$date' : ApiEndpoints.healthSummary;
+    final res = await _api.get<Map<String, dynamic>>(url);
+    if (res.success && res.data != null) {
+      return res.data!;
+    }
+    return null;
+  }
+
+  Future<List<dynamic>> getConnectedSources() async {
+    final res = await _api.get<List<dynamic>>(ApiEndpoints.healthConnections);
+    if (res.success && res.data != null) {
+      return res.data!;
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>?> connectHealthSource(Map<String, dynamic> payload) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      ApiEndpoints.healthConnections,
+      body: payload,
+    );
+    if (res.success && res.data != null) {
+      return res.data!;
+    }
+    return null;
+  }
+
+  Future<bool> disconnectHealthSource(String connectionId) async {
+    final res = await _api.delete<dynamic>(ApiEndpoints.healthConnectionDetail(connectionId));
+    return res.success;
+  }
+
+  Future<Map<String, dynamic>?> syncHealthData(Map<String, dynamic> payload) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      ApiEndpoints.healthSync,
+      body: payload,
+    );
+    if (res.success && res.data != null) {
+      return res.data!;
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> getActivityMetrics() async {
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthActivity);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>?> getSleepMetrics() async {
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthSleep);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>?> getHeartMetrics() async {
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthHeart);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>?> getBodyMetrics() async {
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthBody);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>?> getHydrationMetrics() async {
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthHydration);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>?> getExerciseMetrics() async {
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthExercise);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>?> getNutritionMetrics() async {
+    final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthNutrition);
+    return res.data;
+  }
+
+  Future<bool> deleteHealthData(Map<String, dynamic> payload) async {
+    final res = await _api.delete<dynamic>(
+      ApiEndpoints.healthDataDelete,
+      body: payload,
+    );
+    return res.success;
+  }
 }
+

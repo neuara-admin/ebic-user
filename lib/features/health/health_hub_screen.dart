@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -8,6 +9,7 @@ import '../../shared/widgets/member_switcher_widget.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/auth/session_manager.dart';
 
 /// Section 31 & 35: Health Hub Screen
 /// Designed as a cohesive health dashboard rather than a list of disconnected features.
@@ -21,8 +23,12 @@ class HealthHubScreen extends StatefulWidget {
 class _HealthHubScreenState extends State<HealthHubScreen> {
   final ApiClient _api = ApiClient();
   Map<String, dynamic>? _healthSnapshot;
+  List<dynamic> _connectedSources = [];
   bool _isLoading = true;
+  bool _isSyncing = false;
+  String? _syncMessage;
   String? _errorMessage;
+  String _lastUpdatedText = 'Recently';
 
   @override
   void initState() {
@@ -37,7 +43,41 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
     });
 
     try {
-      final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.home);
+      if (SessionManager().isAuthenticated) {
+        final res = await _api.get<Map<String, dynamic>>(
+          ApiEndpoints.healthOverview,
+          requiresAuth: true,
+        );
+        if (res.success && res.data != null) {
+          if (mounted) {
+            final today = res.data!['today'] as Map<String, dynamic>? ?? {};
+            final sources = res.data!['connectedSources'] as List<dynamic>? ?? [];
+            setState(() {
+              _connectedSources = sources;
+              _healthSnapshot = {
+                'weight': today['weightKg'],
+                'water': today['waterMl'] != null ? (today['waterMl'] as num) / 1000.0 : null,
+                'steps': today['steps'],
+                'sleep': today['sleepMinutes'] != null
+                    ? '${(today['sleepMinutes'] as num) ~/ 60}h ${(today['sleepMinutes'] as num) % 60}m'
+                    : null,
+                'heartRate': today['restingHeartRate'],
+                'calories': today['activeCalories'],
+              };
+              _lastUpdatedText = 'Today ${TimeOfDay.now().format(context)}';
+              _isLoading = false;
+              _errorMessage = null;
+            });
+            return;
+          }
+        }
+      }
+
+      // Fallback
+      final res = await _api.get<Map<String, dynamic>>(
+        ApiEndpoints.home,
+        requiresAuth: false,
+      );
       if (res.success && res.data != null) {
         if (mounted) {
           setState(() {
@@ -46,20 +86,72 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
             _errorMessage = null;
           });
         }
-        return;
       } else {
         if (mounted) {
           setState(() {
-            _errorMessage = res.error?.message ?? 'Unable to fetch health snapshot';
+            _healthSnapshot = {};
             _isLoading = false;
+            _errorMessage = SessionManager().isAuthenticated
+                ? (res.error?.message ?? 'Unable to fetch health snapshot')
+                : null;
           });
         }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Network connection interrupted. Please try again.';
+          _healthSnapshot = {};
           _isLoading = false;
+          _errorMessage = SessionManager().isAuthenticated
+              ? 'Network connection interrupted. Please try again.'
+              : null;
+        });
+      }
+    }
+  }
+
+  Future<void> _triggerSync() async {
+    if (_isSyncing) return;
+    setState(() {
+      _isSyncing = true;
+      _syncMessage = 'Syncing health data...';
+    });
+
+    try {
+      final res = await _api.post<Map<String, dynamic>>(
+        ApiEndpoints.healthSync,
+        body: {
+          'provider': _connectedSources.isNotEmpty
+              ? _connectedSources.first['provider']
+              : 'HEALTH_CONNECT',
+          'syncType': 'INCREMENTAL',
+        },
+        requiresAuth: true,
+      );
+
+      if (mounted) {
+        if (res.success) {
+          setState(() {
+            _syncMessage = 'Health data updated';
+            _lastUpdatedText = 'Just now';
+          });
+          await _loadHealthData();
+        } else {
+          setState(() {
+            _syncMessage = 'Sync failed. Will retry automatically.';
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _syncMessage = 'Offline sync queued';
+        });
+      }
+    } finally {
+      if (mounted) {
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _isSyncing = false);
         });
       }
     }
@@ -71,18 +163,20 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
     final waterVal = _healthSnapshot?['water'];
     final stepsVal = _healthSnapshot?['steps'];
     final sleepVal = _healthSnapshot?['sleep'];
+    final heartVal = _healthSnapshot?['heartRate'];
+    final calVal = _healthSnapshot?['calories'];
 
     final weightDisplay = weightVal != null ? '$weightVal kg' : '—';
-    final weightSub = weightVal != null ? 'Synced vital' : 'Tap to record';
+    final weightSub = weightVal != null ? 'Synced vital' : 'Tap to log';
 
-    final waterDisplay = waterVal != null ? '$waterVal L' : '—';
+    final waterDisplay = waterVal != null ? '${(waterVal as num).toStringAsFixed(1)} L' : '—';
     final waterSub = waterVal != null ? 'Daily intake' : 'Tap to log';
 
-    final stepsDisplay = stepsVal != null && stepsVal > 0 ? '$stepsVal' : '—';
-    final stepsSub = stepsVal != null && stepsVal > 0 ? 'Steps taken' : 'Sync wearable';
+    final stepsDisplay = stepsVal != null && (stepsVal as num) > 0 ? '$stepsVal' : '—';
+    final stepsSub = stepsVal != null && (stepsVal as num) > 0 ? 'Steps today' : 'Tap to track';
 
     final sleepDisplay = sleepVal != null ? '$sleepVal' : '—';
-    final sleepSub = sleepVal != null ? 'Rest recorded' : 'Tap to log';
+    final sleepSub = sleepVal != null ? 'Rest duration' : 'Tap to log';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.slate900 : Colors.white;
@@ -99,6 +193,11 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
         foregroundColor: textPrimary,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: Icon(Icons.devices_other_rounded, color: isDark ? AppColors.primaryLight : AppColors.primary),
+            tooltip: 'Connected Sources',
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.connectedSources).then((_) => _loadHealthData()),
+          ),
           IconButton(
             icon: Icon(Icons.shield_outlined, color: isDark ? AppColors.primaryLight : AppColors.primary),
             tooltip: 'Privacy & Consent',
@@ -118,7 +217,65 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
               children: [
                 // Member Selector Bar (Section 18 & 35)
                 const MemberSwitcherBar(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+
+                // Sync Bar (Section 49 & 50)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.slate900 : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: cardBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isSyncing ? Icons.sync_rounded : Icons.check_circle_outline_rounded,
+                        size: 18,
+                        color: _isSyncing ? AppColors.primary : AppColors.emerald700,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isSyncing
+                                  ? (_syncMessage ?? 'Syncing health data...')
+                                  : 'Last updated: $_lastUpdatedText',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: textPrimary,
+                              ),
+                            ),
+                            if (_connectedSources.isNotEmpty)
+                              Text(
+                                '${_connectedSources.length} source(s) connected',
+                                style: TextStyle(fontSize: 10, color: textMuted),
+                              )
+                            else
+                              Text(
+                                'No wearable device connected',
+                                style: TextStyle(fontSize: 10, color: AppColors.amber700),
+                              ),
+                          ],
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _isSyncing ? null : _triggerSync,
+                        icon: _isSyncing
+                            ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.refresh_rounded, size: 14),
+                        label: Text(
+                          _isSyncing ? 'Syncing' : 'Sync Now',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
 
                 // Offline / Server Unreachable Banner
                 if (_errorMessage != null) ...[
@@ -146,10 +303,46 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                 ],
 
-                // Today's Overview (Section 35: Weight, Water, Activity, Sleep)
+                // Connected Sources Summary Strip (Section 9 & 62)
+                InkWell(
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.connectedSources).then((_) => _loadHealthData()),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.primaryDark.withOpacity(0.15) : AppColors.primarySubtle.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.watch_rounded, size: 18, color: isDark ? AppColors.primaryLight : AppColors.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _connectedSources.isNotEmpty
+                                ? '${_connectedSources.map((s) => s['provider']?.toString().replaceAll('_', ' ')).join(', ')} connected'
+                                : (defaultTargetPlatform == TargetPlatform.iOS
+                                    ? 'Connect Apple Health to sync vitals'
+                                    : 'Connect Android Health Connect or Samsung Health'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? AppColors.primaryLight : AppColors.primaryDark,
+                            ),
+                          ),
+                        ),
+                        Icon(Icons.arrow_forward_ios, size: 12, color: isDark ? AppColors.primaryLight : AppColors.primary),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // Today's Overview Header (Section 51)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -179,7 +372,11 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                         title: 'Weight',
                         value: weightDisplay,
                         subtitle: weightSub,
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.healthMetrics).then((_) => _loadHealthData()),
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.healthMetricDetail,
+                          arguments: {'type': 'body'},
+                        ).then((_) => _loadHealthData()),
                         isDark: isDark,
                         cardBg: cardBg,
                         cardBorder: cardBorder,
@@ -196,7 +393,11 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                         title: 'Hydration',
                         value: waterDisplay,
                         subtitle: waterSub,
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.healthMetrics).then((_) => _loadHealthData()),
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.healthMetricDetail,
+                          arguments: {'type': 'hydration'},
+                        ).then((_) => _loadHealthData()),
                         isDark: isDark,
                         cardBg: cardBg,
                         cardBorder: cardBorder,
@@ -217,7 +418,11 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                         title: 'Activity',
                         value: stepsDisplay,
                         subtitle: stepsSub,
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.healthMetrics).then((_) => _loadHealthData()),
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.healthMetricDetail,
+                          arguments: {'type': 'activity'},
+                        ).then((_) => _loadHealthData()),
                         isDark: isDark,
                         cardBg: cardBg,
                         cardBorder: cardBorder,
@@ -234,7 +439,57 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                         title: 'Sleep',
                         value: sleepDisplay,
                         subtitle: sleepSub,
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.healthMetrics).then((_) => _loadHealthData()),
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.healthMetricDetail,
+                          arguments: {'type': 'sleep'},
+                        ).then((_) => _loadHealthData()),
+                        isDark: isDark,
+                        cardBg: cardBg,
+                        cardBorder: cardBorder,
+                        textPrimary: textPrimary,
+                        textSecondary: textSecondary,
+                        textMuted: textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricTile(
+                        icon: Icons.favorite_outline_rounded,
+                        color: Colors.redAccent,
+                        title: 'Heart Rate',
+                        value: heartVal != null ? '$heartVal bpm' : '—',
+                        subtitle: heartVal != null ? 'Resting vital' : 'Tap to view',
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.healthMetricDetail,
+                          arguments: {'type': 'heart'},
+                        ).then((_) => _loadHealthData()),
+                        isDark: isDark,
+                        cardBg: cardBg,
+                        cardBorder: cardBorder,
+                        textPrimary: textPrimary,
+                        textSecondary: textSecondary,
+                        textMuted: textMuted,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMetricTile(
+                        icon: Icons.local_fire_department_outlined,
+                        color: Colors.deepOrange,
+                        title: 'Calories',
+                        value: calVal != null ? '$calVal kcal' : '—',
+                        subtitle: calVal != null ? 'Active burn' : 'Tap to view',
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.healthMetricDetail,
+                          arguments: {'type': 'activity'},
+                        ).then((_) => _loadHealthData()),
                         isDark: isDark,
                         cardBg: cardBg,
                         cardBorder: cardBorder,

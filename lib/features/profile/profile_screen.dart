@@ -9,6 +9,7 @@ import '../../core/storage/token_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/bmi_health_widget.dart';
+import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/member_switcher_widget.dart';
 import 'widgets/avatar_picker_sheet.dart';
@@ -35,6 +36,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _refreshProfile() async {
+    if (!_auth.isAuthenticated) {
+      if (mounted) setState(() {});
+      return;
+    }
     try {
       final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.me);
       if (res.success && res.data != null) {
@@ -91,10 +96,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final isAuthed = _auth.isAuthenticated;
     final user = _auth.user;
     final rawName = user?['name'] as String?;
     final hasName = rawName != null && rawName.trim().isNotEmpty;
-    final name = hasName ? rawName.trim() : 'Add your name';
+    final name = hasName ? rawName.trim() : (isAuthed ? 'Add your name' : 'Guest User');
 
     final rawPhone = (user?['phone'] ?? user?['phoneNumber']) as String?;
     final hasPhone = rawPhone != null && rawPhone.trim().isNotEmpty;
@@ -102,7 +108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final rawEmail = user?['email'] as String?;
     final hasEmail = rawEmail != null && rawEmail.trim().isNotEmpty;
-    final email = hasEmail ? rawEmail.trim() : 'No email address added';
+    final email = hasEmail ? rawEmail.trim() : (isAuthed ? 'No email address added' : 'Tap to sign in or create account');
     final avatarUrl = user?['avatarUrl'] as String?;
     final isEmailVerified = user?['emailVerified'] == true;
     final isPhoneVerified = user?['phoneVerified'] == true;
@@ -394,7 +400,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
+                          Expanded(child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
@@ -406,7 +412,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 child: const Icon(Icons.favorite_rounded, size: 16, color: AppColors.primary),
                               ),
                               const SizedBox(width: 8),
-                              const Text(
+                              Flexible(child: const Text(
                                 'HEALTH VITALS & BMI',
                                 style: TextStyle(
                                   fontSize: 12,
@@ -414,9 +420,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   letterSpacing: 0.6,
                                   color: AppColors.slate700,
                                 ),
-                              ),
+                              )),
                             ],
-                          ),
+                          )),
                           InkWell(
                             onTap: () {
                               setState(() {
@@ -797,6 +803,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   subtitle: 'HIPAA encrypted diagnostic reports & prescriptions',
                   onTap: () => Navigator.pushNamed(context, AppRoutes.healthDocuments),
                 ),
+                const SizedBox(height: 8),
+                _buildMenuItem(
+                  isDark: isDark,
+                  icon: Icons.devices_other_rounded,
+                  title: 'Connected Health Sources',
+                  subtitle: 'Apple Health, Health Connect, Samsung Health & devices',
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.connectedSources),
+                ),
                 const SizedBox(height: 20),
 
                 // Group 3: Financial & Promos
@@ -804,9 +818,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 8),
                 _buildMenuItem(
                   isDark: isDark,
-                  icon: Icons.account_balance_wallet_outlined,
-                  title: 'EBIC Wallet & Credits',
-                  subtitle: 'Ledger balance, cashback & refund history',
+                  icon: Icons.stars_rounded,
+                  title: 'EBIC Credits',
+                  subtitle: 'Promotional, referral & refund credits ledger',
                   onTap: () => Navigator.pushNamed(context, AppRoutes.walletCredits),
                 ),
                 const SizedBox(height: 8),
@@ -856,21 +870,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 24),
 
 
-                // Sign Out
-                EbicCard(
-                  onTap: _logout,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.logout_rounded, color: AppColors.danger, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Logout of EBIC',
-                        style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                    ],
+                if (isAuthed) ...[
+                  // Sign Out
+                  EbicCard(
+                    onTap: _logout,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.logout_rounded, color: AppColors.danger, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Logout of EBIC',
+                          style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ] else ...[
+                  EbicButton(
+                    label: 'Sign In or Create Account',
+                    icon: Icons.login_rounded,
+                    onPressed: () => Navigator.pushNamed(context, AppRoutes.welcome),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 Center(
                   child: Text(

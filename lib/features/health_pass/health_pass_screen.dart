@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/auth/session_manager.dart';
+import '../../core/realtime/realtime_service.dart';
+import '../../core/config/remote_config_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/consultation_model.dart';
@@ -28,8 +32,11 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
   ActiveHealthPassModel? _activePass;
   ConsultationModel? _activeConsultation;
   ConsultationModel? _completedConsultation;
+  ConsultationModel? _missedConsultation;
+  ConsultationModel? _notesPendingConsultation;
   bool _isLoading = true;
   String? _errorMessage;
+  StreamSubscription<StandardSocketEnvelope>? _consultationSub;
 
   @override
   void initState() {
@@ -37,17 +44,30 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
     AnalyticsService().logHealthPassViewed();
     _loadCurrentPass();
     HealthPassRepository.passUpdateNotifier.addListener(_loadCurrentPass);
+    _consultationSub = RealtimeService().consultationUpdates.listen((_) => _loadCurrentPass(silent: true));
   }
 
   @override
   void dispose() {
     HealthPassRepository.passUpdateNotifier.removeListener(_loadCurrentPass);
+    _consultationSub?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadCurrentPass() async {
+  Future<void> _loadCurrentPass({bool silent = false}) async {
+    if (!SessionManager().isAuthenticated) {
+      if (mounted) {
+        setState(() {
+          _activePass = null;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    if (!mounted) return;
     setState(() {
-      _isLoading = true;
+      if (!silent) _isLoading = true;
       _errorMessage = null;
     });
 
@@ -55,6 +75,8 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
       final pass = await _repository.fetchCurrentPass();
       ConsultationModel? activeConsult = pass?.activeConsultation;
       ConsultationModel? completedConsult = pass?.latestCompletedConsultation;
+      ConsultationModel? missedConsult;
+      ConsultationModel? notesPendingConsult;
 
       try {
         final consultRes = await _api.get<List<dynamic>>(ApiEndpoints.consultations);
@@ -64,16 +86,30 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
               .toList();
           list.sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
 
+          // Booked or live only — a finished call is delivered, not active.
           final upcomingOrActive = list.where(
             (c) => c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING',
           ).toList();
-          if (upcomingOrActive.isNotEmpty) {
-            activeConsult = upcomingOrActive.first;
-          }
+          activeConsult = upcomingOrActive.isNotEmpty ? upcomingOrActive.first : null;
 
           final completedList = list.where((c) => c.status == 'COMPLETED').toList();
           if (completedList.isNotEmpty) {
             completedConsult = completedList.first;
+          }
+
+          final deliveredList = list.where((c) => c.isDelivered).toList();
+          final latestDelivered = deliveredList.isNotEmpty ? deliveredList.first : null;
+          if (latestDelivered != null && latestDelivered.isNotesPending) {
+            notesPendingConsult = latestDelivered;
+          }
+          bool newerThanDelivered(ConsultationModel c) =>
+              latestDelivered == null || c.scheduledAt.isAfter(latestDelivered.scheduledAt);
+
+          // A member no-show (reschedulable) or a dietitian no-show (rebook,
+          // not counted) — whichever is newer than the last delivered call.
+          final missedList = list.where((c) => c.status == 'NO_SHOW' || c.isDietitianNoShow).toList();
+          if (missedList.isNotEmpty && newerThanDelivered(missedList.first)) {
+            missedConsult = missedList.first;
           }
         }
       } catch (_) {}
@@ -83,6 +119,8 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
           _activePass = pass;
           _activeConsultation = activeConsult;
           _completedConsultation = completedConsult;
+          _missedConsultation = missedConsult;
+          _notesPendingConsultation = notesPendingConsult;
           _isLoading = false;
         });
       }
@@ -111,7 +149,13 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
           IconButton(
             icon: const Icon(Icons.history_rounded),
             tooltip: 'Pass History',
-            onPressed: () => Navigator.pushNamed(context, AppRoutes.healthPassHistory),
+            onPressed: () {
+              if (!SessionManager().isAuthenticated) {
+                Navigator.pushNamed(context, AppRoutes.login);
+                return;
+              }
+              Navigator.pushNamed(context, AppRoutes.healthPassHistory);
+            },
           ),
         ],
       ),
@@ -493,14 +537,25 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
         ),
         const SizedBox(height: 14),
 
-        // 3. Completed Consultation & Dietitian Contact Section (PRIORITY #1 if completed)
+        // 3. Consultation status. A booked/live/just-finished or missed
+        // consultation always shows first — otherwise a follow-up booked
+        // after the kickoff was hidden behind the "completed" card.
+        if (activeConsult != null) ...[
+          _buildActiveConsultationBanner(activeConsult, isDark),
+          const SizedBox(height: 14),
+        ],
+        if (activeConsult == null && _missedConsultation != null) ...[
+          _buildActiveConsultationBanner(_missedConsultation!, isDark),
+          const SizedBox(height: 14),
+        ],
+        if (activeConsult == null && _missedConsultation == null && _notesPendingConsultation != null) ...[
+          _buildActiveConsultationBanner(_notesPendingConsultation!, isDark),
+          const SizedBox(height: 14),
+        ],
         if (isCompleted) ...[
           _buildCompletedConsultationCard(pass, completedConsult, isDark),
           const SizedBox(height: 14),
-        ] else if (activeConsult != null) ...[
-          _buildActiveConsultationBanner(activeConsult, isDark),
-          const SizedBox(height: 14),
-        ] else ...[
+        ] else if (activeConsult == null && _missedConsultation == null) ...[
           _buildPendingConsultationBanner(pass, isDark),
           const SizedBox(height: 14),
         ],
@@ -544,14 +599,14 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Flexible(child: const Text(
                       'COVERED HOUSEHOLD MEMBERS',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
-                    ),
-                    Text(
+                    )),
+                    Flexible(child: Text(
                       '${pass.coveredMembers.length} Members',
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
-                    ),
+                    )),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -613,14 +668,14 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
 
   // ───────────────────────── Completed Consultation & Dietitian Card ─────────────────────────
   Widget _buildCompletedConsultationCard(ActiveHealthPassModel pass, ConsultationModel? c, bool isDark) {
-    final dietitianName = c?.dietitianName ?? pass.assignedDietitian?.name ?? 'Dr. Ananya Sharma';
-    final dietitianQual = c?.dietitianQualification ?? pass.assignedDietitian?.specializations.join(' • ') ?? 'Senior Clinical Nutritionist (RD)';
+    final dietitianName = c?.dietitianName ?? pass.assignedDietitian?.name ?? 'Your dietitian';
+    final dietitianQual = c?.dietitianQualification ?? pass.assignedDietitian?.specializations.join(' • ') ?? '';
     final photoUrl = c?.dietitianPhotoUrl ?? pass.assignedDietitian?.photoUrl;
-    final consultDate = c?.scheduledAt != null ? DateFormat('dd MMM yyyy').format(c!.scheduledAt) : 'Recent';
-    final startTimeStr = c?.scheduledAt != null ? DateFormat('hh:mm a').format(c!.scheduledAt) : '10:00 AM';
+    final consultDate = c?.scheduledAt != null ? DateFormat('dd MMM yyyy').format(c!.scheduledAt) : '—';
+    final startTimeStr = c?.scheduledAt != null ? DateFormat('hh:mm a').format(c!.scheduledAt) : '—';
     final endTimeStr = c?.endsAt != null
         ? DateFormat('hh:mm a').format(c!.endsAt!)
-        : (c?.scheduledAt != null ? DateFormat('hh:mm a').format(c!.scheduledAt.add(const Duration(minutes: 45))) : '10:45 AM');
+        : (c?.scheduledAt != null ? DateFormat('hh:mm a').format(c!.scheduledAt.add(const Duration(minutes: 45))) : '—');
 
     return Container(
       width: double.infinity,
@@ -806,8 +861,17 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   icon: const Icon(Icons.video_call_rounded, size: 15, color: AppColors.primary),
-                  label: const Text('Book Session', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
+                  label: Text(
+                    _activeConsultation != null
+                        ? 'Follow-up Booked'
+                        : pass.consultationsRemaining > 0
+                            ? 'Book Follow-up (${pass.consultationsRemaining} left)'
+                            : 'No Follow-ups Left',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  onPressed: _activeConsultation != null || pass.consultationsRemaining <= 0
+                      ? null
+                      : () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
                 ),
               ),
             ],
@@ -865,6 +929,7 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
 
   // Contact Dietitian Modal Bottom Sheet
   void _showContactDietitianSheet(String dietitianName) {
+    final supportPhone = RemoteConfigService().supportPhone;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -888,24 +953,26 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                 const SizedBox(height: 6),
                 const Text('Choose how you would like to connect with your dietitian:', style: TextStyle(color: AppColors.slate500, fontSize: 12)),
                 const SizedBox(height: 16),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.phone_rounded, color: Color(0xFF15803D)),
+                if (supportPhone.isNotEmpty) ...[
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.phone_rounded, color: Color(0xFF15803D)),
+                    ),
+                    title: const Text('Call EBIC Support', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: Text(supportPhone, style: const TextStyle(fontSize: 11)),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: supportPhone.replaceAll(' ', '')));
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Support line $supportPhone copied to clipboard!')),
+                      );
+                    },
                   ),
-                  title: const Text('Call Clinical Nutrition Desk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: const Text('+91 80 4719 3200 (Toll-Free Priority Care)', style: TextStyle(fontSize: 11)),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                  onTap: () {
-                    Clipboard.setData(const ClipboardData(text: '+918047193200'));
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Support line +91 80 4719 3200 copied to clipboard!')),
-                    );
-                  },
-                ),
-                const Divider(),
+                  const Divider(),
+                ],
                 ListTile(
                   leading: Container(
                     padding: const EdgeInsets.all(10),
@@ -929,63 +996,115 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
   }
 
   // Active / Scheduled Consultation Banner
+  /// Booked (SCHEDULED), live (IN_PROGRESS), call done (VIDEO_COMPLETED) or
+  /// missed (NO_SHOW) — each with its own message and action.
   Widget _buildActiveConsultationBanner(ConsultationModel c, bool isDark) {
-    final isSessionActive = c.status == 'IN_PROGRESS';
     final dateStr = DateFormat('dd MMM, hh:mm a').format(c.scheduledAt);
+    final kind = c.isInitial ? 'Kickoff consultation' : 'Follow-up consultation';
+
+    late final Color bg, border, iconColor, titleColor, subColor, buttonColor;
+    late final IconData icon;
+    late final String title, subtitle, buttonLabel;
+    late final String route;
+
+    switch (c.status) {
+      case 'IN_PROGRESS':
+        bg = const Color(0xFFFFFBEB);
+        border = const Color(0xFFF59E0B);
+        iconColor = const Color(0xFFB45309);
+        titleColor = const Color(0xFF92400E);
+        subColor = const Color(0xFFB45309);
+        buttonColor = const Color(0xFFD97706);
+        icon = Icons.videocam_rounded;
+        title = 'Video Call Is Live';
+        subtitle = '${c.dietitianDisplayName} is waiting for you';
+        buttonLabel = 'Join';
+        route = AppRoutes.consultationVideo;
+        break;
+      case 'VIDEO_COMPLETED':
+        bg = const Color(0xFFE0F2FE);
+        border = const Color(0xFF0EA5E9);
+        iconColor = const Color(0xFF0369A1);
+        titleColor = const Color(0xFF0C4A6E);
+        subColor = const Color(0xFF0369A1);
+        buttonColor = const Color(0xFF0284C7);
+        icon = Icons.check_circle_outline_rounded;
+        title = 'Consultation Completed';
+        subtitle = 'Your dietitian\'s notes are pending';
+        buttonLabel = 'Details';
+        route = AppRoutes.consultationDetail;
+        break;
+      case 'CANCELLED':
+        // Only reached for a dietitian no-show (see _loadCurrentPass).
+        bg = const Color(0xFFFFFBEB);
+        border = const Color(0xFFF59E0B);
+        iconColor = const Color(0xFFB45309);
+        titleColor = const Color(0xFF92400E);
+        subColor = const Color(0xFFB45309);
+        buttonColor = const Color(0xFFD97706);
+        icon = Icons.event_busy_rounded;
+        title = '${c.dietitianDisplayName} Couldn\'t Join';
+        subtitle = '$dateStr — cancelled, not counted against your plan';
+        buttonLabel = 'Book';
+        route = AppRoutes.consultationBook;
+        break;
+      case 'NO_SHOW':
+        bg = const Color(0xFFFEF2F2);
+        border = const Color(0xFFF87171);
+        iconColor = const Color(0xFFB91C1C);
+        titleColor = const Color(0xFF7F1D1D);
+        subColor = const Color(0xFFB91C1C);
+        buttonColor = AppColors.danger;
+        icon = Icons.event_busy_rounded;
+        title = 'Consultation Missed';
+        subtitle = '$kind on $dateStr — reschedule it at no extra cost';
+        buttonLabel = 'Reschedule';
+        route = AppRoutes.consultationDetail;
+        break;
+      default:
+        bg = const Color(0xFFEFF6FF);
+        border = const Color(0xFF3B82F6);
+        iconColor = const Color(0xFF1D4ED8);
+        titleColor = const Color(0xFF1E40AF);
+        subColor = const Color(0xFF2563EB);
+        buttonColor = AppColors.primary;
+        icon = Icons.event_available_rounded;
+        title = '$kind Booked';
+        subtitle = '$dateStr with ${c.dietitianDisplayName}';
+        buttonLabel = 'Details';
+        route = AppRoutes.consultationDetail;
+    }
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isSessionActive ? const Color(0xFFFFFBEB) : const Color(0xFFEFF6FF),
+        color: bg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isSessionActive ? const Color(0xFFF59E0B) : const Color(0xFF3B82F6),
-        ),
+        border: Border.all(color: border),
       ),
       child: Row(
         children: [
-          Icon(
-            isSessionActive ? Icons.hourglass_top_rounded : Icons.event_available_rounded,
-            color: isSessionActive ? const Color(0xFFB45309) : const Color(0xFF1D4ED8),
-            size: 22,
-          ),
+          Icon(icon, color: iconColor, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  isSessionActive ? 'Video Consultation Active' : 'Consultation Scheduled',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: isSessionActive ? const Color(0xFF92400E) : const Color(0xFF1E40AF),
-                  ),
-                ),
-                Text(
-                  isSessionActive ? 'Dr. ${c.dietitianName} is in call' : '$dateStr with Dr. ${c.dietitianName}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isSessionActive ? const Color(0xFFB45309) : const Color(0xFF2563EB),
-                  ),
-                ),
+                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: titleColor)),
+                Text(subtitle, style: TextStyle(fontSize: 11, color: subColor)),
               ],
             ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: isSessionActive ? const Color(0xFFD97706) : AppColors.primary,
+              backgroundColor: buttonColor,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: Text(isSessionActive ? 'Join' : 'Details', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            child: Text(buttonLabel, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
             onPressed: () {
-              if (isSessionActive) {
-                Navigator.pushNamed(context, AppRoutes.consultationVideo, arguments: {'consultation': c}).then((_) => _loadCurrentPass());
-              } else {
-                Navigator.pushNamed(context, AppRoutes.consultationDetail, arguments: {'consultation': c}).then((_) => _loadCurrentPass());
-              }
+              Navigator.pushNamed(context, route, arguments: {'consultation': c}).then((_) => _loadCurrentPass(silent: true));
             },
           ),
         ],
@@ -993,37 +1112,85 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
     );
   }
 
-  // Pending First Consultation Booking Banner
+  // Pending First Consultation Booking Banner — same visual language as the
+  // "Step 1: Complete Initial Consultation" callout on activation_screen.dart,
+  // so the pending state reads consistently wherever it appears.
   Widget _buildPendingConsultationBanner(ActiveHealthPassModel pass, bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : AppColors.primarySubtle,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+        gradient: LinearGradient(
+          colors: isDark
+              ? [AppColors.slate800, AppColors.slate800.withOpacity(0.8)]
+              : [AppColors.primarySubtle.withOpacity(0.85), Colors.white],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.primary.withOpacity(0.3) : AppColors.primaryLight.withOpacity(0.5),
+          width: 1.5,
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.video_call_outlined, color: AppColors.primary, size: 24),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Initial Consultation Pending', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                Text('Schedule your 1-on-1 video call to start plan', style: TextStyle(color: AppColors.slate500, fontSize: 11)),
-              ],
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.event_available_rounded, color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Step 1: Complete Initial Consultation',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Validity commences upon completion',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Your ${pass.durationMonths}-month membership validity begins strictly on the date your initial dietitian consultation is completed. Schedule your video call now to commence your clinical diet plan!',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? AppColors.slate300 : AppColors.slate700,
+              height: 1.4,
             ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.video_call_outlined, size: 18),
+              label: const Text('Schedule Initial Consultation', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
             ),
-            child: const Text('Schedule', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-            onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadCurrentPass()),
           ),
         ],
       ),

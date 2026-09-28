@@ -27,44 +27,8 @@ class HealthDocumentsRemoteDataSource {
       }
     } catch (_) {}
 
-    // Fallback initial categories per Section 5 of specification
-    return const [
-      DocumentCategoryItem(
-        key: 'LAB_REPORT',
-        name: 'Lab Report',
-        description: 'Blood work, urinalysis, pathology panels, and lipid profiles',
-      ),
-      DocumentCategoryItem(
-        key: 'DIAGNOSTIC_REPORT',
-        name: 'Diagnostic Report',
-        description: 'Radiology, scans, ultrasounds, ECG, and diagnostic testing',
-      ),
-      DocumentCategoryItem(
-        key: 'DOCTOR_REPORT',
-        name: 'Doctor Report',
-        description: 'Physician notes, clinical summaries, and hospital discharge papers',
-      ),
-      DocumentCategoryItem(
-        key: 'PRESCRIPTION',
-        name: 'Prescription',
-        description: 'Medical prescriptions, pharmaceutical regimens, and supplements',
-      ),
-      DocumentCategoryItem(
-        key: 'DIETITIAN_REPORT',
-        name: 'Dietitian Report',
-        description: 'Nutrition assessments, clinical goals, and consultation notes',
-      ),
-      DocumentCategoryItem(
-        key: 'MEDICAL_DOCUMENT',
-        name: 'Medical Document',
-        description: 'Health history summaries, insurance records, and vaccination certificates',
-      ),
-      DocumentCategoryItem(
-        key: 'OTHER',
-        name: 'Other Health Document',
-        description: 'Miscellaneous health, recovery, or fitness reports',
-      ),
-    ];
+    // Categories are served by the backend only.
+    return const [];
   }
 
   Future<List<HealthDocumentModel>> fetchMemberDocuments(

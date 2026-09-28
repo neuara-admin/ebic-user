@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/consultation_model.dart';
@@ -21,22 +23,26 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
 
   List<ConsultationModel> _consultations = [];
   bool _isLoading = true;
+  StreamSubscription<StandardSocketEnvelope>? _realtimeSub;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _fetchConsultations();
+    _realtimeSub = RealtimeService().consultationUpdates.listen((_) => _fetchConsultations(silent: true));
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _realtimeSub?.cancel();
     super.dispose();
   }
 
-  Future<void> _fetchConsultations() async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchConsultations({bool silent = false}) async {
+    if (!mounted) return;
+    if (!silent) setState(() => _isLoading = true);
 
     try {
       final res = await _api.get<List<dynamic>>(ApiEndpoints.consultations);
@@ -214,9 +220,12 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
       return c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING';
     }).toList();
 
-    // Past contains COMPLETED, CANCELLED, NO_SHOW
+    // Past contains VIDEO_COMPLETED (call done, notes pending), COMPLETED, CANCELLED, NO_SHOW
     final past = _consultations.where((c) {
-      return c.status == 'COMPLETED' || c.status == 'CANCELLED' || c.status == 'NO_SHOW';
+      return c.status == 'VIDEO_COMPLETED' ||
+          c.status == 'COMPLETED' ||
+          c.status == 'CANCELLED' ||
+          c.status == 'NO_SHOW';
     }).toList();
 
     return Scaffold(
@@ -258,7 +267,7 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('Past Consultations'),
+                  const Flexible(child: Text('Past Consultations', overflow: TextOverflow.ellipsis)),
                   if (past.isNotEmpty) ...[
                     const SizedBox(width: 6),
                     Container(
@@ -413,38 +422,24 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Row: Status Badge & Regional Hub / Type
+                // Top Row: Status Badge & Consultation Type
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildStatusChip(c.status),
-                    Row(
-                      children: [
-                        if (c.hubName != null) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.storefront_rounded, size: 11, color: AppColors.slate500),
-                                const SizedBox(width: 4),
-                                Text(
-                                  c.hubName!,
-                                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.slate600),
-                                ),
-                              ],
+                    _buildStatusChip(c.isDietitianNoShow ? 'DIETITIAN_NO_SHOW' : c.status),
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '${c.kindLabel} • ${c.consultationType == 'VIDEO' ? 'HD Video' : c.consultationType}',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
                             ),
                           ),
-                          const SizedBox(width: 6),
                         ],
-                        Text(
-                          c.consultationType == 'VIDEO' ? 'HD Video' : c.consultationType,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
@@ -604,35 +599,40 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
 
                 const SizedBox(height: 14),
 
-                // Action Buttons
+                // Action Buttons — the customer can only ever JOIN a video
+                // call, never start one: the dietitian initiates it, which
+                // is what flips status to IN_PROGRESS. Showing a "Join"
+                // button before that would let the customer sit in an empty
+                // call on their own.
                 if (isUpcoming && !isInProgress) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 5,
-                        child: EbicButton(
-                          label: 'Join Video Call',
-                          icon: Icons.videocam_rounded,
-                          onPressed: () {
-                            Navigator.pushNamed(
-                              context,
-                              AppRoutes.consultationVideo,
-                              arguments: {'consultation': c},
-                            );
-                          },
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.hourglass_top_rounded, size: 16, color: isDark ? AppColors.slate400 : AppColors.slate500),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Your dietitian will start the video call at the scheduled time — you\'ll be able to join from here.',
+                            style: TextStyle(fontSize: 11.5, color: isDark ? AppColors.slate400 : AppColors.slate600),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 3,
-                        child: EbicButton(
-                          label: 'Details',
-                          icon: Icons.info_outline_rounded,
-                          variant: EbicButtonVariant.outline,
-                          onPressed: () => _showConsultationDetailsModal(c),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: EbicButton(
+                      label: 'Details',
+                      icon: Icons.info_outline_rounded,
+                      variant: EbicButtonVariant.outline,
+                      onPressed: () => _showConsultationDetailsModal(c),
+                    ),
                   ),
                   if (canCancelOrReschedule) ...[
                     const SizedBox(height: 8),
@@ -673,7 +673,7 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
                     children: [
                       Expanded(
                         child: EbicButton(
-                          label: 'Re-join Video Call',
+                          label: 'Join Video Call',
                           icon: Icons.videocam_rounded,
                           onPressed: () {
                             Navigator.pushNamed(
@@ -714,6 +714,24 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
                             icon: Icons.restaurant_menu_rounded,
                             variant: EbicButtonVariant.primary,
                             onPressed: () => Navigator.pushNamed(context, AppRoutes.dietPlan),
+                          ),
+                        ),
+                      ] else if (c.status == 'NO_SHOW') ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: EbicButton(
+                            label: 'Reschedule',
+                            icon: Icons.event_repeat_rounded,
+                            variant: EbicButtonVariant.primary,
+                            onPressed: () async {
+                              final done = await showModalBottomSheet<bool>(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (_) => RescheduleBottomSheet(consultation: c),
+                              );
+                              if (done == true) _fetchConsultations(silent: true);
+                            },
                           ),
                         ),
                       ] else if (isCancelled) ...[
@@ -757,6 +775,12 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
         label = 'IN PROGRESS';
         icon = Icons.hourglass_top_rounded;
         break;
+      case 'VIDEO_COMPLETED':
+        bg = const Color(0xFFE0F2FE);
+        fg = const Color(0xFF0369A1);
+        label = 'NOTES PENDING';
+        icon = Icons.pending_actions_rounded;
+        break;
       case 'COMPLETED':
         bg = const Color(0xFFD1FAE5);
         fg = const Color(0xFF047857);
@@ -768,6 +792,18 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
         fg = const Color(0xFFB91C1C);
         label = 'CANCELLED';
         icon = Icons.cancel_outlined;
+        break;
+      case 'NO_SHOW':
+        bg = const Color(0xFFFEF2F2);
+        fg = const Color(0xFFB91C1C);
+        label = 'MISSED';
+        icon = Icons.event_busy_rounded;
+        break;
+      case 'DIETITIAN_NO_SHOW':
+        bg = const Color(0xFFFFFBEB);
+        fg = const Color(0xFFB45309);
+        label = 'DIETITIAN DIDN\'T JOIN';
+        icon = Icons.event_busy_rounded;
         break;
       default:
         bg = const Color(0xFFF1F5F9);

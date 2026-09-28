@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/auth/session_manager.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dish_model.dart';
@@ -38,10 +39,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   bool _isSearchExpanded = false;
 
   // Filter State
-  String _quickFilter = 'ALL'; // ALL, VEG, NON_VEG, HIGH_PROTEIN, QUICK, LOW_CAL
+  String _quickFilter =
+      'ALL'; // ALL, VEG, NON_VEG, HIGH_PROTEIN, QUICK, LOW_CAL
   String _dietaryFilter = 'ALL'; // ALL, VEG, NON_VEG, VEGAN
   Set<String> _selectedCuisines = {};
-  String _sortBy = 'RECOMMENDED'; // RECOMMENDED, COOK_TIME_ASC, PROTEIN_DESC, CALORIES_ASC
+  String _sortBy =
+      'RECOMMENDED'; // RECOMMENDED, COOK_TIME_ASC, PROTEIN_DESC, CALORIES_ASC
   int? _maxCookTime; // null = any, 20, 30, 45
   int? _maxCalories; // null = any, 350, 500
 
@@ -71,11 +74,17 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
     try {
       // 1. Fetch Household Members (Section 8)
-      final membersRes = await _api.get<List<dynamic>>(ApiEndpoints.householdMembers);
-      if (membersRes.success && membersRes.data != null) {
-        _members = membersRes.data!
-            .map((m) => HouseholdMemberModel.fromJson(m as Map<String, dynamic>))
-            .toList();
+      if (SessionManager().isAuthenticated) {
+        final membersRes = await _api.get<List<dynamic>>(
+          ApiEndpoints.householdMembers,
+        );
+        if (membersRes.success && membersRes.data != null) {
+          _members = membersRes.data!
+              .map(
+                (m) => HouseholdMemberModel.fromJson(m as Map<String, dynamic>),
+              )
+              .toList();
+        }
       }
 
       if (_members.isEmpty) {
@@ -98,7 +107,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       // 2. Fetch Dynamic Catalogue Categories (Section 11)
       final catRes = await _api.get<List<dynamic>>(ApiEndpoints.categories);
       if (catRes.success && catRes.data != null) {
-        _categories = catRes.data!.map((c) => c as Map<String, dynamic>).toList();
+        _categories = catRes.data!
+            .map((c) => c as Map<String, dynamic>)
+            .toList();
       }
 
       // 3. Fetch Dishes from Backend (Section 51)
@@ -139,13 +150,14 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
       if (res.success && res.data != null) {
         final items = res.data!['items'] as List<dynamic>? ?? [];
-        _dishes = items.map((d) => DishModel.fromJson(d as Map<String, dynamic>)).toList();
+        _dishes = items
+            .map((d) => DishModel.fromJson(d as Map<String, dynamic>))
+            .toList();
+      } else {
+        _dishes = [];
       }
-    } catch (_) {}
-
-    // Curated high-yield fallbacks if backend returns empty
-    if (_dishes.isEmpty) {
-      _dishes = _getCuratedFallbackDishes();
+    } catch (_) {
+      _dishes = [];
     }
 
     if (mounted) {
@@ -160,88 +172,6 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       _loadDishes();
     });
     setState(() {});
-  }
-
-  List<DishModel> _getCuratedFallbackDishes() {
-    return [
-      DishModel(
-        id: 'dish-1',
-        name: 'Herb Grilled Chicken Breast',
-        category: 'HIGH_PROTEIN',
-        cuisine: 'Continental',
-        description: 'Tender marinated chicken breast with rosemary, thyme, and roasted garlic.',
-        baseCookTimeMin: 22,
-        perServingIncMin: 4,
-        nutrition: DishNutritionModel(calories: 380, proteinG: 44, carbsG: 4, fatG: 8),
-        dietaryTags: ['High Protein', 'Gluten Free'],
-      ),
-      DishModel(
-        id: 'dish-2',
-        name: 'Paneer Tikka Protein Bowl',
-        category: 'HIGH_PROTEIN',
-        cuisine: 'North Indian',
-        description: 'Cottage cheese cubes charred with bell peppers, onions, and roasted cumin.',
-        baseCookTimeMin: 20,
-        perServingIncMin: 3,
-        nutrition: DishNutritionModel(calories: 420, proteinG: 28, carbsG: 14, fatG: 22),
-        dietaryTags: ['Vegetarian', 'High Protein'],
-      ),
-      DishModel(
-        id: 'dish-3',
-        name: 'High-Fibre Quinoa & Lentil Khichdi',
-        category: 'HIGH_FIBRE',
-        cuisine: 'Healthy Indian',
-        description: 'Nutritious slow-cooked organic quinoa with yellow moong lentils and fresh spinach.',
-        baseCookTimeMin: 25,
-        perServingIncMin: 5,
-        nutrition: DishNutritionModel(calories: 340, proteinG: 18, carbsG: 48, fatG: 6),
-        dietaryTags: ['Vegetarian', 'Vegan', 'High Fibre'],
-      ),
-      DishModel(
-        id: 'dish-4',
-        name: 'Steamed Lemon Garlic Broccoli & Greens',
-        category: 'HIGH_FIBRE',
-        cuisine: 'Continental',
-        description: 'Fresh crisp broccoli, zucchini, and asparagus tossed in extra virgin olive oil and lemon zest.',
-        baseCookTimeMin: 14,
-        perServingIncMin: 2,
-        nutrition: DishNutritionModel(calories: 140, proteinG: 6, carbsG: 12, fatG: 4),
-        dietaryTags: ['Vegetarian', 'Vegan', 'Low Calorie'],
-      ),
-      DishModel(
-        id: 'dish-5',
-        name: 'Balanced Brown Basmati Pulao',
-        category: 'BALANCED',
-        cuisine: 'North Indian',
-        description: 'Aromatic whole grain brown rice with garden peas, carrots and whole spices.',
-        baseCookTimeMin: 18,
-        perServingIncMin: 3,
-        nutrition: DishNutritionModel(calories: 280, proteinG: 8, carbsG: 52, fatG: 3),
-        dietaryTags: ['Vegetarian', 'Balanced'],
-      ),
-      DishModel(
-        id: 'dish-6',
-        name: 'Atlantic Salmon Pan-Seared Fillet',
-        category: 'HIGH_PROTEIN',
-        cuisine: 'Continental',
-        description: 'Omega-3 rich wild salmon seared with dill butter and served with sautéed green beans.',
-        baseCookTimeMin: 18,
-        perServingIncMin: 4,
-        nutrition: DishNutritionModel(calories: 410, proteinG: 38, carbsG: 2, fatG: 24),
-        dietaryTags: ['High Protein', 'Keto Friendly'],
-      ),
-      DishModel(
-        id: 'dish-7',
-        name: 'Tofu & Vegetable Stir-Fry',
-        category: 'BALANCED',
-        cuisine: 'Asian',
-        description: 'Crispy tofu batons with bell peppers, mushrooms and snow peas in ginger soy glaze.',
-        baseCookTimeMin: 16,
-        perServingIncMin: 3,
-        nutrition: DishNutritionModel(calories: 260, proteinG: 20, carbsG: 18, fatG: 11),
-        dietaryTags: ['Vegetarian', 'Vegan', 'High Protein'],
-      ),
-    ];
   }
 
   Future<void> _validateSelection() async {
@@ -269,7 +199,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           final errors = data['errors'] as List<dynamic>? ?? [];
           if (errors.isNotEmpty) {
             final firstErr = errors.first as Map<String, dynamic>;
-            _validationError = firstErr['message']?.toString() ?? 'Selection conflict';
+            _validationError =
+                firstErr['message']?.toString() ?? 'Selection conflict';
           }
         } else {
           _validationError = null;
@@ -319,14 +250,17 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       }
 
       // 3. Cuisines Multi-select
-      bool matchesCuisine = _selectedCuisines.isEmpty ||
+      bool matchesCuisine =
+          _selectedCuisines.isEmpty ||
           (_selectedCuisines.contains(d.cuisine ?? 'Other'));
 
       // 4. Max Cook Time
-      bool matchesCookTime = _maxCookTime == null || d.baseCookTimeMin <= _maxCookTime!;
+      bool matchesCookTime =
+          _maxCookTime == null || d.baseCookTimeMin <= _maxCookTime!;
 
       // 5. Max Calories
-      bool matchesCalories = _maxCalories == null ||
+      bool matchesCalories =
+          _maxCalories == null ||
           ((d.nutrition?.calories ?? 0) <= _maxCalories!);
 
       return matchesQuick &&
@@ -340,11 +274,16 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     if (_sortBy == 'COOK_TIME_ASC') {
       list.sort((a, b) => a.baseCookTimeMin.compareTo(b.baseCookTimeMin));
     } else if (_sortBy == 'PROTEIN_DESC') {
-      list.sort((a, b) =>
-          (b.nutrition?.proteinG ?? 0).compareTo(a.nutrition?.proteinG ?? 0));
+      list.sort(
+        (a, b) =>
+            (b.nutrition?.proteinG ?? 0).compareTo(a.nutrition?.proteinG ?? 0),
+      );
     } else if (_sortBy == 'CALORIES_ASC') {
-      list.sort((a, b) =>
-          (a.nutrition?.calories ?? 999).compareTo(b.nutrition?.calories ?? 999));
+      list.sort(
+        (a, b) => (a.nutrition?.calories ?? 999).compareTo(
+          b.nutrition?.calories ?? 999,
+        ),
+      );
     }
 
     return list;
@@ -360,15 +299,32 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     return set;
   }
 
-  void _proceedToReview() {
-    if (_cart.isEmpty) {
+  Future<void> _proceedToReview() async {
+    if (!SessionManager().isAuthenticated) {
+      Navigator.pushNamed(context, AppRoutes.login);
+      return;
+    }
+
+    if (_isValidating) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one dish to your order.')),
+        const SnackBar(
+          content: Text('Validating your selection with kitchen rules...'),
+        ),
       );
       return;
     }
 
-    if (_validationError != null && _validationError!.toLowerCase().contains('allerg')) {
+    if (_cart.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add at least one dish to your order.'),
+        ),
+      );
+      return;
+    }
+
+    if (_validationError != null &&
+        _validationError!.toLowerCase().contains('allerg')) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Allergen conflict: $_validationError'),
@@ -392,7 +348,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       };
     }).toList();
 
-    Navigator.pushNamed(
+    final result = await Navigator.pushNamed(
       context,
       AppRoutes.bookChefQuote,
       arguments: {
@@ -403,19 +359,27 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         'memberDietary': _selectedMember?.dietaryPreferences ?? [],
         'memberAllergies': _selectedMember?.allergies ?? [],
         'isHealthPassCovered': _selectedMember?.isCoveredByHealthPass ?? false,
-        'allMembers': _members.map((m) => {
-          'id': m.id,
-          'name': m.name,
-          'relationship': m.relationship,
-          'allergies': m.allergies,
-          'dietaryPreferences': m.dietaryPreferences,
-          'isCoveredByHealthPass': m.isCoveredByHealthPass,
-        }).toList(),
+        'allMembers': _members
+            .map(
+              (m) => {
+                'id': m.id,
+                'name': m.name,
+                'relationship': m.relationship,
+                'allergies': m.allergies,
+                'dietaryPreferences': m.dietaryPreferences,
+                'isCoveredByHealthPass': m.isCoveredByHealthPass,
+              },
+            )
+            .toList(),
         'occasion': _cart.selectedOccasion,
         'bookingOption': _cart.occasionCode,
         'dishes': dishInputs,
       },
     );
+    if (result == true || result == 'confirmed' || _cart.isEmpty) {
+      _cart.clear();
+      if (mounted) setState(() {});
+    }
   }
 
   void _showFilterBottomSheet() {
@@ -449,13 +413,20 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
                   // Header
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
                           'Filters & Dietary Preferences',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.slate900),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.slate900,
+                          ),
                         ),
                         TextButton(
                           onPressed: () {
@@ -468,7 +439,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                             });
                             setState(() {});
                           },
-                          child: const Text('Reset All', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Reset All',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -481,122 +458,219 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                       padding: const EdgeInsets.all(20),
                       children: [
                         // Section 1: Dietary Preference
-                        const Text('Dietary Preference', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
+                        const Text(
+                          'Dietary Preference',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.slate900,
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            _buildModalFilterChip('All', _dietaryFilter == 'ALL', () {
-                              setModalState(() => _dietaryFilter = 'ALL');
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('🥦 Vegetarian', _dietaryFilter == 'VEG', () {
-                              setModalState(() => _dietaryFilter = 'VEG');
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('🍗 Non-Vegetarian', _dietaryFilter == 'NON_VEG', () {
-                              setModalState(() => _dietaryFilter = 'NON_VEG');
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('🌱 Vegan', _dietaryFilter == 'VEGAN', () {
-                              setModalState(() => _dietaryFilter = 'VEGAN');
-                              setState(() {});
-                            }),
+                            _buildModalFilterChip(
+                              'All',
+                              _dietaryFilter == 'ALL',
+                              () {
+                                setModalState(() => _dietaryFilter = 'ALL');
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              '🥦 Vegetarian',
+                              _dietaryFilter == 'VEG',
+                              () {
+                                setModalState(() => _dietaryFilter = 'VEG');
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              '🍗 Non-Vegetarian',
+                              _dietaryFilter == 'NON_VEG',
+                              () {
+                                setModalState(() => _dietaryFilter = 'NON_VEG');
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              '🌱 Vegan',
+                              _dietaryFilter == 'VEGAN',
+                              () {
+                                setModalState(() => _dietaryFilter = 'VEGAN');
+                                setState(() {});
+                              },
+                            ),
                           ],
                         ),
                         const SizedBox(height: 20),
 
                         // Section 2: Sort By
-                        const Text('Sort By', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
+                        const Text(
+                          'Sort By',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.slate900,
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            _buildModalFilterChip('Recommended', _sortBy == 'RECOMMENDED', () {
-                              setModalState(() => _sortBy = 'RECOMMENDED');
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('⚡ Fastest Cook Time', _sortBy == 'COOK_TIME_ASC', () {
-                              setModalState(() => _sortBy = 'COOK_TIME_ASC');
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('💪 High Protein First', _sortBy == 'PROTEIN_DESC', () {
-                              setModalState(() => _sortBy = 'PROTEIN_DESC');
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('🥗 Lowest Calories', _sortBy == 'CALORIES_ASC', () {
-                              setModalState(() => _sortBy = 'CALORIES_ASC');
-                              setState(() {});
-                            }),
+                            _buildModalFilterChip(
+                              'Recommended',
+                              _sortBy == 'RECOMMENDED',
+                              () {
+                                setModalState(() => _sortBy = 'RECOMMENDED');
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              '⚡ Fastest Cook Time',
+                              _sortBy == 'COOK_TIME_ASC',
+                              () {
+                                setModalState(() => _sortBy = 'COOK_TIME_ASC');
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              '💪 High Protein First',
+                              _sortBy == 'PROTEIN_DESC',
+                              () {
+                                setModalState(() => _sortBy = 'PROTEIN_DESC');
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              '🥗 Lowest Calories',
+                              _sortBy == 'CALORIES_ASC',
+                              () {
+                                setModalState(() => _sortBy = 'CALORIES_ASC');
+                                setState(() {});
+                              },
+                            ),
                           ],
                         ),
                         const SizedBox(height: 20),
 
                         // Section 3: Cooking Time
-                        const Text('Maximum Cooking Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
+                        const Text(
+                          'Maximum Cooking Time',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.slate900,
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
                           children: [
-                            _buildModalFilterChip('Any Time', _maxCookTime == null, () {
-                              setModalState(() => _maxCookTime = null);
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('≤ 20 mins', _maxCookTime == 20, () {
-                              setModalState(() => _maxCookTime = 20);
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('≤ 30 mins', _maxCookTime == 30, () {
-                              setModalState(() => _maxCookTime = 30);
-                              setState(() {});
-                            }),
+                            _buildModalFilterChip(
+                              'Any Time',
+                              _maxCookTime == null,
+                              () {
+                                setModalState(() => _maxCookTime = null);
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              '≤ 20 mins',
+                              _maxCookTime == 20,
+                              () {
+                                setModalState(() => _maxCookTime = 20);
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              '≤ 30 mins',
+                              _maxCookTime == 30,
+                              () {
+                                setModalState(() => _maxCookTime = 30);
+                                setState(() {});
+                              },
+                            ),
                           ],
                         ),
                         const SizedBox(height: 20),
 
                         // Section 4: Calories
-                        const Text('Calorie Intake', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
+                        const Text(
+                          'Calorie Intake',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.slate900,
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
                           children: [
-                            _buildModalFilterChip('Any Calories', _maxCalories == null, () {
-                              setModalState(() => _maxCalories = null);
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('Light (≤ 350 kcal)', _maxCalories == 350, () {
-                              setModalState(() => _maxCalories = 350);
-                              setState(() {});
-                            }),
-                            _buildModalFilterChip('Moderate (≤ 500 kcal)', _maxCalories == 500, () {
-                              setModalState(() => _maxCalories = 500);
-                              setState(() {});
-                            }),
+                            _buildModalFilterChip(
+                              'Any Calories',
+                              _maxCalories == null,
+                              () {
+                                setModalState(() => _maxCalories = null);
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              'Light (≤ 350 kcal)',
+                              _maxCalories == 350,
+                              () {
+                                setModalState(() => _maxCalories = 350);
+                                setState(() {});
+                              },
+                            ),
+                            _buildModalFilterChip(
+                              'Moderate (≤ 500 kcal)',
+                              _maxCalories == 500,
+                              () {
+                                setModalState(() => _maxCalories = 500);
+                                setState(() {});
+                              },
+                            ),
                           ],
                         ),
                         const SizedBox(height: 20),
 
                         // Section 5: Cuisines
                         if (_availableCuisines.isNotEmpty) ...[
-                          const Text('Cuisines', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
+                          const Text(
+                            'Cuisines',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: AppColors.slate900,
+                            ),
+                          ),
                           const SizedBox(height: 10),
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
                             children: _availableCuisines.map((cuisine) {
-                              final isSelected = _selectedCuisines.contains(cuisine);
-                              return _buildModalFilterChip(cuisine, isSelected, () {
-                                setModalState(() {
-                                  if (isSelected) {
-                                    _selectedCuisines.remove(cuisine);
-                                  } else {
-                                    _selectedCuisines.add(cuisine);
-                                  }
-                                });
-                                setState(() {});
-                              });
+                              final isSelected = _selectedCuisines.contains(
+                                cuisine,
+                              );
+                              return _buildModalFilterChip(
+                                cuisine,
+                                isSelected,
+                                () {
+                                  setModalState(() {
+                                    if (isSelected) {
+                                      _selectedCuisines.remove(cuisine);
+                                    } else {
+                                      _selectedCuisines.add(cuisine);
+                                    }
+                                  });
+                                  setState(() {});
+                                },
+                              );
                             }).toList(),
                           ),
                           const SizedBox(height: 20),
@@ -607,10 +681,15 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
                   // Apply Button
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
                     decoration: const BoxDecoration(
                       color: Colors.white,
-                      border: Border(top: BorderSide(color: AppColors.slate200)),
+                      border: Border(
+                        top: BorderSide(color: AppColors.slate200),
+                      ),
                     ),
                     child: EbicButton(
                       label: 'Show ${_filteredDishes.length} Recipes',
@@ -626,7 +705,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     );
   }
 
-  Widget _buildModalFilterChip(String label, bool isSelected, VoidCallback onTap) {
+  Widget _buildModalFilterChip(
+    String label,
+    bool isSelected,
+    VoidCallback onTap,
+  ) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -636,27 +719,27 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         focusColor: Colors.transparent,
         splashColor: AppColors.primary.withOpacity(0.12),
         child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primarySubtle : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.slate300,
-            width: isSelected ? 1.5 : 1,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primarySubtle : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.slate300,
+              width: isSelected ? 1.5 : 1,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? AppColors.primaryDark : AppColors.slate800,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color: isSelected ? AppColors.primaryDark : AppColors.slate800,
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -672,19 +755,46 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           children: const [
             Text(
               "Chef's Menu",
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.slate900),
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: AppColors.slate900,
+              ),
             ),
             Text(
               'Certified Live Home Cooking in Your Kitchen',
-              style: TextStyle(fontSize: 11, color: AppColors.slate500, fontWeight: FontWeight.normal),
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.slate500,
+                fontWeight: FontWeight.normal,
+              ),
             ),
           ],
         ),
         actions: [
+          if (_cart.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_outlined, color: AppColors.danger, size: 22),
+              tooltip: 'Reset Selection',
+              onPressed: () {
+                _cart.clear();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Chef menu item selection cleared.'),
+                    behavior: SnackBarBehavior.floating,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: Icon(
-              _isSearchExpanded ? Icons.search_off_rounded : Icons.search_rounded,
-              color: (_isSearchExpanded || _searchQuery.isNotEmpty) ? AppColors.primary : AppColors.slate700,
+              _isSearchExpanded
+                  ? Icons.search_off_rounded
+                  : Icons.search_rounded,
+              color: (_isSearchExpanded || _searchQuery.isNotEmpty)
+                  ? AppColors.primary
+                  : AppColors.slate700,
             ),
             tooltip: 'Search Dishes',
             onPressed: () {
@@ -704,7 +814,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
               backgroundColor: AppColors.primary,
               child: Icon(
                 Icons.tune_rounded,
-                color: _activeFilterCount > 0 ? AppColors.primary : AppColors.slate700,
+                color: _activeFilterCount > 0
+                    ? AppColors.primary
+                    : AppColors.slate700,
               ),
             ),
             tooltip: 'Filters',
@@ -729,7 +841,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         color: AppColors.primarySubtle,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.restaurant_rounded, color: AppColors.primary, size: 20),
+                      child: const Icon(
+                        Icons.restaurant_rounded,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ),
@@ -742,6 +858,48 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           children: [
             Column(
               children: [
+                // Guest Notice Banner
+                if (!SessionManager().isAuthenticated)
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySubtle,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, color: AppColors.primaryDark, size: 20),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Browsing Chef Menu as Guest. Sign in to add dishes & book.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryDark,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pushNamed(context, AppRoutes.login),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            elevation: 0,
+                          ),
+                          child: const Text('Sign In', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Top Filter & Control Panel Container
                 Container(
                   color: Colors.white,
@@ -767,8 +925,6 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   ),
                 ),
 
-
-
                 // Dish list header with count & backend indicator
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
@@ -788,8 +944,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                           _sortBy == 'COOK_TIME_ASC'
                               ? '⚡ Fastest First'
                               : _sortBy == 'PROTEIN_DESC'
-                                  ? '💪 High Protein'
-                                  : '🥗 Lowest Cal',
+                              ? '💪 High Protein'
+                              : '🥗 Lowest Cal',
                           style: const TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
@@ -805,16 +961,22 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   child: _isLoading
                       ? const LoadingView(message: "Loading Chef's Menu...")
                       : _filteredDishes.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.separated(
-                              padding: EdgeInsets.fromLTRB(16, 4, 16, _cart.isEmpty ? 24 : 110),
-                              itemCount: _filteredDishes.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final dish = _filteredDishes[index];
-                                return _buildDishCard(dish);
-                              },
-                            ),
+                      ? _buildEmptyState()
+                      : ListView.separated(
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            4,
+                            16,
+                            _cart.isEmpty ? 24 : 110,
+                          ),
+                          itemCount: _filteredDishes.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final dish = _filteredDishes[index];
+                            return _buildDishCard(dish);
+                          },
+                        ),
                 ),
               ],
             ),
@@ -853,7 +1015,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 focusColor: Colors.transparent,
                 splashColor: AppColors.primary.withOpacity(0.12),
                 child: Ink(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.slate100,
                     borderRadius: BorderRadius.circular(24),
@@ -861,11 +1026,19 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.person_add_alt_1_rounded, size: 15, color: AppColors.primary),
+                      Icon(
+                        Icons.person_add_alt_1_rounded,
+                        size: 15,
+                        color: AppColors.primary,
+                      ),
                       SizedBox(width: 5),
                       Text(
                         'Add Member',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -892,7 +1065,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
               focusColor: Colors.transparent,
               splashColor: AppColors.primary.withOpacity(0.12),
               child: Ink(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected ? AppColors.primarySubtle : Colors.white,
                   borderRadius: BorderRadius.circular(24),
@@ -906,24 +1082,42 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   children: [
                     CircleAvatar(
                       radius: 12,
-                      backgroundColor: isSelected ? AppColors.primary : AppColors.slate400,
+                      backgroundColor: isSelected
+                          ? AppColors.primary
+                          : AppColors.slate400,
                       child: Text(
-                        member.name.isNotEmpty ? member.name[0].toUpperCase() : 'M',
-                        style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                        member.name.isNotEmpty
+                            ? member.name[0].toUpperCase()
+                            : 'M',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      memberDishes > 0 ? '${member.name} ($memberDishes)' : member.name,
+                      memberDishes > 0
+                          ? '${member.name} ($memberDishes)'
+                          : member.name,
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                        color: isSelected ? AppColors.primaryDark : AppColors.slate800,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.w600,
+                        color: isSelected
+                            ? AppColors.primaryDark
+                            : AppColors.slate800,
                       ),
                     ),
                     if (member.isCoveredByHealthPass) ...[
                       const SizedBox(width: 4),
-                      const Icon(Icons.verified_rounded, size: 13, color: AppColors.primary),
+                      const Icon(
+                        Icons.verified_rounded,
+                        size: 13,
+                        color: AppColors.primary,
+                      ),
                     ],
                   ],
                 ),
@@ -989,10 +1183,17 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                     children: [
                       const Text(
                         'Add Family Member',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.slate900),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                          color: AppColors.slate900,
+                        ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: AppColors.slate600),
+                        icon: const Icon(
+                          Icons.close,
+                          color: AppColors.slate600,
+                        ),
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
@@ -1016,12 +1217,22 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.primary, width: 1.8),
+                        borderSide: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.8,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text('Relationship', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.slate800)),
+                  const Text(
+                    'Relationship',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.slate800,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
@@ -1031,20 +1242,34 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         label: Text(r['label']!),
                         selected: isSel,
                         selectedColor: AppColors.primarySubtle,
-                        side: BorderSide(color: isSel ? AppColors.primary : AppColors.slate300),
+                        side: BorderSide(
+                          color: isSel ? AppColors.primary : AppColors.slate300,
+                        ),
                         labelStyle: TextStyle(
-                          color: isSel ? AppColors.primaryDark : AppColors.slate800,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          color: isSel
+                              ? AppColors.primaryDark
+                              : AppColors.slate800,
+                          fontWeight: isSel
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                           fontSize: 12,
                         ),
                         onSelected: (sel) {
-                          if (sel) setSheetState(() => selectedRelation = r['key']!);
+                          if (sel)
+                            setSheetState(() => selectedRelation = r['key']!);
                         },
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 14),
-                  const Text('Dietary Preference', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.slate800)),
+                  const Text(
+                    'Dietary Preference',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.slate800,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
@@ -1054,10 +1279,16 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         label: Text(d),
                         selected: isSel,
                         selectedColor: AppColors.primarySubtle,
-                        side: BorderSide(color: isSel ? AppColors.primary : AppColors.slate300),
+                        side: BorderSide(
+                          color: isSel ? AppColors.primary : AppColors.slate300,
+                        ),
                         labelStyle: TextStyle(
-                          color: isSel ? AppColors.primaryDark : AppColors.slate800,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          color: isSel
+                              ? AppColors.primaryDark
+                              : AppColors.slate800,
+                          fontWeight: isSel
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                           fontSize: 12,
                         ),
                         onSelected: (sel) {
@@ -1092,7 +1323,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('$name added! You can now select dishes for $name.'),
+                            content: Text(
+                              '$name added! You can now select dishes for $name.',
+                            ),
                             backgroundColor: AppColors.primary,
                           ),
                         );
@@ -1100,9 +1333,14 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
-                      child: const Text('Save & Select Dishes for Member', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        'Save & Select Dishes for Member',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                 ],
@@ -1116,11 +1354,23 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
   Widget _buildOccasionSwitcher() {
     const occasions = [
-      {'key': 'BREAKFAST', 'label': 'Breakfast', 'icon': Icons.wb_twilight_rounded},
+      {
+        'key': 'BREAKFAST',
+        'label': 'Breakfast',
+        'icon': Icons.wb_twilight_rounded,
+      },
       {'key': 'LUNCH', 'label': 'Lunch', 'icon': Icons.wb_sunny_rounded},
       {'key': 'DINNER', 'label': 'Dinner', 'icon': Icons.nightlight_round},
-      {'key': 'BREAKFAST_LUNCH', 'label': 'B + L', 'icon': Icons.set_meal_rounded},
-      {'key': 'LUNCH_DINNER', 'label': 'L + D', 'icon': Icons.soup_kitchen_rounded},
+      {
+        'key': 'BREAKFAST_LUNCH',
+        'label': 'B + L',
+        'icon': Icons.set_meal_rounded,
+      },
+      {
+        'key': 'LUNCH_DINNER',
+        'label': 'L + D',
+        'icon': Icons.soup_kitchen_rounded,
+      },
     ];
 
     return Container(
@@ -1149,7 +1399,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected ? Colors.white : Colors.transparent,
                     borderRadius: BorderRadius.circular(9),
@@ -1159,7 +1412,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                               color: Colors.black.withOpacity(0.08),
                               blurRadius: 4,
                               offset: const Offset(0, 1),
-                            )
+                            ),
                           ]
                         : null,
                   ),
@@ -1169,15 +1422,21 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                       Icon(
                         occ['icon'] as IconData,
                         size: 14,
-                        color: isSelected ? AppColors.primary : AppColors.slate600,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.slate600,
                       ),
                       const SizedBox(width: 5),
                       Text(
                         occ['label'] as String,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                          color: isSelected ? AppColors.primaryDark : AppColors.slate700,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w600,
+                          color: isSelected
+                              ? AppColors.primaryDark
+                              : AppColors.slate700,
                         ),
                       ),
                     ],
@@ -1207,15 +1466,30 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
               child: TextField(
                 controller: _searchController,
                 autofocus: _isSearchExpanded && _searchQuery.isEmpty,
-                style: const TextStyle(fontSize: 13, color: AppColors.slate900, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.slate900,
+                  fontWeight: FontWeight.w500,
+                ),
                 onChanged: _onSearchChanged,
                 decoration: InputDecoration(
                   hintText: 'Search dishes, cuisines, ingredients...',
-                  hintStyle: const TextStyle(fontSize: 12.5, color: AppColors.slate500),
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppColors.primary),
+                  hintStyle: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.slate500,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    size: 20,
+                    color: AppColors.primary,
+                  ),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear_rounded, size: 18, color: AppColors.slate600),
+                          icon: const Icon(
+                            Icons.clear_rounded,
+                            size: 18,
+                            color: AppColors.slate600,
+                          ),
                           onPressed: () {
                             _searchController.clear();
                             _onSearchChanged('');
@@ -1230,7 +1504,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           ),
           const SizedBox(width: 6),
           IconButton(
-            icon: const Icon(Icons.close_rounded, size: 20, color: AppColors.slate600),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 20,
+              color: AppColors.slate600,
+            ),
             tooltip: 'Close search',
             onPressed: () {
               setState(() {
@@ -1255,11 +1533,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       {'key': 'BALANCED', 'label': '🥗 Balanced Meals', 'isCat': true},
       {'key': 'QUICK', 'label': '⚡ Quick (<20m)', 'isCat': false},
       {'key': 'LOW_CAL', 'label': '🥗 Low Calorie', 'isCat': false},
-      ..._categories.map((c) => {
-            'key': c['code']?.toString() ?? '',
-            'label': c['name']?.toString() ?? '',
-            'isCat': true,
-          }),
+      ..._categories.map(
+        (c) => {
+          'key': c['code']?.toString() ?? '',
+          'label': c['name']?.toString() ?? '',
+          'isCat': true,
+        },
+      ),
     ];
 
     return Container(
@@ -1276,7 +1556,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           final label = item['label'] as String;
           final isCat = item['isCat'] == true;
 
-          final isSelected = isCat ? (_selectedCategory == key) : (_quickFilter == key);
+          final isSelected = isCat
+              ? (_selectedCategory == key)
+              : (_quickFilter == key);
 
           return InkWell(
             borderRadius: BorderRadius.circular(20),
@@ -1315,7 +1597,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                           color: AppColors.primary.withOpacity(0.2),
                           blurRadius: 4,
                           offset: const Offset(0, 1),
-                        )
+                        ),
                       ]
                     : null,
               ),
@@ -1358,95 +1640,127 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              // Dish Culinary Icon Box
-              Stack(
-                children: [
-                  Container(
-                    width: 86,
-                    height: 86,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: dish.isVegetarian
-                            ? [const Color(0xFFE8F5E9), const Color(0xFFC8E6C9)]
-                            : [const Color(0xFFFFF3E0), const Color(0xFFFFE0B2)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        dish.isVegetarian ? Icons.eco_rounded : Icons.restaurant_rounded,
-                        color: dish.isVegetarian ? AppColors.primary : AppColors.accent,
-                        size: 38,
-                      ),
-                    ),
-                  ),
-                  // Veg / Non-Veg Indicator
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: _buildVegIndicator(dish.isVegetarian),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 14),
-
-              // Title, Description & Tags
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Dish Culinary Icon Box
+                Stack(
                   children: [
-                    Row(
-                      children: [
-                        if (dish.cuisine != null) ...[
+                    Container(
+                      width: 86,
+                      height: 86,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: dish.isVegetarian
+                              ? [
+                                  const Color(0xFFE8F5E9),
+                                  const Color(0xFFC8E6C9),
+                                ]
+                              : [
+                                  const Color(0xFFFFF3E0),
+                                  const Color(0xFFFFE0B2),
+                                ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          dish.isVegetarian
+                              ? Icons.eco_rounded
+                              : Icons.restaurant_rounded,
+                          color: dish.isVegetarian
+                              ? AppColors.primary
+                              : AppColors.accent,
+                          size: 38,
+                        ),
+                      ),
+                    ),
+                    // Veg / Non-Veg Indicator
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: _buildVegIndicator(dish.isVegetarian),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 14),
+
+                // Title, Description & Tags
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (dish.cuisine != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.slate100,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                dish.cuisine!,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.slate700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: AppColors.slate100,
+                              color: AppColors.primarySubtle,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              dish.cuisine!,
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.slate700),
+                              dish.category.replaceAll('_', ' '),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryDark,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 6),
                         ],
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primarySubtle,
-                            borderRadius: BorderRadius.circular(6),
+                      ),
+                      const SizedBox(height: 4),
+
+                      Text(
+                        dish.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: AppColors.slate900,
+                        ),
+                      ),
+                      if (dish.description != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          dish.description!,
+                          style: const TextStyle(
+                            color: AppColors.slate600,
+                            fontSize: 12,
+                            height: 1.3,
                           ),
-                          child: Text(
-                            dish.category.replaceAll('_', ' '),
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
-                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 4),
-
-                    Text(
-                      dish.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
-                    ),
-                    if (dish.description != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        dish.description!,
-                        style: const TextStyle(color: AppColors.slate600, fontSize: 12, height: 1.3),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
 
           const SizedBox(height: 12),
           const Divider(height: 1, color: AppColors.slate200),
@@ -1465,17 +1779,28 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.timer_outlined, size: 14, color: AppColors.slate600),
+                        const Icon(
+                          Icons.timer_outlined,
+                          size: 14,
+                          color: AppColors.slate600,
+                        ),
                         const SizedBox(width: 3),
                         Text(
                           '~${dish.baseCookTimeMin}m',
-                          style: const TextStyle(fontSize: 12, color: AppColors.slate800, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.slate800,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
                     if (dish.nutrition != null) ...[
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFFF7ED),
                           borderRadius: BorderRadius.circular(4),
@@ -1483,11 +1808,18 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         ),
                         child: Text(
                           '${dish.nutrition!.calories.toInt()} kcal',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFC2410C)),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFC2410C),
+                          ),
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFEFF6FF),
                           borderRadius: BorderRadius.circular(4),
@@ -1495,7 +1827,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         ),
                         child: Text(
                           '${dish.nutrition!.proteinG.toInt()}g protein',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1D4ED8),
+                          ),
                         ),
                       ),
                     ],
@@ -1509,7 +1845,24 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   ? Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => _cart.addDishForMember(dish, activeMemberId, activeMemberName, servings: 1),
+                        onTap: () {
+                          if (!SessionManager().isAuthenticated) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please sign in to add dishes to your chef booking.'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            Navigator.pushNamed(context, AppRoutes.login);
+                            return;
+                          }
+                          _cart.addDishForMember(
+                            dish,
+                            activeMemberId,
+                            activeMemberName,
+                            servings: 1,
+                          );
+                        },
                         borderRadius: BorderRadius.circular(8),
                         highlightColor: Colors.transparent,
                         focusColor: Colors.transparent,
@@ -1534,7 +1887,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                                 ),
                               ),
                               SizedBox(width: 4),
-                              Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                              Icon(
+                                Icons.add_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
                             ],
                           ),
                         ),
@@ -1552,14 +1909,26 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                           Material(
                             color: Colors.transparent,
                             child: InkWell(
-                              onTap: () => _cart.decrementDishForMember(dish, activeMemberId),
-                              borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                              onTap: () => _cart.decrementDishForMember(
+                                dish,
+                                activeMemberId,
+                              ),
+                              borderRadius: const BorderRadius.horizontal(
+                                left: Radius.circular(8),
+                              ),
                               highlightColor: Colors.transparent,
                               focusColor: Colors.transparent,
                               splashColor: Colors.white24,
                               child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 7, vertical: 6),
-                                child: Icon(Icons.remove, size: 15, color: Colors.white),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 6,
+                                ),
+                                child: Icon(
+                                  Icons.remove,
+                                  size: 15,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -1567,20 +1936,37 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: Text(
                               '$count',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12.5),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 12.5,
+                              ),
                             ),
                           ),
                           Material(
                             color: Colors.transparent,
                             child: InkWell(
-                              onTap: () => _cart.incrementDishForMember(dish, activeMemberId, activeMemberName),
-                              borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+                              onTap: () => _cart.incrementDishForMember(
+                                dish,
+                                activeMemberId,
+                                activeMemberName,
+                              ),
+                              borderRadius: const BorderRadius.horizontal(
+                                right: Radius.circular(8),
+                              ),
                               highlightColor: Colors.transparent,
                               focusColor: Colors.transparent,
                               splashColor: Colors.white24,
                               child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 7, vertical: 6),
-                                child: Icon(Icons.add, size: 15, color: Colors.white),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 6,
+                                ),
+                                child: Icon(
+                                  Icons.add,
+                                  size: 15,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -1645,7 +2031,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
               color: AppColors.primary,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.restaurant_rounded, color: Colors.white, size: 18),
+            child: const Icon(
+              Icons.restaurant_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1655,7 +2045,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
               children: [
                 Text(
                   '$distinctCount dishes ($totalServings servings)',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Colors.white),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13.5,
+                    color: Colors.white,
+                  ),
                 ),
                 Text(
                   '~$estCookTime mins est. live cooking',
@@ -1671,12 +2065,17 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             height: 38,
             child: ElevatedButton.icon(
               onPressed: _proceedToReview,
-              icon: const Text('Review Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+              icon: Text(
+                SessionManager().isAuthenticated ? 'Review Order' : 'Sign In to Book Chef',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+              ),
               label: const Icon(Icons.arrow_forward_rounded, size: 16),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 padding: const EdgeInsets.symmetric(horizontal: 14),
               ),
             ),
@@ -1699,12 +2098,20 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 color: AppColors.slate100,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.search_off_rounded, size: 48, color: AppColors.slate500),
+              child: const Icon(
+                Icons.search_off_rounded,
+                size: 48,
+                color: AppColors.slate500,
+              ),
             ),
             const SizedBox(height: 16),
             const Text(
               'No matching recipes found',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.slate800),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: AppColors.slate800,
+              ),
             ),
             const SizedBox(height: 6),
             const Text(

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
 import '../storage/token_storage.dart';
+import '../../features/catalogue/cart_service.dart';
 
 /// Module 2 (Section 28 & 53) Authentication Session States
 enum AuthSessionStatus {
@@ -68,6 +69,7 @@ class SessionManager extends ChangeNotifier {
           email: res.data!['email'],
           avatarUrl: res.data!['avatarUrl'],
         );
+        CartService().loadFromBackend();
       } else {
         if (res.error?.code == 'ACCOUNT_RESTRICTED') {
           _status = AuthSessionStatus.restricted;
@@ -150,6 +152,7 @@ class SessionManager extends ChangeNotifier {
     _status = AuthSessionStatus.authenticated;
     _sessionMessage = null;
     notifyListeners();
+    CartService().syncToBackend();
   }
 
   /// Update user profile in session cache
@@ -188,6 +191,7 @@ class SessionManager extends ChangeNotifier {
       _currentUser = null;
       _status = AuthSessionStatus.unauthenticated;
       _sessionMessage = null;
+      CartService().clear();
       notifyListeners();
     }
   }

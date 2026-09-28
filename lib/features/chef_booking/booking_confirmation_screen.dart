@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/models/quote_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../catalogue/cart_service.dart';
 
 class BookingConfirmationScreen extends StatefulWidget {
   final Map<String, dynamic> confirmationData;
@@ -31,6 +32,8 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
   @override
   void initState() {
     super.initState();
+    // Authoritatively reset/clear cart items after order creation
+    CartService().clear();
     _previewMarkers = {
       Marker(
         markerId: const MarkerId('kitchen'),
@@ -93,17 +96,22 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
     // Live or Passed Details
     final bookingNumber = _liveOrder?['bookingNumber']?.toString() ??
         (orderId.length > 8 ? 'CB-${orderId.substring(0, 6).toUpperCase()}' : orderId);
-    final startOtp = _liveOrder?['startOtp']?.toString() ?? '4829';
+    // Real code from the backend only — never a placeholder the chef could be told
+    final startOtp = _liveOrder?['startOtp']?.toString();
     final chefName = _liveOrder?['assignedChef']?['name']?.toString() ??
         widget.confirmationData['chefName']?.toString() ??
-        'Chef Rajesh Kumar';
-    final arrivalMinutes = _liveOrder?['visitCookTimeMin']?.toString() ?? '20';
+        'Assigning your chef…';
+    // Minutes until the ETA the backend promised; null until a chef is assigned.
+    final promisedEta = DateTime.tryParse(_liveOrder?['promisedEtaAt']?.toString() ?? '');
+    final arrivalMinutes = promisedEta == null
+        ? null
+        : promisedEta.difference(DateTime.now()).inMinutes.clamp(0, 999).toString();
 
     final dishes = (widget.confirmationData['dishes'] as List<dynamic>?) ?? [];
     final quote = widget.confirmationData['quote'] as QuoteModel?;
     final addressLine = widget.confirmationData['addressLine']?.toString() ??
         widget.confirmationData['address']?['street']?.toString() ??
-        'Kitchen Location, Current Residence';
+        '';
     final memberName = widget.confirmationData['memberName']?.toString() ?? 'Self';
     final isCancelled = (_liveOrder?['status']?.toString().toUpperCase() ?? '').contains('CANCEL');
 
@@ -230,7 +238,7 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
   }
 
   // ───────────────────────── 1. Header & Start OTP ─────────────────────────
-  Widget _buildCelebrationHeader(String bookingNumber, String startOtp) {
+  Widget _buildCelebrationHeader(String bookingNumber, String? startOtp) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -339,15 +347,31 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppColors.primary.withOpacity(0.3)),
                   ),
-                  child: Text(
-                    startOtp.split('').join('   '),
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 4,
-                      color: AppColors.primaryDark,
-                    ),
-                  ),
+                  child: startOtp != null
+                      ? Text(
+                          startOtp.split('').join('   '),
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 4,
+                            color: AppColors.primaryDark,
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _isLoadingLive ? 'Fetching your code…' : 'Code appears once a chef is assigned',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryDark),
+                            ),
+                          ],
+                        ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -364,7 +388,7 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
   }
 
   // ───────────────────────── 2. Live GPS & Chef Card ─────────────────────────
-  Widget _buildLiveGpsCard(String chefName, String arrivalMinutes, String orderId, bool isCancelled) {
+  Widget _buildLiveGpsCard(String chefName, String? arrivalMinutes, String orderId, bool isCancelled) {
     return EbicCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -433,7 +457,9 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                             child: Text(
                               isCancelled
                                   ? 'Booking Cancelled • GPS Inactive'
-                                  : 'Chef arriving in ~$arrivalMinutes mins • 2.4 km',
+                                  : arrivalMinutes != null
+                                      ? 'Chef arriving in ~$arrivalMinutes mins'
+                                      : 'Chef assignment in progress',
                               maxLines: 1,
                               style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
@@ -535,7 +561,7 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                           SizedBox(width: 2),
                           Expanded(
                             child: Text(
-                              '4.9 (420+ meals) • Certified Executive Chef',
+                              'Verified EBIC Chef',
                               style: TextStyle(fontSize: 11, color: AppColors.slate600, fontWeight: FontWeight.w500),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -615,16 +641,22 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.restaurant_menu_rounded, color: AppColors.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Dishes Booked ($count)',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
-                  ),
-                ],
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.restaurant_menu_rounded, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Dishes Booked ($count)',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(

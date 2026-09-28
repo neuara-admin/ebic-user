@@ -32,10 +32,6 @@ class _ConsultationReviewScreenState extends State<ConsultationReviewScreen> {
   late Map<String, String> _memberNamesMap;
   ActiveHealthPassModel? _activePass;
 
-  String? _userHubId;
-  String? _userHubName;
-  String? _userHubCode;
-
   bool _isBooking = false;
   String? _errorMessage;
 
@@ -48,9 +44,6 @@ class _ConsultationReviewScreenState extends State<ConsultationReviewScreen> {
     _selectedMemberIds = (args['selectedMemberIds'] as List?)?.map((e) => e.toString()).toList() ?? [];
     _memberNamesMap = (args['memberNamesMap'] as Map?)?.map((k, v) => MapEntry(k.toString(), v.toString())) ?? {};
     _activePass = args['activePass'] as ActiveHealthPassModel?;
-    _userHubId = args['userHubId'] as String?;
-    _userHubName = args['userHubName'] as String?;
-    _userHubCode = args['userHubCode'] as String?;
   }
 
   @override
@@ -82,9 +75,6 @@ class _ConsultationReviewScreenState extends State<ConsultationReviewScreen> {
             : (_selectedMemberIds.length > 1
                 ? 'Family Clinical Nutrition Consultation'
                 : 'Clinical Dietitian Consultation'),
-        'hubId': _userHubId ?? _dietitian.hubId,
-        'hubName': _userHubName ?? _dietitian.hubName,
-        'hubCode': _userHubCode ?? _dietitian.hubCode,
       };
 
       final res = await _api.post<Map<String, dynamic>>(

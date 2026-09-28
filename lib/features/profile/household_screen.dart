@@ -578,6 +578,39 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
             ),
           ),
 
+          // Dietitian update banner — shown when a dietitian, not the customer,
+          // most recently updated this member's clinical data (e.g. during a
+          // consultation), so it's clear the data below didn't come from self-entry.
+          if (m.lastUpdatedByDietitian != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.emerald50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.medical_services_rounded, size: 12, color: AppColors.primaryDark),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      m.lastUpdatedByDietitian!.displayText,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryDark,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // 3. Dietary Preferences, Allergies & Medical Conditions Chips
           if (m.dietaryPreferences.isNotEmpty || m.allergies.isNotEmpty || m.medicalConditions.isNotEmpty) ...[
             const SizedBox(height: 10),

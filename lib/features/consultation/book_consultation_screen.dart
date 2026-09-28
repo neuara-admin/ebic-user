@@ -8,6 +8,7 @@ import '../../shared/models/dietitian_model.dart';
 import '../../shared/models/health_pass_model.dart';
 import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../dietitian/dietitian_profile_screen.dart';
 import '../health_pass/data/health_pass_repository.dart';
 
 /// Module 3 & 4 — Sections 17 & 35: Book Clinical Dietitian Video Consultation Screen
@@ -29,6 +30,13 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
   ActiveHealthPassModel? _activePass;
   bool _isLoadingPass = true;
 
+  /// From GET /consultations/eligibility — the same rules the backend enforces
+  /// at booking (one active consultation at a time, plan allowance, and
+  /// whether the next one is the INITIAL kickoff or a FOLLOW_UP).
+  Map<String, dynamic>? _eligibility;
+  bool get _isBlocked => _eligibility != null && _eligibility!['eligible'] == false;
+  bool get _isFollowUp => _eligibility?['kind'] == 'FOLLOW_UP';
+
   // Dietitians
   List<DietitianModel> _allDietitians = [];
   DietitianModel? _selectedDietitian;
@@ -38,8 +46,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
   final TextEditingController _dietitianSearchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String _dietitianSearchQuery = '';
-  String _selectedDietitianCategory = 'ALL'; // 'ALL', 'MY_HUB', 'METABOLIC', 'CLINICAL', 'DIABETES', 'TOP_RATED'
-  bool _isDietitianDirectoryOpen = true;
+  String _selectedDietitianCategory = 'ALL'; // 'ALL', 'METABOLIC', 'CLINICAL', 'DIABETES'
 
   // Family Members Selection (Multi-Member Support)
   List<CoveredMemberModel> _healthPassMembers = [];
@@ -53,11 +60,6 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
   List<DietitianSlotModel> _allSlots = [];
   DietitianSlotModel? _selectedSlot;
   bool _isLoadingSlots = false;
-
-  // Regional Hub Context
-  String? _userHubId;
-  String? _userHubName;
-  String? _userHubCode;
 
   String? _errorMessage;
 
@@ -88,21 +90,21 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
 
   Future<void> _initializeBooking() async {
     await Future.wait([
-      _loadCustomerHub(),
       _loadActivePass(),
       _fetchHouseholdMembers(),
+      _loadEligibility(),
     ]);
 
     await _loadDietitians();
 
-    // Pre-select dietitian ONLY if explicitly passed via arguments
+    // Pre-select the dietitian passed via arguments if there is one,
+    // otherwise default to the first dietitian in the (experience-sorted)
+    // list so timings are visible immediately without an extra tap —
+    // the customer can still switch via the horizontal selector.
     if (widget.arguments != null && widget.arguments!['dietitian'] is DietitianModel) {
       _selectedDietitian = widget.arguments!['dietitian'] as DietitianModel;
-      _isDietitianDirectoryOpen = false;
-    } else {
-      // User must choose dietitian first before dates and times are shown
-      _selectedDietitian = null;
-      _isDietitianDirectoryOpen = true;
+    } else if (_filteredDietitians.isNotEmpty) {
+      _selectedDietitian = _filteredDietitians.first;
     }
 
     if (_selectedDietitian != null) {
@@ -110,25 +112,16 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     }
   }
 
-  Future<void> _loadCustomerHub() async {
+  Future<void> _loadEligibility() async {
     try {
-      final res = await _api.get<List<dynamic>>(ApiEndpoints.addresses);
+      final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.consultationEligibility);
       if (res.success && res.data != null && mounted) {
-        final addresses = res.data!;
-        if (addresses.isNotEmpty) {
-          final primary = addresses.firstWhere(
-            (a) => a['isPrimary'] == true || a['isDefault'] == true,
-            orElse: () => addresses.first,
-          );
-          final hub = primary['hub'] as Map<String, dynamic>?;
-          setState(() {
-            _userHubId = primary['hubId']?.toString() ?? hub?['id']?.toString();
-            _userHubName = primary['hubName']?.toString() ?? hub?['name']?.toString() ?? 'Hyderabad Central Hub';
-            _userHubCode = hub?['code']?.toString() ?? 'HYD-CENTRAL';
-          });
-        }
+        setState(() => _eligibility = res.data);
       }
-    } catch (_) {}
+    } catch (_) {
+      // Booking still validates server-side; a failed pre-check just means
+      // no up-front message.
+    }
   }
 
   Future<void> _loadActivePass() async {
@@ -155,10 +148,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
 
   Future<void> _loadDietitians() async {
     try {
-      final endpoint = _userHubId != null
-          ? '${ApiEndpoints.dietitians}?hubId=$_userHubId'
-          : ApiEndpoints.dietitians;
-      final res = await _api.get<List<dynamic>>(endpoint);
+      final res = await _api.get<List<dynamic>>(ApiEndpoints.dietitians);
       if (res.success && res.data != null && mounted) {
         final list = res.data!
             .map((json) => DietitianModel.fromJson(json as Map<String, dynamic>))
@@ -247,29 +237,26 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     }).toList();
   }
 
+  // Sorted by experience (a real backend field) descending — the most
+  // defensible default ordering signal we have today. Real-time availability
+  // would be a better ordering signal, but the dietitian list endpoint
+  // doesn't include per-dietitian open slots (fetching them per card would
+  // mean N+1 network calls just to render a list), so it's not used here.
+  // See the "available-first" note left for the team alongside this change.
   List<DietitianModel> get _filteredDietitians {
-    return _allDietitians.where((d) {
+    final results = _allDietitians.where((d) {
       if (_dietitianSearchQuery.trim().isNotEmpty) {
         final q = _dietitianSearchQuery.trim().toLowerCase();
         final nameMatches = d.name.toLowerCase().contains(q);
         final specMatches = (d.specialization ?? '').toLowerCase().contains(q);
         final qualMatches = (d.qualification ?? '').toLowerCase().contains(q);
         final langMatches = (d.languages ?? '').toLowerCase().contains(q);
-        final hubMatches = (d.hubName ?? '').toLowerCase().contains(q) || (d.hubCode ?? '').toLowerCase().contains(q);
-        if (!nameMatches && !specMatches && !qualMatches && !langMatches && !hubMatches) {
+        if (!nameMatches && !specMatches && !qualMatches && !langMatches) {
           return false;
         }
       }
 
       switch (_selectedDietitianCategory) {
-        case 'MY_HUB':
-          if (_userHubId != null && d.hubId != null) {
-            return d.hubId == _userHubId;
-          }
-          if (_userHubCode != null && d.hubCode != null) {
-            return d.hubCode == _userHubCode;
-          }
-          return true;
         case 'METABOLIC':
           return (d.specialization ?? '').toLowerCase().contains('metabolic');
         case 'CLINICAL':
@@ -278,20 +265,20 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
         case 'DIABETES':
           final s = (d.specialization ?? '').toLowerCase();
           return s.contains('diabetes') || s.contains('weight') || s.contains('lifestyle');
-        case 'TOP_RATED':
-          return d.rating >= 4.8;
         default:
           return true;
       }
     }).toList();
+
+    results.sort((a, b) => (b.experienceYears ?? 0).compareTo(a.experienceYears ?? 0));
+    return results;
   }
 
   void _onDietitianChanged(DietitianModel dietitian) {
-    setState(() {
-      _selectedDietitian = dietitian;
-      _isDietitianDirectoryOpen = false;
-    });
+    if (_selectedDietitian?.id == dietitian.id) return;
+    setState(() => _selectedDietitian = dietitian);
     _loadDietitianSlots(dietitian.id);
+    _scrollToDates();
   }
 
   void _toggleMember(String id) {
@@ -329,6 +316,68 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     });
   }
 
+  Widget _buildBlockedNotice(bool isDark) {
+    final code = _eligibility?['reasonCode']?.toString();
+    final message = _eligibility?['message']?.toString() ?? 'You can\'t book a consultation right now.';
+    final existingId = _eligibility?['existingConsultationId']?.toString();
+    final title = switch (code) {
+      'CONSULTATION_CONFLICT' => 'You already have a consultation',
+      'CONSULTATION_ALLOWANCE_EXHAUSTED' => 'No consultations left',
+      'CONSULTATION_NOT_INCLUDED' => 'Not included in your plan',
+      'NO_ACTIVE_HEALTH_PASS' => 'Health Pass required',
+      _ => 'Booking unavailable',
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate800 : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: Color(0xFFB45309), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF92400E),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: TextStyle(fontSize: 12.5, height: 1.4, color: isDark ? AppColors.slate300 : const Color(0xFF78350F)),
+          ),
+          if (code == 'CONSULTATION_CONFLICT' && existingId != null) ...[
+            const SizedBox(height: 12),
+            EbicButton(
+              label: 'View My Consultation',
+              icon: Icons.event_note_rounded,
+              variant: EbicButtonVariant.outline,
+              onPressed: () => Navigator.pushNamed(
+                context,
+                AppRoutes.consultationDetail,
+                arguments: {'consultationId': existingId},
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   void _proceedToReview() {
     if (_selectedDietitian == null) {
       setState(() => _errorMessage = 'Please choose a clinical dietitian.');
@@ -352,9 +401,6 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
         'selectedMemberIds': _selectedMemberIds.toList(),
         'memberNamesMap': _memberNamesMap,
         'activePass': _activePass,
-        'userHubId': _userHubId,
-        'userHubName': _userHubName,
-        'userHubCode': _userHubCode,
       },
     );
   }
@@ -364,7 +410,10 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final isPendingKickoff = _activePass?.isConsultationPending == true;
+    final isPendingKickoff = _activePass?.isConsultationPending == true && !_isFollowUp;
+    final entitlement = _eligibility?['entitlement'] as Map<String, dynamic>?;
+    final remaining = (entitlement?['remaining'] as num?)?.toInt() ?? _activePass?.consultationsRemaining ?? 0;
+    final allocated = (entitlement?['allocated'] as num?)?.toInt();
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
@@ -413,63 +462,83 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                       const SizedBox(height: 14),
                     ],
 
-                    // 1. Consultation Kickoff Banner (When Pending)
-                    if (isPendingKickoff) ...[
+                    // 0. Booking not allowed right now (consultation already
+                    // active, allowance used up, or plan has none).
+                    if (_isBlocked) ...[
+                      _buildBlockedNotice(isDark),
+                      const SizedBox(height: 18),
+                    ]
+                    // 1. Consultation Kickoff Banner (When Pending) — matches
+                    // the "Step 1: Complete Initial Consultation" callout
+                    // shown on the Health Pass and activation screens, so the
+                    // same onboarding step reads consistently everywhere.
+                    else if (isPendingKickoff) ...[
                       Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: isDark
-                                ? [AppColors.slate800, AppColors.slate900]
-                                : [const Color(0xFFFEF3C7), const Color(0xFFFFFBEB)],
+                                ? [AppColors.slate800, AppColors.slate800.withOpacity(0.8)]
+                                : [AppColors.primarySubtle.withOpacity(0.85), Colors.white],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: const Color(0xFFF59E0B).withOpacity(0.4),
+                            color: isDark ? AppColors.primary.withOpacity(0.3) : AppColors.primaryLight.withOpacity(0.5),
+                            width: 1.5,
                           ),
                         ),
-                        child: Row(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF59E0B).withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(Icons.stars_rounded, color: Color(0xFFB45309), size: 20),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Row(
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.event_available_rounded, color: AppColors.primary, size: 20),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Row(
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          'Step 1: Consultation Kickoff',
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF92400E)),
+                                          'Step 1: Complete Initial Consultation',
+                                          style: TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark ? Colors.white : AppColors.slate900,
+                                          ),
                                         ),
                                       ),
-                                      Text(
-                                        'FREE',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF047857)),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Text(
+                                          'FREE',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5, color: Colors.white),
+                                        ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Completing your initial consultation commences your ${_activePass?.durationMonths ?? 1}-month subscription countdown. Included at ₹0 with your pass.',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: isDark ? AppColors.slate300 : const Color(0xFF78350F),
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Completing your initial consultation commences your ${_activePass?.durationMonths ?? 1}-month subscription countdown. Included at ₹0 with your pass.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? AppColors.slate300 : AppColors.slate700,
+                                height: 1.4,
                               ),
                             ),
                           ],
@@ -491,7 +560,9 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                '${_activePass!.planName} • ${_activePass!.consultationsRemaining} Consultations Remaining',
+                                _isFollowUp
+                                    ? 'Follow-up Consultation • $remaining${allocated != null ? ' of $allocated' : ''} left${_eligibility?['entitlement']?['resetsAt'] != null ? ' this month' : ''}'
+                                    : '${_activePass!.planName} • $remaining Consultations Remaining',
                                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
                               ),
                             ),
@@ -529,29 +600,15 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                     const SizedBox(height: 20),
 
                     // 3. Clinical Dietitian Selection
-                    _buildSectionHeaderWithAction(
+                    _buildSectionHeader(
                       '2. Choose Clinical Dietitian',
-                      _selectedDietitian != null
-                          ? 'Assigned specialist for this session'
-                          : 'Select your clinical nutritionist from our verified network',
-                      _selectedDietitian != null
-                          ? (_isDietitianDirectoryOpen ? 'Hide Directory' : 'Change Doctor')
-                          : (_isDietitianDirectoryOpen ? 'Showing Directory' : 'Browse All'),
-                      () {
-                        setState(() {
-                          _isDietitianDirectoryOpen = !_isDietitianDirectoryOpen;
-                        });
-                      },
+                      'Swipe to compare specialists — timings below update instantly for whoever you pick',
                     ),
                     const SizedBox(height: 10),
                     _buildDietitianSelectorSection(isDark),
                     const SizedBox(height: 22),
 
-                    if (_selectedDietitian == null) ...[
-                      // Helpful notice explaining dates and times appear after selecting a doctor
-                      _buildSelectDietitianFirstNotice(isDark),
-                      const SizedBox(height: 20),
-                    ] else ...[
+                    if (_selectedDietitian != null) ...[
                       // 4. Date Selection (Explicitly connected to Dietitian)
                       _buildSectionHeader(
                         '3. Select Appointment Date',
@@ -653,15 +710,18 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                 child: SizedBox(
                   width: double.infinity,
                   child: EbicButton(
-                    label: _selectedDietitian == null
-                        ? 'Select Clinical Dietitian'
-                        : _selectedSlot == null
-                            ? 'Select Appointment Slot'
-                            : _selectedMemberIds.isEmpty
-                                ? 'Select Attending Member'
-                                : 'Proceed to Review & Confirm',
+                    label: _isBlocked
+                        ? 'Booking Unavailable'
+                        : _selectedDietitian == null
+                            ? 'Select Clinical Dietitian'
+                            : _selectedSlot == null
+                                ? 'Select Appointment Slot'
+                                : _selectedMemberIds.isEmpty
+                                    ? 'Select Attending Member'
+                                    : 'Proceed to Review & Confirm',
                     icon: Icons.arrow_forward_rounded,
-                    onPressed: (_selectedDietitian == null ||
+                    onPressed: (_isBlocked ||
+                            _selectedDietitian == null ||
                             _selectedSlot == null ||
                             _selectedMemberIds.isEmpty)
                         ? null
@@ -813,44 +873,6 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     );
   }
 
-  Widget _buildSelectDietitianFirstNotice(bool isDark) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800.withOpacity(0.6) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0),
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.person_search_rounded, color: AppColors.primary, size: 28),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Select a Clinical Dietitian to View Schedule',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Each specialist maintains independent clinical hours. Once you choose your preferred clinical nutritionist above, their live available dates and time slots will appear here instantly.',
-            style: TextStyle(fontSize: 12, color: AppColors.slate500, height: 1.35),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDietitianSelectorSection(bool isDark) {
     if (_isLoadingDietitians) {
       return const Padding(
@@ -882,15 +904,13 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
       );
     }
 
-    // When a doctor is selected and directory is not explicitly opened, show the selected hero card
-    if (_selectedDietitian != null && !_isDietitianDirectoryOpen) {
-      return _buildSelectedDietitianHero(isDark);
-    }
-
     return _buildDietitianDirectory(isDark);
   }
 
-  Widget _buildSelectedDietitianHero(bool isDark) {
+  // Compact "assigned specialist" summary for whichever dietitian is
+  // currently selected in the horizontal strip above — qualification,
+  // specialization, live slot count, and a way to see their full profile.
+  Widget _buildSelectedDietitianDetails(bool isDark) {
     final d = _selectedDietitian!;
 
     return Container(
@@ -898,14 +918,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
       decoration: BoxDecoration(
         color: isDark ? AppColors.slate900 : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.12),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -913,31 +926,12 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 26,
-                    backgroundColor: AppColors.primaryLight.withOpacity(0.3),
-                    backgroundImage: d.photoUrl != null ? NetworkImage(d.photoUrl!) : null,
-                    onBackgroundImageError: d.photoUrl != null ? (_, __) {} : null,
-                    child: d.photoUrl == null
-                        ? const Icon(Icons.person, color: AppColors.primary, size: 28)
-                        : null,
-                  ),
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 11,
-                      height: 11,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ),
-                ],
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: AppColors.primaryLight.withOpacity(0.3),
+                backgroundImage: d.photoUrl != null ? NetworkImage(d.photoUrl!) : null,
+                onBackgroundImageError: d.photoUrl != null ? (_, __) {} : null,
+                child: d.photoUrl == null ? const Icon(Icons.person, color: AppColors.primary, size: 24) : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -955,95 +949,41 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                         ),
                         const SizedBox(width: 4),
                         const Icon(Icons.verified, color: AppColors.primary, size: 16),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD1FAE5),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: const Text(
-                            'SELECTED',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF047857),
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      d.qualification ?? 'Clinical Nutritionist (RD)',
-                      style: const TextStyle(fontSize: 12, color: AppColors.slate500),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isDark ? AppColors.slate800 : const Color(0xFFEFF6FF),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            d.specialization ?? 'Metabolic Nutrition',
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.primaryDark),
-                          ),
+                    if (d.qualification != null && d.qualification!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        d.qualification!,
+                        style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (d.specialization != null && d.specialization!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.slate800 : const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(5),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.location_on_rounded, size: 10, color: AppColors.primary),
-                              const SizedBox(width: 3),
-                              Text(
-                                d.hubName ?? 'Hyderabad Central Hub',
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.slate600),
-                              ),
-                            ],
-                          ),
+                        child: Text(
+                          d.specialization!,
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.primaryDark),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.star_rounded, color: AppColors.accent, size: 16),
-              const SizedBox(width: 3),
-              Text(
-                '${d.rating}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '• ${d.experienceYears}+ Yrs Experience',
-                style: const TextStyle(fontSize: 11.5, color: AppColors.slate500),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  '• ${d.languages ?? "English, Hindi"}',
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.slate500),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          Text(
+            _dietitianStatsLine(d),
+            style: const TextStyle(fontSize: 11.5, color: AppColors.slate500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const Divider(height: 20),
           Row(
@@ -1068,47 +1008,16 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                label: const Text('Change Doctor', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.badge_outlined, size: 16),
+                label: const Text('View Details', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 onPressed: () {
-                  setState(() {
-                    _isDietitianDirectoryOpen = true;
-                  });
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => DietitianProfileScreen(dietitian: d)),
+                  );
                 },
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF047857),
-                foregroundColor: Colors.white,
-                elevation: 1,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: _scrollToDates,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle_rounded, size: 16, color: Colors.white),
-                  SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Selected (View Available Dates Below ↓)',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, letterSpacing: 0.2),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  SizedBox(width: 6),
-                  Icon(Icons.arrow_downward_rounded, size: 14, color: Colors.white70),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -1121,43 +1030,6 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Regional Hub Banner
-        Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate800 : AppColors.primarySubtle,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.primary.withOpacity(0.25)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Regional Care Hub: ${_userHubName ?? "Hyderabad Central Hub"}',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  _userHubCode ?? 'HYD-CENTRAL',
-                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-        ),
-
         // Search Input
         Container(
           decoration: BoxDecoration(
@@ -1169,15 +1041,13 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
           ),
           child: TextField(
             controller: _dietitianSearchController,
-            onChanged: (val) {
-              setState(() => _dietitianSearchQuery = val);
-            },
+            onChanged: (val) => setState(() => _dietitianSearchQuery = val),
             style: TextStyle(
               fontSize: 13,
               color: isDark ? Colors.white : AppColors.slate900,
             ),
             decoration: InputDecoration(
-              hintText: 'Search doctor, specialty, language, or hub...',
+              hintText: 'Search doctor, specialty, or language...',
               hintStyle: const TextStyle(fontSize: 12, color: AppColors.slate400),
               prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppColors.slate400),
               suffixIcon: _dietitianSearchQuery.isNotEmpty
@@ -1203,54 +1073,19 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
             children: [
               _buildFilterChip('ALL', 'All Doctors (${_allDietitians.length})', isDark),
               const SizedBox(width: 6),
-              _buildFilterChip('MY_HUB', '📍 ${_userHubCode ?? "My Hub"}', isDark),
-              const SizedBox(width: 6),
               _buildFilterChip('METABOLIC', 'Metabolic Health', isDark),
               const SizedBox(width: 6),
               _buildFilterChip('CLINICAL', 'Clinical Nutrition', isDark),
               const SizedBox(width: 6),
               _buildFilterChip('DIABETES', 'Diabetes & Weight', isDark),
-              const SizedBox(width: 6),
-              _buildFilterChip('TOP_RATED', '⭐ 4.8+ Rated', isDark),
             ],
           ),
         ),
         const SizedBox(height: 14),
 
-        // If user already has a selected doctor and is viewing directory, show option to collapse
-        if (_selectedDietitian != null) ...[
-          InkWell(
-            onTap: () => setState(() => _isDietitianDirectoryOpen = false),
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFCBD5E1)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Currently Selected: Dr. ${_selectedDietitian!.name}',
-                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const Text(
-                    'Keep & Close ✕',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-
-        // Vertical List of Doctors
+        // Horizontal Dietitian Selector — swipe to compare, tap to select.
+        // The first (most experienced) is pre-selected by default so
+        // timings show immediately without an extra tap.
         if (filtered.isEmpty) ...[
           Container(
             width: double.infinity,
@@ -1284,7 +1119,19 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
             ),
           ),
         ] else ...[
-          ...filtered.map((d) => _buildDietitianCard(d, isDark)),
+          SizedBox(
+            height: 132,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: filtered.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) => _buildSuggestedDietitianCard(filtered[i], isDark),
+            ),
+          ),
+          if (_selectedDietitian != null) ...[
+            const SizedBox(height: 14),
+            _buildSelectedDietitianDetails(isDark),
+          ],
         ],
       ],
     );
@@ -1294,9 +1141,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     final isSelected = _selectedDietitianCategory == key;
     return InkWell(
       onTap: () {
-        setState(() {
-          _selectedDietitianCategory = key;
-        });
+        setState(() => _selectedDietitianCategory = key);
       },
       borderRadius: BorderRadius.circular(20),
       child: Container(
@@ -1324,212 +1169,61 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     );
   }
 
-  Widget _buildDietitianCard(DietitianModel d, bool isDark) {
+  Widget _buildSuggestedDietitianCard(DietitianModel d, bool isDark) {
     final isSelected = _selectedDietitian?.id == d.id;
-
     return InkWell(
       onTap: () => _onDietitianChanged(d),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
+        width: 148,
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected
               ? (isDark ? AppColors.primaryDark.withOpacity(0.25) : AppColors.primarySubtle)
               : (isDark ? AppColors.slate900 : Colors.white),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? AppColors.primary : (isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
             width: isSelected ? 2 : 1,
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.12),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Stack(
               children: [
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 26,
-                      backgroundColor: AppColors.primaryLight.withOpacity(0.3),
-                      backgroundImage: d.photoUrl != null ? NetworkImage(d.photoUrl!) : null,
-                      onBackgroundImageError: d.photoUrl != null ? (_, __) {} : null,
-                      child: d.photoUrl == null
-                          ? const Icon(Icons.person, color: AppColors.primary, size: 28)
-                          : null,
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                      ),
-                    ),
-                  ],
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppColors.primaryLight.withOpacity(0.3),
+                  backgroundImage: d.photoUrl != null ? NetworkImage(d.photoUrl!) : null,
+                  onBackgroundImageError: d.photoUrl != null ? (_, __) {} : null,
+                  child: d.photoUrl == null ? const Icon(Icons.person, color: AppColors.primary, size: 22) : null,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              'Dr. ${d.name}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.verified, color: AppColors.primary, size: 15),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        d.qualification ?? 'Clinical Nutritionist (RD)',
-                        style: const TextStyle(fontSize: 12, color: AppColors.slate500),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppColors.slate800 : const Color(0xFFEFF6FF),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Text(
-                              d.specialization ?? 'Metabolic Nutrition',
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.primaryDark),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.location_on_rounded, size: 10, color: AppColors.primary),
-                                const SizedBox(width: 2),
-                                Text(
-                                  d.hubName ?? 'Hyderabad Central Hub',
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.slate600),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                if (isSelected)
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 16),
+                    ),
                   ),
-                ),
               ],
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(Icons.star_rounded, color: AppColors.accent, size: 16),
-                const SizedBox(width: 3),
-                Text(
-                  '${d.rating}',
-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '• ${d.experienceYears}+ Yrs Experience',
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.slate500),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '• ${d.languages ?? "English, Hindi"}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.slate500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 8),
+            Text(
+              'Dr. ${d.name}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 42,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isSelected
-                      ? const Color(0xFF047857)
-                      : (isDark ? AppColors.primaryDark : AppColors.primary),
-                  foregroundColor: Colors.white,
-                  elevation: isSelected ? 1.5 : 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                onPressed: () {
-                  if (isSelected) {
-                    setState(() => _isDietitianDirectoryOpen = false);
-                    _scrollToDates();
-                  } else {
-                    _onDietitianChanged(d);
-                    _scrollToDates();
-                  }
-                },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      isSelected ? Icons.check_circle_rounded : Icons.event_available_rounded,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        isSelected
-                            ? 'Selected (View Available Dates Below ↓)'
-                            : 'Select Clinical Dietitian',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      isSelected ? Icons.arrow_downward_rounded : Icons.arrow_forward_rounded,
-                      size: 14,
-                      color: Colors.white.withOpacity(0.9),
-                    ),
-                  ],
-                ),
-              ),
+            const SizedBox(height: 2),
+            Text(
+              d.experienceYears != null ? '${d.experienceYears} yrs experience' : 'Clinical Dietitian',
+              style: TextStyle(fontSize: 10.5, color: isDark ? AppColors.slate400 : AppColors.slate500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -1876,4 +1570,13 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
       ],
     );
   }
+}
+
+/// Rating, experience and languages — only the parts the backend provided.
+String _dietitianStatsLine(DietitianModel d) {
+  return [
+    if (d.rating != null) '★ ${d.rating!.toStringAsFixed(1)}',
+    if (d.experienceYears != null) '${d.experienceYears}+ yrs experience',
+    if (d.languages != null && d.languages!.isNotEmpty) d.languages!,
+  ].join(' • ');
 }

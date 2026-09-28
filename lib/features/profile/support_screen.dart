@@ -39,34 +39,6 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
     'OTHER',
   ];
 
-  final List<Map<String, String>> _fallbackFaqs = [
-    {
-      'title': 'How does EBIC automatic chef assignment work?',
-      'category': 'CHEF',
-      'content': 'Customers do not manually select chefs. Once your quote is paid, our backend assignment engine matches the nearest qualified executive chef based on proximity, culinary tier, and live shift capacity.'
-    },
-    {
-      'title': 'What is the dynamic cooking time engine?',
-      'category': 'BOOKING',
-      'content': 'Cooking time is calculated from recipe dependencies, batch overlap, portion count, and plating rules. Times are never hard-coded or multiplied directly.'
-    },
-    {
-      'title': 'How does Health Pass differ from Chef Booking?',
-      'category': 'HEALTH_PASS',
-      'content': 'Health Pass is a separate clinical subscription owning dietitians, consultations, diet plans, and health profiles. Chef Booking is an on-demand culinary dispatch service.'
-    },
-    {
-      'title': 'How are refunds handled?',
-      'category': 'REFUND',
-      'content': 'Refund requests are automatically evaluated based on cancellation policies. Once approved, refunds are credited back to your original payment method or wallet.'
-    },
-    {
-      'title': 'How are ingredients handled?',
-      'category': 'BOOKING',
-      'content': 'Every confirmed booking generates a preparation checklist indicating customer-supplied staples and EBIC-supplied gourmet spices.'
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -105,7 +77,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
 
     if (mounted) {
       setState(() {
-        _articles = _fallbackFaqs.map((f) => Map<String, dynamic>.from(f)).toList();
+        _articles = [];
         _isLoadingArticles = false;
       });
     }
@@ -201,6 +173,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                 const SizedBox(height: 14),
 
                 DropdownButtonFormField<String>(
+                  isExpanded: true, // fit the field width; long options don't overflow
                   value: selectedCategory,
                   decoration: const InputDecoration(labelText: 'Issue Category'),
                   items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c.replaceAll('_', ' ')))).toList(),

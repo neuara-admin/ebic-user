@@ -51,6 +51,7 @@ class HealthPassRepository {
     required String planCode,
     required int durationMonths,
     required List<String> memberIds,
+    String? couponCode,
   }) async {
     final res = await _api.post<Map<String, dynamic>>(
       ApiEndpoints.healthPassQuote,
@@ -58,6 +59,8 @@ class HealthPassRepository {
         'planCode': planCode,
         'durationMonths': durationMonths,
         'memberIds': memberIds,
+        if (couponCode != null && couponCode.trim().isNotEmpty)
+          'couponCode': couponCode.trim(),
       },
     );
     if (res.success && res.data != null) {

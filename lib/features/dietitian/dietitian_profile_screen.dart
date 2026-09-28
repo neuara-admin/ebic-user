@@ -20,7 +20,6 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
   final HealthPassRepository _healthPassRepo = HealthPassRepository();
 
   ActiveHealthPassModel? _activePass;
-  bool _isLoadingPass = true;
 
   @override
   void initState() {
@@ -34,16 +33,9 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
       if (mounted) {
         setState(() {
           _activePass = pass;
-          _isLoadingPass = false;
         });
       }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _isLoadingPass = false;
-        });
-      }
-    }
+    } catch (_) {}
   }
 
   bool get _hasActiveSubscription {
@@ -244,45 +236,18 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
           const SizedBox(height: 4),
 
           // Qualification
-          Text(
-            widget.dietitian.qualification ?? 'Senior Clinical Dietitian & Registered Dietitian (RD)',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? AppColors.slate400 : AppColors.slate600,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Hub Tag
-          if (widget.dietitian.hubName != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.slate800 : AppColors.slate100,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.location_on, size: 13, color: AppColors.primary),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      widget.dietitian.hubName!,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: isDark ? AppColors.slate300 : AppColors.slate700,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+          if (widget.dietitian.qualification != null && widget.dietitian.qualification!.trim().isNotEmpty) ...[
+            Text(
+              widget.dietitian.qualification!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppColors.slate400 : AppColors.slate600,
+                fontWeight: FontWeight.w500,
               ),
             ),
+            const SizedBox(height: 8),
+          ],
         ],
       ),
     );
@@ -476,19 +441,29 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
-        children: [
-          _buildSafeDetailRow('Qualification', widget.dietitian.qualification ?? 'M.Sc Clinical Nutrition, RD', isDark),
-          _buildDetailDivider(isDark),
-          _buildSafeDetailRow('Experience', '${widget.dietitian.experienceYears} Years in Clinical Practice', isDark),
-          _buildDetailDivider(isDark),
-          _buildSafeDetailRow('Languages', widget.dietitian.languages ?? 'English, Hindi', isDark),
-          _buildDetailDivider(isDark),
-          _buildSafeDetailRow('Care Hub', widget.dietitian.hubName ?? 'Hyderabad Central Care Hub', isDark),
-          _buildDetailDivider(isDark),
-          _buildSafeDetailRow('Consultation Mode', 'HD Video Session (45 min) + Diet Chart', isDark),
-        ],
+        children: _buildCredentialRows(isDark),
       ),
     );
+  }
+
+  // Only shows rows for fields the dietitian's real profile actually has —
+  // never a plausible-sounding invented default.
+  List<Widget> _buildCredentialRows(bool isDark) {
+    final rows = <MapEntry<String, String>>[
+      if (widget.dietitian.qualification != null && widget.dietitian.qualification!.trim().isNotEmpty)
+        MapEntry('Qualification', widget.dietitian.qualification!),
+      MapEntry('Experience', '${widget.dietitian.experienceYears} Years in Clinical Practice'),
+      if (widget.dietitian.languages != null && widget.dietitian.languages!.trim().isNotEmpty)
+        MapEntry('Languages', widget.dietitian.languages!),
+      const MapEntry('Consultation Mode', 'HD Video Session (45 min) + Diet Chart'),
+    ];
+
+    final widgets = <Widget>[];
+    for (var i = 0; i < rows.length; i++) {
+      widgets.add(_buildSafeDetailRow(rows[i].key, rows[i].value, isDark));
+      if (i != rows.length - 1) widgets.add(_buildDetailDivider(isDark));
+    }
+    return widgets;
   }
 
   Widget _buildSafeDetailRow(String label, String value, bool isDark) {

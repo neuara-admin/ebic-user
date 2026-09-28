@@ -15,8 +15,6 @@ class RemoteConfigService {
     'booking_cancellation_window_minutes': 30,
     'max_retry_attempts': 3,
     'supported_booking_modes': ['INSTANT'],
-    'support_phone': '+91 8000 123 456',
-    'support_email': 'support@ebic.com',
     'addon_window_policy': 'BEFORE_CHEF_ARRIVAL',
     'maintenance_mode': false,
     'maintenance_message': 'EBIC is temporarily unavailable. We\'re working to restore the service. Please try again later.',
@@ -52,8 +50,12 @@ class RemoteConfigService {
   int get quoteExpirySeconds => (_config['quote_expiry_seconds'] as num?)?.toInt() ?? 300;
   int get maxRetryAttempts => (_config['max_retry_attempts'] as num?)?.toInt() ?? 3;
   List<String> get supportedBookingModes => List<String>.from(_config['supported_booking_modes'] ?? ['INSTANT']);
+  /// Support contacts from admin settings (General → Contact); empty until loaded.
   String get supportPhone => _config['support_phone'] as String? ?? '';
   String get supportEmail => _config['support_email'] as String? ?? '';
+
+  /// Chef booking preview video (Settings → Customer App); null hides the preview.
+  String? get chefBookingVideoUrl => _config['chef_booking_video_url'] as String?;
 
   dynamic get(String key, [dynamic defaultValue]) {
     return _config[key] ?? defaultValue;
@@ -66,7 +68,12 @@ class RemoteConfigService {
   /// Fetches runtime configuration from backend /config endpoint (Section 338).
   Future<bool> fetchRemoteConfig() async {
     try {
-      final response = await ApiClient().get(ApiEndpoints.appConfig);
+      final response = await ApiClient().get(
+        ApiEndpoints.appConfig,
+        queryParameters: {
+          'platform': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+        },
+      );
       if (response.success && response.data != null) {
         var data = response.data as Map<String, dynamic>;
         if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
@@ -100,6 +107,16 @@ class RemoteConfigService {
           FeatureFlagService().updateFlags(data['featureFlags'] as Map<String, dynamic>);
         }
 
+        // Admin-managed content & support contacts
+        if (data['content'] is Map<String, dynamic>) {
+          _config['chef_booking_video_url'] = (data['content'] as Map<String, dynamic>)['chefBookingVideoUrl'];
+        }
+        if (data['support'] is Map<String, dynamic>) {
+          final support = data['support'] as Map<String, dynamic>;
+          _config['support_phone'] = support['phone'];
+          _config['support_email'] = support['email'];
+        }
+
         // Languages
         if (data['supportedLanguages'] is List) {
           _config['supported_languages'] = List<String>.from(data['supportedLanguages']);
@@ -115,14 +132,16 @@ class RemoteConfigService {
 
   /// Evaluates whether a forced app update is required per Section 313.
   bool isForceUpdateRequired(String currentVersionString) {
-    if (forceUpdate) return true;
+    if (kDebugMode) return false;
     final current = _parseVersion(currentVersionString);
     final minRequired = _parseVersion(minimumSupportedVersion);
-    return _compareVersions(current, minRequired) < 0;
+    final isBelowMin = _compareVersions(current, minRequired) < 0;
+    return isBelowMin;
   }
 
   /// Evaluates whether an optional app update is available per Section 313.
   bool isOptionalUpdateAvailable(String currentVersionString) {
+    if (kDebugMode) return false;
     final current = _parseVersion(currentVersionString);
     final latest = _parseVersion(latestVersion);
     return _compareVersions(current, latest) < 0;

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Ebic User</string>
+	<string>Ebic</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -44,11 +44,17 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>EBIC needs camera access to take a profile photo.</string>
+	<string>EBIC needs camera access to take a profile photo and for your video consultations with your dietitian.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EBIC needs microphone access for your video consultations with your dietitian.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>EBIC needs photo library access to upload a profile photo.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>EBIC needs your location to pinpoint your kitchen address and find nearby service hubs.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>EBIC reads your steps, sleep, heart rate, and other Apple Health data to personalize your nutrition plan and share progress with your dietitian.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>EBIC does not write data to Apple Health. This permission is required by the system but is unused.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

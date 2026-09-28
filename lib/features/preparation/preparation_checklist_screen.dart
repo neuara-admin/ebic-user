@@ -4,7 +4,8 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/preparation_model.dart';
 import '../../shared/widgets/ebic_card.dart';
-import '../../shared/widgets/ebic_button.dart';
+import '../../shared/widgets/empty_state_view.dart';
+import '../../shared/widgets/error_view.dart';
 
 class PreparationChecklistScreen extends StatefulWidget {
   final String orderId;
@@ -36,7 +37,10 @@ class _PreparationChecklistScreenState extends State<PreparationChecklistScreen>
     });
 
     if (widget.orderId.trim().isEmpty) {
-      await _loadIngredientsFromOrderOrFallback();
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'This booking has no preparation checklist.';
+      });
       return;
     }
 
@@ -44,291 +48,24 @@ class _PreparationChecklistScreenState extends State<PreparationChecklistScreen>
       final res = await _api.get<Map<String, dynamic>>(
         ApiEndpoints.chefBookingPreparation(widget.orderId),
       );
-
-      if (res.success && res.data != null) {
-        final parsed = OrderPreparationChecklistModel.fromJson(res.data!);
-        if (parsed.items.isNotEmpty) {
-          setState(() {
-            _checklist = parsed;
-            _isLoading = false;
-          });
-          return;
-        }
-      }
-      // If backend returned empty items array or failed, generate dynamic dish-aware checklist!
-      await _loadIngredientsFromOrderOrFallback();
-    } catch (_) {
-      await _loadIngredientsFromOrderOrFallback();
-    }
-  }
-
-  Future<void> _loadIngredientsFromOrderOrFallback() async {
-    List<String> dishNames = [];
-
-    try {
-      if (widget.orderId.trim().isNotEmpty) {
-        // 1. Try fetching chef booking / order details to get booked dishes
-        var orderRes = await _api.get<Map<String, dynamic>>(
-          ApiEndpoints.chefBooking(widget.orderId),
-        );
-        if (!orderRes.success || orderRes.data == null) {
-          orderRes = await _api.get<Map<String, dynamic>>(
-            ApiEndpoints.orderDetail(widget.orderId),
-          );
-        }
-
-        final data = orderRes.data;
-        if (data != null) {
-        // Collect dish names from meals/items
-        final rawMeals = data['meals'] ?? data['bookingMeals'] ?? data['orderMeals'];
-        if (rawMeals is List) {
-          for (var m in rawMeals) {
-            if (m is Map) {
-              final rawDishes = m['dishes'] ?? m['items'];
-              if (rawDishes is List) {
-                for (var d in rawDishes) {
-                  if (d is Map) {
-                    final name = d['dishName'] ?? d['name'] ?? (d['dish'] is Map ? d['dish']['name'] : null);
-                    if (name != null && name.toString().trim().isNotEmpty) {
-                      dishNames.add(name.toString().trim());
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        final directDishes = data['dishes'] ?? data['items'] ?? data['orderItems'] ?? data['bookingItems'];
-        if (dishNames.isEmpty && directDishes is List) {
-          for (var d in directDishes) {
-            if (d is Map) {
-              final name = d['dishName'] ?? d['name'] ?? (d['dish'] is Map ? d['dish']['name'] : null);
-              if (name != null && name.toString().trim().isNotEmpty) {
-                dishNames.add(name.toString().trim());
-              }
-            }
-          }
-        }
-      }
-      }
-    } catch (_) {}
-
-    final List<PreparationItemModel> generatedItems = [];
-    int counter = 1;
-
-    if (dishNames.isNotEmpty) {
-      for (var dish in dishNames.take(4)) {
-        final dLower = dish.toLowerCase();
-        if (dLower.contains('biryani') || dLower.contains('pulao') || dLower.contains('rice')) {
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Aged Basmati Rice ($dish)',
-            quantity: 350,
-            unit: 'g',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: true,
-            preparationInstructions: 'Rinse twice and soak for 20 mins',
-            status: 'READY',
-          ));
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Biryani Whole Spices & Saffron',
-            quantity: 1,
-            unit: 'kit',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: false,
-            preparationInstructions: 'Keep bay leaf, cloves, and cardamom ready',
-            status: 'READY',
-          ));
-        } else if (dLower.contains('paneer') || dLower.contains('cottage')) {
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Fresh Malai Paneer ($dish)',
-            quantity: 250,
-            unit: 'g',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: true,
-            preparationInstructions: 'Dice into bite-sized cubes',
-            status: 'READY',
-          ));
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Fresh Cream & Kasuri Methi',
-            quantity: 50,
-            unit: 'g',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: true,
-            preparationRequired: false,
-            preparationInstructions: 'Keep refrigerated until chef requests',
-            status: 'PENDING',
-          ));
-        } else if (dLower.contains('chicken') || dLower.contains('mutton') || dLower.contains('fish')) {
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Fresh Washed Cut Cuts ($dish)',
-            quantity: 500,
-            unit: 'g',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: true,
-            preparationInstructions: 'Thawed, washed, and drained dry',
-            status: 'PENDING',
-          ));
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Ginger, Garlic & Curd Marination',
-            quantity: 60,
-            unit: 'g',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: true,
-            preparationInstructions: 'Crushed garlic/ginger paste ready',
-            status: 'READY',
-          ));
-        } else if (dLower.contains('dal') || dLower.contains('lentil') || dLower.contains('tadka')) {
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Yellow Toor / Moong Lentils ($dish)',
-            quantity: 200,
-            unit: 'g',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: true,
-            preparationInstructions: 'Wash thoroughly and keep drained',
-            status: 'READY',
-          ));
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Pure Desi Ghee & Cumin Seeds',
-            quantity: 40,
-            unit: 'g',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: false,
-            preparationInstructions: 'Keep near stove for final tempering',
-            status: 'READY',
-          ));
-        } else if (dLower.contains('roti') || dLower.contains('paratha') || dLower.contains('chapati')) {
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Whole Wheat Atta & Rolling Pin ($dish)',
-            quantity: 300,
-            unit: 'g',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: false,
-            preparationInstructions: 'Tawa and chakla-belan on clean counter',
-            status: 'READY',
-          ));
+      if (!mounted) return;
+      setState(() {
+        if (res.success && res.data != null) {
+          _checklist = OrderPreparationChecklistModel.fromJson(res.data!);
         } else {
-          generatedItems.add(PreparationItemModel(
-            id: 'ing-${counter++}',
-            ingredientId: 'ing-$counter',
-            name: 'Key Fresh Ingredients for $dish',
-            quantity: 1,
-            unit: 'set',
-            customerProvides: true,
-            ebicProvides: false,
-            optional: false,
-            preparationRequired: true,
-            preparationInstructions: 'Washed and kept accessible for the chef',
-            status: 'PENDING',
-          ));
+          _errorMessage = res.error?.message ??
+              res.message ??
+              'Unable to load the preparation checklist.';
         }
-      }
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Unable to load the preparation checklist.';
+      });
     }
-
-    // Always include pantry essentials so list is rich, structured, and never empty
-    generatedItems.addAll([
-      PreparationItemModel(
-        id: 'pantry-1',
-        ingredientId: 'pantry-1',
-        name: 'Cold-Pressed Cooking Oil / Pure Ghee',
-        quantity: 100,
-        unit: 'ml',
-        customerProvides: true,
-        ebicProvides: false,
-        optional: false,
-        preparationRequired: false,
-        preparationInstructions: 'Keep near the cooking stove',
-        status: 'READY',
-      ),
-      PreparationItemModel(
-        id: 'pantry-2',
-        ingredientId: 'pantry-2',
-        name: 'Fresh Chopped Onions & Garlic',
-        quantity: 150,
-        unit: 'g',
-        customerProvides: true,
-        ebicProvides: false,
-        optional: false,
-        preparationRequired: true,
-        preparationInstructions: 'Peeled or finely chopped for cooking base',
-        status: 'PENDING',
-      ),
-      PreparationItemModel(
-        id: 'pantry-3',
-        ingredientId: 'pantry-3',
-        name: 'Himalayan Pink Salt & Spice Shaker',
-        quantity: 1,
-        unit: 'set',
-        customerProvides: true,
-        ebicProvides: false,
-        optional: false,
-        preparationRequired: false,
-        preparationInstructions: 'Salt, turmeric, and chili shaker ready',
-        status: 'READY',
-      ),
-      PreparationItemModel(
-        id: 'pantry-4',
-        ingredientId: 'pantry-4',
-        name: 'Fresh Coriander & Green Chillies',
-        quantity: 30,
-        unit: 'g',
-        customerProvides: true,
-        ebicProvides: false,
-        optional: true,
-        preparationRequired: true,
-        preparationInstructions: 'Rinsed with cold water for garnishing',
-        status: 'PENDING',
-      ),
-    ]);
-
-    final readyCount = generatedItems.where((i) => i.isReady).length;
-
-    setState(() {
-      _checklist = OrderPreparationChecklistModel(
-        orderId: widget.orderId,
-        items: generatedItems,
-        readyCount: readyCount,
-        totalCount: generatedItems.length,
-        allReady: readyCount == generatedItems.length,
-        updatedAt: DateTime.now().toIso8601String(),
-      );
-      _isLoading = false;
-      _errorMessage = null;
-    });
   }
 
   Future<void> _toggleItemStatus(PreparationItemModel item) async {
@@ -481,6 +218,14 @@ class _PreparationChecklistScreenState extends State<PreparationChecklistScreen>
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+          ? ErrorView(message: _errorMessage!, onRetry: _fetchChecklist)
+          : allItems.isEmpty
+          ? const EmptyStateView(
+              icon: Icons.checklist_rounded,
+              title: 'Checklist not ready yet',
+              message: 'Your preparation checklist appears here once the kitchen confirms the ingredients for your booking.',
+            )
           : SafeArea(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -506,14 +251,14 @@ class _PreparationChecklistScreenState extends State<PreparationChecklistScreen>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
+                            Flexible(child: Text(
                               '$readyCount of $totalCount Ingredients Ready',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
-                            ),
+                            )),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                               decoration: BoxDecoration(

@@ -176,6 +176,7 @@ class _HealthProfileEditScreenState extends State<HealthProfileEditScreen> {
                           const SizedBox(height: 12),
 
                           DropdownButtonFormField<String>(
+                            isExpanded: true, // fit the field width; long options don't overflow
                             value: _selectedSex,
                             decoration: InputDecoration(
                               labelText: 'Biological Sex',

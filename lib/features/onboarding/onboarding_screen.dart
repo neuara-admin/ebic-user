@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../shared/widgets/fill_scroll_view.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/storage/local_preferences.dart';
@@ -46,13 +47,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ),
   ];
 
-  Future<void> _completeOnboarding() async {
+  Future<void> _completeOnboarding({bool skipToHome = false}) async {
     final prefs = await LocalPreferences.getInstance();
     await prefs.setOnboardingCompleted(true);
     await AnalyticsService().logOnboardingCompleted();
 
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, AppRoutes.welcome);
+    if (skipToHome) {
+      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainShell, (route) => false);
+    } else {
+      Navigator.pushReplacementNamed(context, AppRoutes.register);
+    }
   }
 
   void _nextPage() {
@@ -94,29 +99,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
-                          gradient: AppColors.primaryGradient,
                           borderRadius: BorderRadius.circular(9),
                         ),
-                        child: const Icon(Icons.restaurant_menu_rounded, color: Colors.white, size: 18),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(9),
+                          child: Image.asset(
+                            'assets/icon/app_icon.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       const Text(
-                        'EBIC',
+                        'ebic',
                         style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
                           color: Colors.white,
-                          letterSpacing: 1.2,
+                          letterSpacing: 1.0,
                         ),
                       ),
                     ],
                   ),
                   TextButton(
-                    onPressed: _completeOnboarding,
+                    onPressed: () => _completeOnboarding(skipToHome: true),
                     child: const Text(
-                      'Skip',
+                      'Skip to Home',
                       style: TextStyle(
-                        color: Colors.white60,
+                        color: Colors.white70,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
@@ -134,7 +144,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 onPageChanged: (index) => setState(() => _currentPage = index),
                 itemBuilder: (context, index) {
                   final page = _pages[index];
-                  return Padding(
+                  return FillScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 28),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -260,6 +270,43 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     label: isLast ? 'Get Started' : 'Next',
                     icon: isLast ? Icons.arrow_forward_rounded : null,
                     onPressed: _nextPage,
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: () => _completeOnboarding(skipToHome: true),
+                        child: const Text(
+                          'Explore as Guest',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Text('•', style: TextStyle(color: Colors.white38)),
+                      ),
+                      GestureDetector(
+                        onTap: () async {
+                          final prefs = await LocalPreferences.getInstance();
+                          await prefs.setOnboardingCompleted(true);
+                          if (!mounted) return;
+                          Navigator.pushNamed(context, AppRoutes.login);
+                        },
+                        child: const Text(
+                          'Login',
+                          style: TextStyle(
+                            color: AppColors.primaryLight,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

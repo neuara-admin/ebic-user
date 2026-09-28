@@ -95,6 +95,7 @@ class _AllergiesScreenState extends State<AllergiesScreen> {
               const SizedBox(height: 16),
 
               DropdownButtonFormField<String>(
+                isExpanded: true, // fit the field width; long options don't overflow
                 value: selectedAllergenId,
                 decoration: InputDecoration(
                   labelText: 'Select Allergen',
@@ -117,6 +118,7 @@ class _AllergiesScreenState extends State<AllergiesScreen> {
               const SizedBox(height: 14),
 
               DropdownButtonFormField<String>(
+                isExpanded: true, // fit the field width; long options don't overflow
                 value: selectedSeverity,
                 decoration: InputDecoration(
                   labelText: 'Severity Level',

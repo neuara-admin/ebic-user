@@ -3,60 +3,52 @@ class DietitianModel {
   final String name;
   final String? qualification;
   final String? specialization;
-  final int experienceYears;
+  final int? experienceYears;
   final String? bio;
   final String? languages;
-  final double rating;
+  /// Null until the dietitian has been rated.
+  final double? rating;
   final String? photoUrl;
   final List<DietitianSlotModel> availableSlots;
-  final String? hubId;
-  final String? hubName;
-  final String? hubCode;
 
   DietitianModel({
     required this.id,
     required this.name,
     this.qualification,
     this.specialization,
-    this.experienceYears = 5,
+    this.experienceYears,
     this.bio,
     this.languages,
-    this.rating = 4.9,
+    this.rating,
     this.photoUrl,
     this.availableSlots = const [],
-    this.hubId,
-    this.hubName,
-    this.hubCode,
   });
 
   factory DietitianModel.fromJson(Map<String, dynamic> json) {
     final user = json['user'] as Map<String, dynamic>?;
     final specs = json['specializations'];
     final specStr = json['specialization'] ??
-        (specs is List ? specs.join(', ') : specs?.toString()) ??
-        'Metabolic Health & Weight Management';
+        (specs is List && specs.isNotEmpty ? specs.join(', ') : null);
 
     final langs = json['languages'];
-    final langStr = (langs is List ? langs.join(', ') : langs?.toString()) ?? 'English, Hindi';
-    final hub = json['hub'] as Map<String, dynamic>?;
+    final langStr = langs is List
+        ? (langs.isEmpty ? null : langs.join(', '))
+        : langs?.toString();
 
     return DietitianModel(
       id: json['id'] ?? '',
-      name: user?['name'] ?? json['name'] ?? 'Clinical Dietitian',
-      qualification: json['qualification'] ?? 'M.Sc Clinical Nutrition, RD',
+      name: user?['name'] ?? json['name'] ?? '',
+      qualification: json['qualification'],
       specialization: specStr,
-      experienceYears: int.tryParse(json['experienceYears']?.toString() ?? '6') ?? 6,
-      bio: json['bio'] ?? 'Specializing in personalized preventive nutrition and clinical diet plans.',
+      experienceYears: int.tryParse(json['experienceYears']?.toString() ?? ''),
+      bio: json['bio'],
       languages: langStr,
-      rating: double.tryParse(json['rating']?.toString() ?? '4.9') ?? 4.9,
+      rating: double.tryParse(json['rating']?.toString() ?? ''),
       photoUrl: json['photoUrl'],
       availableSlots: (json['availability'] as List<dynamic>?)
               ?.map((e) => DietitianSlotModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      hubId: json['hubId'] ?? hub?['id'],
-      hubName: json['hubName'] ?? hub?['name'] ?? 'Hyderabad Central Hub',
-      hubCode: json['hubCode'] ?? hub?['code'] ?? 'HYD-CENTRAL',
     );
   }
 }

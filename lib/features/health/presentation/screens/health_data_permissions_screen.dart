@@ -100,10 +100,10 @@ class _HealthDataPermissionsScreenState extends State<HealthDataPermissionsScree
                           children: [
                             Icon(Icons.privacy_tip_outlined, color: AppColors.primary, size: 22),
                             SizedBox(width: 10),
-                            Text(
+                            Flexible(child: Text(
                               'Who Can Access My Health Data?',
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.slate900),
-                            ),
+                            )),
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -163,14 +163,14 @@ class _HealthDataPermissionsScreenState extends State<HealthDataPermissionsScree
                               children: [
                                 Row(
                                   children: [
-                                    Text(
+                                    Flexible(child: Text(
                                       perm.dataType,
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                         color: isGranted ? AppColors.slate900 : AppColors.slate600,
                                       ),
-                                    ),
+                                    )),
                                     const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

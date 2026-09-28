@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/auth/auth_service.dart';
+import '../../core/auth/session_manager.dart';
+import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/order_model.dart';
@@ -16,6 +19,8 @@ import '../health_pass/data/health_pass_repository.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/remote_config_service.dart';
 import '../system/app_update_screen.dart';
+import '../profile/widgets/kitchen_map_picker_sheet.dart';
+import 'package:geolocator/geolocator.dart';
 import 'widgets/auto_scroll_banner_carousel.dart';
 import 'widgets/health_journey_banner.dart';
 
@@ -38,6 +43,14 @@ class _HomeScreenState extends State<HomeScreen> {
   MyHealthPassModel? _healthPass;
   ConsultationModel? _upcomingConsultation;
   ConsultationModel? _completedConsultation;
+  /// Latest NO_SHOW newer than the latest delivered one — still reschedulable.
+  ConsultationModel? _missedConsultation;
+  /// Latest delivered consultation whose notes the dietitian hasn't saved yet.
+  ConsultationModel? _notesPendingConsultation;
+  /// Auto-cancelled because the dietitian never started it.
+  ConsultationModel? _dietitianMissedConsultation;
+  StreamSubscription<StandardSocketEnvelope>? _consultationSub;
+  StreamSubscription<StandardSocketEnvelope>? _notificationSub;
   OrderModel? _activeOrder;
   AddressModel? _currentAddress;
   Map<String, dynamic>? _todayMeal;
@@ -45,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isUpdateAvailable = false;
 
   // Local state for hydration quick-log
-  double _loggedWaterLiters = 2.1;
+  double _loggedWaterLiters = 0.0;
   static const double _targetWaterLiters = 3.0;
 
   @override
@@ -53,17 +66,26 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadHomeData();
     HealthPassRepository.passUpdateNotifier.addListener(_loadHomeData);
+    // Live updates: a dietitian starting/ending/completing a consultation
+    // refreshes the journey card without pull-to-refresh.
+    _consultationSub = RealtimeService().consultationUpdates.listen((_) => _loadHomeData(silent: true));
+    _notificationSub = RealtimeService().notifications.listen((_) {
+      if (mounted) setState(() => _unreadNotifications += 1);
+    });
   }
 
   @override
   void dispose() {
     HealthPassRepository.passUpdateNotifier.removeListener(_loadHomeData);
+    _consultationSub?.cancel();
+    _notificationSub?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadHomeData() async {
+  Future<void> _loadHomeData({bool silent = false}) async {
+    if (!mounted) return;
     setState(() {
-      _isLoading = true;
+      if (!silent) _isLoading = true;
       _hasPartialError = false;
       _networkErrorMessage = null;
     });
@@ -81,7 +103,10 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (_) {}
 
       // 1. Primary Home Aggregation (Section 61–63)
-      final homeRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.home);
+      final homeRes = await _api.get<Map<String, dynamic>>(
+        ApiEndpoints.home,
+        requiresAuth: false,
+      );
       if (homeRes.success && homeRes.data != null) {
         _homeData = homeRes.data;
         _unreadNotifications = (homeRes.data!['notifications']?['unreadCount'] as num?)?.toInt() ?? 0;
@@ -92,21 +117,16 @@ class _HomeScreenState extends State<HomeScreen> {
         if (homeRes.data!['today_plan'] is Map<String, dynamic>) {
           _todayMeal = homeRes.data!['today_plan'] as Map<String, dynamic>;
         }
-      } else if (_homeData == null) {
-        _networkErrorMessage = homeRes.message ?? homeRes.error?.message ?? 'Unable to connect to EBIC server. Please check your connection.';
-      }
-
-      // 2. Health Pass (Safely check active pass via /health-pass/current)
-      try {
-        final hpRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthPassCurrent);
-        if (hpRes.success && hpRes.data != null && hpRes.data!.isNotEmpty) {
-          _healthPass = MyHealthPassModel.fromJson(hpRes.data!);
-        } else {
-          _healthPass = null;
-        }
-      } catch (e) {
-        debugPrint('Health pass current query info: $e');
-        _healthPass = null;
+      } else {
+        // Safe default home data for offline / guest mode so user is never blocked from browsing
+        _homeData ??= {
+          'quick_actions': [
+            {'id': 'book_chef', 'title': 'Book Chef', 'icon': 'chef', 'route': AppRoutes.bookChef},
+            {'id': 'diet_plan', 'title': 'Diet Plan', 'icon': 'diet_plan', 'route': AppRoutes.dietPlan},
+            {'id': 'dietitian', 'title': 'Dietitian', 'icon': 'dietitian', 'route': AppRoutes.dietitian},
+            {'id': 'health', 'title': 'Health', 'icon': 'health', 'route': AppRoutes.health},
+          ],
+        };
       }
 
       List<dynamic> extractList(dynamic data) {
@@ -129,111 +149,161 @@ class _HomeScreenState extends State<HomeScreen> {
         return [];
       }
 
-      // 3. Consultations (Safely parse upcoming or active consultations)
-      try {
-        final consultRes = await _api.get<dynamic>(ApiEndpoints.consultations);
-        if (consultRes.success && consultRes.data != null) {
-          final listRaw = extractList(consultRes.data);
+      if (SessionManager().isAuthenticated) {
+        // 2. Health Pass (Safely check active pass via /health-pass/current)
+        try {
+          final hpRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.healthPassCurrent);
+          if (hpRes.success && hpRes.data != null && hpRes.data!.isNotEmpty) {
+            _healthPass = MyHealthPassModel.fromJson(hpRes.data!);
+          } else {
+            _healthPass = null;
+          }
+        } catch (e) {
+          debugPrint('Health pass current query info: $e');
+          _healthPass = null;
+        }
 
-          final list = <ConsultationModel>[];
-          for (final item in listRaw) {
-            if (item is Map) {
-              try {
-                list.add(ConsultationModel.fromJson(Map<String, dynamic>.from(item)));
-              } catch (ce) {
-                debugPrint('Skipping unparseable consultation: $ce');
+        // 3. Consultations (Safely parse upcoming or active consultations)
+        try {
+          final consultRes = await _api.get<dynamic>(ApiEndpoints.consultations);
+          if (consultRes.success && consultRes.data != null) {
+            final listRaw = extractList(consultRes.data);
+
+            final list = <ConsultationModel>[];
+            for (final item in listRaw) {
+              if (item is Map) {
+                try {
+                  list.add(ConsultationModel.fromJson(Map<String, dynamic>.from(item)));
+                } catch (ce) {
+                  debugPrint('Skipping unparseable consultation: $ce');
+                }
               }
             }
-          }
 
-          if (list.isNotEmpty) {
-            list.sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
+            if (list.isNotEmpty) {
+              list.sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
 
-            final upcomingOrActive = list.where(
-              (c) => c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING',
-            ).toList();
-            _upcomingConsultation = upcomingOrActive.isNotEmpty ? upcomingOrActive.first : null;
+              // Booked or live only. A call that has ended is *delivered*;
+              // pending notes are the dietitian's task, not an open consultation.
+              final upcomingOrActive = list.where(
+                (c) => c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING',
+              ).toList();
+              _upcomingConsultation = upcomingOrActive.isNotEmpty ? upcomingOrActive.first : null;
 
-            final completed = list.where((c) => c.status == 'COMPLETED').toList();
-            _completedConsultation = completed.isNotEmpty ? completed.first : null;
+              final completed = list.where((c) => c.status == 'COMPLETED').toList();
+              _completedConsultation = completed.isNotEmpty ? completed.first : null;
+
+              final delivered = list.where((c) => c.isDelivered).toList();
+              final latestDelivered = delivered.isNotEmpty ? delivered.first : null;
+              _notesPendingConsultation =
+                  latestDelivered != null && latestDelivered.isNotesPending ? latestDelivered : null;
+
+              bool newerThanDelivered(ConsultationModel c) =>
+                  latestDelivered == null || c.scheduledAt.isAfter(latestDelivered.scheduledAt);
+
+              final missed = list.where((c) => c.status == 'NO_SHOW').toList();
+              _missedConsultation =
+                  missed.isNotEmpty && newerThanDelivered(missed.first) ? missed.first : null;
+
+              final dietitianMissed = list.where((c) => c.isDietitianNoShow).toList();
+              _dietitianMissedConsultation =
+                  dietitianMissed.isNotEmpty && newerThanDelivered(dietitianMissed.first) ? dietitianMissed.first : null;
+            } else {
+              _upcomingConsultation = null;
+              _completedConsultation = null;
+              _missedConsultation = null;
+              _notesPendingConsultation = null;
+              _dietitianMissedConsultation = null;
+            }
           } else {
             _upcomingConsultation = null;
             _completedConsultation = null;
+            _missedConsultation = null;
+            _notesPendingConsultation = null;
+            _dietitianMissedConsultation = null;
           }
-        } else {
+        } catch (e) {
+          debugPrint('Consultations query info: $e');
           _upcomingConsultation = null;
           _completedConsultation = null;
-        }
-      } catch (e) {
-        debugPrint('Consultations query info: $e');
-        _upcomingConsultation = null;
-        _completedConsultation = null;
-      }
-
-      // 4. Active order / Chef Booking
-      try {
-        final ordersRes = await _api.get<dynamic>(
-          ApiEndpoints.orders,
-          queryParameters: {'tab': 'active', 'limit': 1},
-        );
-        List<dynamic> activeItems = [];
-        if (ordersRes.success && ordersRes.data != null) {
-          activeItems = extractList(ordersRes.data);
+          _missedConsultation = null;
+          _notesPendingConsultation = null;
+          _dietitianMissedConsultation = null;
         }
 
-        if (activeItems.isEmpty) {
-          final cbRes = await _api.get<dynamic>(
-            ApiEndpoints.chefBookings,
+        // 4. Active order / Chef Booking
+        try {
+          final ordersRes = await _api.get<dynamic>(
+            ApiEndpoints.orders,
             queryParameters: {'tab': 'active', 'limit': 1},
           );
-          if (cbRes.success && cbRes.data != null) {
-            activeItems = extractList(cbRes.data);
+          List<dynamic> activeItems = [];
+          if (ordersRes.success && ordersRes.data != null) {
+            activeItems = extractList(ordersRes.data);
           }
-        }
 
-        if (activeItems.isNotEmpty && activeItems.first is Map) {
-          _activeOrder = OrderModel.fromJson(Map<String, dynamic>.from(activeItems.first as Map));
-        } else {
+          if (activeItems.isEmpty) {
+            final cbRes = await _api.get<dynamic>(
+              ApiEndpoints.chefBookings,
+              queryParameters: {'tab': 'active', 'limit': 1},
+            );
+            if (cbRes.success && cbRes.data != null) {
+              activeItems = extractList(cbRes.data);
+            }
+          }
+
+          if (activeItems.isNotEmpty && activeItems.first is Map) {
+            _activeOrder = OrderModel.fromJson(Map<String, dynamic>.from(activeItems.first as Map));
+          } else {
+            _activeOrder = null;
+          }
+        } catch (e) {
+          debugPrint('Active order query info: $e');
           _activeOrder = null;
         }
-      } catch (e) {
-        debugPrint('Active order query info: $e');
+
+        // 5. Today's diet plan (Optional refresh from todayDietPlan endpoint)
+        try {
+          final mealRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.todayDietPlan);
+          if (mealRes.success && mealRes.data != null) {
+            _todayMeal = mealRes.data;
+          }
+        } catch (e) {
+          debugPrint('Today diet plan query info: $e');
+        }
+
+        // 6. Delivery Kitchen Address for Header (Section 29)
+        try {
+          final addrRes = await _api.get<dynamic>(ApiEndpoints.customerAddresses);
+          if (addrRes.success && addrRes.data != null) {
+            final rawAddresses = extractList(addrRes.data);
+            final addresses = <AddressModel>[];
+            for (final item in rawAddresses) {
+              if (item is Map) {
+                try {
+                  addresses.add(AddressModel.fromJson(Map<String, dynamic>.from(item)));
+                } catch (_) {}
+              }
+            }
+            if (addresses.isNotEmpty) {
+              _currentAddress = addresses.firstWhere(
+                (a) => a.isDefault,
+                orElse: () => addresses.first,
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint('Address fetch info: $e');
+        }
+      } else {
+        _healthPass = null;
+        _upcomingConsultation = null;
+        _completedConsultation = null;
         _activeOrder = null;
       }
 
-      // 5. Today's diet plan (Optional refresh from todayDietPlan endpoint)
-      try {
-        final mealRes = await _api.get<Map<String, dynamic>>(ApiEndpoints.todayDietPlan);
-        if (mealRes.success && mealRes.data != null) {
-          _todayMeal = mealRes.data;
-        }
-      } catch (e) {
-        debugPrint('Today diet plan query info: $e');
-      }
-
-      // 6. Delivery Kitchen Address for Header (Section 29)
-      try {
-        final addrRes = await _api.get<dynamic>(ApiEndpoints.customerAddresses);
-        if (addrRes.success && addrRes.data != null) {
-          final rawAddresses = extractList(addrRes.data);
-          final addresses = <AddressModel>[];
-          for (final item in rawAddresses) {
-            if (item is Map) {
-              try {
-                addresses.add(AddressModel.fromJson(Map<String, dynamic>.from(item)));
-              } catch (_) {}
-            }
-          }
-          if (addresses.isNotEmpty) {
-            _currentAddress = addresses.firstWhere(
-              (a) => a.isDefault,
-              orElse: () => addresses.first,
-            );
-          }
-        }
-      } catch (e) {
-        debugPrint('Address fetch info: $e');
-      }
+      // Auto-detect & auto-select current kitchen address (for both logged-in and guest users)
+      await _autoDetectCurrentKitchenAddress();
     } catch (e) {
       debugPrint('Home screen load exception: $e');
       if (_homeData == null) {
@@ -244,6 +314,70 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() => _isLoading = false);
     }
+  }
+
+  /// Automatically locates current GPS coordinates and reverse-geocodes to kitchen address
+  Future<void> _autoDetectCurrentKitchenAddress() async {
+    if (_currentAddress != null) return;
+
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (serviceEnabled) {
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+
+        if (permission == LocationPermission.always ||
+            permission == LocationPermission.whileInUse) {
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 4),
+            ),
+          );
+
+          final res = await _api.get<Map<String, dynamic>>(
+            ApiEndpoints.mapsReverseGeocode,
+            queryParameters: {
+              'lat': pos.latitude.toString(),
+              'lng': pos.longitude.toString(),
+            },
+            requiresAuth: false,
+          );
+
+          if (res.success && res.data != null) {
+            final formatted = res.data!['formattedAddress'] as String?;
+            final locality = res.data!['locality'] as String?;
+            final city = res.data!['city'] as String?;
+
+            if (mounted) {
+              setState(() {
+                _currentAddress = AddressModel(
+                  id: 'current_gps_kitchen',
+                  label: 'Current Kitchen',
+                  line1: formatted?.isNotEmpty == true
+                      ? formatted!
+                      : 'Current Kitchen Location',
+                  locality: locality ?? city ?? 'Current Location',
+                  city: city ?? '',
+                  state: res.data!['state']?.toString() ?? '',
+                  postalCode: res.data!['postalCode']?.toString() ?? '',
+                  lat: pos.latitude,
+                  lng: pos.longitude,
+                  isDefault: true,
+                );
+              });
+              return;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Auto-detect GPS address info: $e');
+    }
+
+    // No saved or detected address: the header prompts the user to pick one.
   }
 
   bool get _hasActiveHealthPass =>
@@ -259,6 +393,15 @@ class _HomeScreenState extends State<HomeScreen> {
         return HealthPassStage.consultationInProgress;
       }
       return HealthPassStage.consultationScheduled;
+    }
+    if (_missedConsultation != null) {
+      return HealthPassStage.consultationMissed;
+    }
+    if (_dietitianMissedConsultation != null) {
+      return HealthPassStage.consultationDietitianMissed;
+    }
+    if (_notesPendingConsultation != null) {
+      return HealthPassStage.consultationAwaitingNotes;
     }
     if (_completedConsultation != null) {
       final hasPlan = _todayMeal?['hasPlan'] == true ||
@@ -282,6 +425,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _quickLogWater() {
+    if (!SessionManager().isAuthenticated) {
+      Navigator.pushNamed(context, AppRoutes.login);
+      return;
+    }
     setState(() {
       _loggedWaterLiters = (_loggedWaterLiters + 0.25).clamp(0.0, 6.0);
     });
@@ -299,7 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (rawBanners == null || rawBanners.isEmpty) return null;
 
     try {
-      return rawBanners.map<BannerMediaItem>((b) {
+      final items = rawBanners.map<BannerMediaItem>((b) {
         final map = b as Map<String, dynamic>;
         String? colorHex = map['tagColor']?.toString();
         Color tagColor = const Color(0xFF059669);
@@ -307,6 +454,8 @@ class _HomeScreenState extends State<HomeScreen> {
           final hex = colorHex.replaceFirst('#', '');
           if (hex.length == 6) {
             tagColor = Color(int.parse('FF$hex', radix: 16));
+          } else if (hex.length == 8) {
+            tagColor = Color(int.parse(hex, radix: 16));
           }
         }
 
@@ -318,10 +467,32 @@ class _HomeScreenState extends State<HomeScreen> {
           tagColor: tagColor,
           imageUrl: map['imageUrl']?.toString() ?? '',
           isVideo: map['isVideo'] == true,
+          videoUrl: map['videoUrl']?.toString(),
           videoDuration: map['videoDuration']?.toString(),
+          autoPlay: map['autoPlay'] != false, // default true if not specified
+          isMuted: map['isMuted'] == true,    // default false if not specified
           targetRoute: map['targetRoute']?.toString(),
+          ctaText: map['ctaText']?.toString(),
+          routeArguments: map['routeArguments'] is Map<String, dynamic>
+              ? map['routeArguments'] as Map<String, dynamic>
+              : null,
         );
       }).toList();
+
+      // Sort by backend priority (lower number = first)
+      items.sort((a, b) {
+        final pa = (rawBanners.firstWhere(
+          (r) => (r as Map)['id'] == a.id,
+          orElse: () => {'priority': 999},
+        ) as Map)['priority'] as num? ?? 999;
+        final pb = (rawBanners.firstWhere(
+          (r) => (r as Map)['id'] == b.id,
+          orElse: () => {'priority': 999},
+        ) as Map)['priority'] as num? ?? 999;
+        return pa.compareTo(pb);
+      });
+
+      return items;
     } catch (_) {
       return null;
     }
@@ -330,7 +501,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final user = AuthService().currentUser;
-    final userName = user?['name'] ?? 'Friend';
+    final isAuthed = SessionManager().isAuthenticated;
+    final userName = user?['name'] ?? (isAuthed ? 'Friend' : 'Guest');
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textPrimary = isDark ? Colors.white : AppColors.slate900;
@@ -343,7 +515,34 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         foregroundColor: textPrimary,
         title: InkWell(
-          onTap: () => Navigator.pushNamed(context, AppRoutes.addresses).then((_) => _loadHomeData()),
+          onTap: () async {
+            if (isAuthed) {
+              await Navigator.pushNamed(context, AppRoutes.addresses);
+              _loadHomeData();
+            } else {
+              final picked = await KitchenMapPickerSheet.show(
+                context,
+                initialLat: _currentAddress?.lat ?? 17.4435,
+                initialLng: _currentAddress?.lng ?? 78.3772,
+              );
+              if (picked != null && mounted) {
+                setState(() {
+                  _currentAddress = AddressModel(
+                    id: 'guest_picked_kitchen',
+                    label: picked.hubName != null ? 'Kitchen (${picked.hubName})' : 'Selected Kitchen',
+                    line1: picked.formattedAddress ?? 'Selected Kitchen Location',
+                    locality: picked.locality ?? picked.city ?? 'Selected Kitchen',
+                    city: picked.city ?? '',
+                    state: picked.state ?? '',
+                    postalCode: picked.postalCode ?? '',
+                    lat: picked.lat,
+                    lng: picked.lng,
+                    isDefault: true,
+                  );
+                });
+              }
+            }
+          },
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
@@ -430,6 +629,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 12),
                       ],
 
+                      // Guest Exploration Banner (App Store / Play Store compliance)
+                      if (!isAuthed) ...[
+                        _buildGuestBanner(isDark),
+                        const SizedBox(height: 12),
+                      ],
+
                       // 2. Urgent Video Call Alert (if consultation is active right now)
                       if (_upcomingConsultation?.status == 'IN_PROGRESS') ...[
                         _buildUrgentVideoCallBanner(_upcomingConsultation!),
@@ -437,12 +642,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
 
                       // 3. Auto-Scrolling Interactive Media Carousel (TOP POSITION)
-                      RepaintBoundary(
-                        child: AutoScrollBannerCarousel(
-                          customBanners: _parseBanners(),
+                      if (_parseBanners() case final banners? when banners.isNotEmpty) ...[
+                        RepaintBoundary(
+                          child: AutoScrollBannerCarousel(banners: banners),
                         ),
-                      ),
-                      const SizedBox(height: 18),
+                        const SizedBox(height: 18),
+                      ],
 
                       // 4. Primary State-Driven Action Card (Active Chef Order OR Journey Stage Card)
                       _buildActiveServiceCard(),
@@ -461,27 +666,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       _buildQuickActionsRow(),
                       const SizedBox(height: 16),
 
-                      // Health Pass Section: Displayed prominently if customer hasn't taken a pass or current one is expired
-                      if (!_hasActiveHealthPass) ...[
-                        _buildHealthPassSection(),
-                        const SizedBox(height: 16),
-                      ],
-
                       // 8. Today's Plan & Assigned Meals Card (Only for active Health Pass members)
                       if (_hasActiveHealthPass) ...[
                         _buildTodayPlanCard(),
                         const SizedBox(height: 16),
                       ],
 
-                      // 9. Health Progress & Snapshot Card
-                      _buildHealthSnapshotCard(),
+                      // 9. Health Pass Section (Active Membership, Expired Renewal, or New User Showcase)
+                      _buildHealthPassSection(),
                       const SizedBox(height: 16),
 
-                      // 10. Health Pass Active Membership Details (when customer has an active pass)
-                      if (_hasActiveHealthPass) ...[
-                        _buildHealthPassSection(),
-                        const SizedBox(height: 16),
-                      ],
+                      // 10. Health Progress & Vitals Snapshot Card
+                      _buildHealthSnapshotCard(),
+                      const SizedBox(height: 16),
 
                       // 11. Assigned Dietitian Card (when consultation is completed)
                       if (_completedConsultation != null) ...[
@@ -507,6 +704,74 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ───────────────────────── 1. Top Update & Call Banners ─────────────────────────
+
+  Widget _buildGuestBanner(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.primary.withOpacity(0.3),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: const BoxDecoration(
+              color: AppColors.primarySubtle,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.person_outline_rounded, color: AppColors.primary, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Exploring as Guest',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Sign in anytime to book chefs & save health metrics.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: isDark ? AppColors.slate400 : AppColors.slate600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.welcome),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: const Text('Sign In', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildUpdateBanner() {
     return Container(
@@ -861,10 +1126,27 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 children: [
                   Expanded(
+                    flex: 5,
                     child: EbicButton(
-                      label: 'Book an Executive Chef',
+                      label: 'Browse Chef Menu',
+                      icon: Icons.restaurant_menu_rounded,
+                      onPressed: () => Navigator.pushNamed(context, AppRoutes.bookChefCatalogue),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 5,
+                    child: EbicButton(
+                      label: 'Book a Chef',
                       icon: Icons.soup_kitchen_rounded,
-                      onPressed: () => Navigator.pushNamed(context, AppRoutes.bookChef),
+                      variant: EbicButtonVariant.outline,
+                      onPressed: () {
+                        if (!SessionManager().isAuthenticated) {
+                          Navigator.pushNamed(context, AppRoutes.login);
+                          return;
+                        }
+                        Navigator.pushNamed(context, AppRoutes.bookChef);
+                      },
                     ),
                   ),
                 ],
@@ -1003,10 +1285,128 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
               EbicButton(
-                label: 'Re-join Video Call Now',
+                label: 'Join Video Call Now',
                 icon: Icons.video_call_rounded,
                 onPressed: () {
                   Navigator.pushNamed(context, AppRoutes.consultationVideo, arguments: {'consultation': c}).then((_) => _loadHomeData());
+                },
+              ),
+            ],
+          ),
+        );
+
+      // 4b. Video call done, dietitian finalizing notes (VIDEO_COMPLETED)
+      case HealthPassStage.consultationAwaitingNotes:
+        final c = _notesPendingConsultation!;
+        final passStart = _healthPass?.startDate;
+        return EbicCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.check_circle_outline_rounded, color: Color(0xFF0369A1), size: 18),
+                      SizedBox(width: 8),
+                      Text('CONSULTATION COMPLETED', style: TextStyle(color: Color(0xFF0369A1), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
+                    ],
+                  ),
+                  StatusBadge.info(c.isInitial ? 'KICKOFF' : 'FOLLOW-UP'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Consultation completed',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Your consultation with ${c.dietitianDisplayName}${c.callEndedAt != null ? ' on ${_formatDateTime(c.callEndedAt!)}' : ''} is complete. Your dietitian\'s notes are pending.'
+                '${c.isInitial && passStart != null ? '\nYour Health Pass started on ${DateFormat('d MMM yyyy').format(passStart)}.' : ''}',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.slate600, height: 1.35),
+              ),
+              const SizedBox(height: 16),
+              EbicButton(
+                label: 'View Consultation',
+                icon: Icons.description_outlined,
+                variant: EbicButtonVariant.outline,
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.consultationDetail, arguments: {'consultation': c}).then((_) => _loadHomeData(silent: true));
+                },
+              ),
+            ],
+          ),
+        );
+
+      // 4d. Dietitian never started the call — auto-cancelled, not counted
+      case HealthPassStage.consultationDietitianMissed:
+        final c = _dietitianMissedConsultation!;
+        return EbicCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.event_busy_rounded, color: Color(0xFFB45309), size: 18),
+                  SizedBox(width: 8),
+                  Text('CONSULTATION CANCELLED', style: TextStyle(color: Color(0xFFB45309), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${c.dietitianDisplayName} couldn\'t join',
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Your consultation on ${_formatDateTime(c.scheduledAt)} wasn\'t started by your dietitian, so it was cancelled and not counted against your plan. Please book a new time.',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.slate600, height: 1.35),
+              ),
+              const SizedBox(height: 16),
+              EbicButton(
+                label: 'Book a New Time',
+                icon: Icons.calendar_today_rounded,
+                onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _loadHomeData(silent: true)),
+              ),
+            ],
+          ),
+        );
+
+      // 4c. Consultation missed (NO_SHOW) — reschedule the same one
+      case HealthPassStage.consultationMissed:
+        final c = _missedConsultation!;
+        return EbicCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.event_busy_rounded, color: AppColors.danger, size: 18),
+                  SizedBox(width: 8),
+                  Text('CONSULTATION MISSED', style: TextStyle(color: AppColors.danger, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'You missed your ${c.isInitial ? 'kickoff' : 'follow-up'} with ${c.dietitianDisplayName}',
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'It was scheduled for ${_formatDateTime(c.scheduledAt)}. Reschedule it at no extra cost — it still counts as this booking.',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.slate600, height: 1.35),
+              ),
+              const SizedBox(height: 16),
+              EbicButton(
+                label: 'Reschedule Consultation',
+                icon: Icons.event_repeat_rounded,
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.consultationDetail, arguments: {'consultation': c}).then((_) => _loadHomeData(silent: true));
                 },
               ),
             ],
@@ -1209,95 +1609,135 @@ class _HomeScreenState extends State<HomeScreen> {
   // ───────────────────────── 3. Quick Actions Row ─────────────────────────
 
   Widget _buildQuickActionsRow() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final actions = [
+      _QuickAction(
+        emoji: '📖',
+        label: 'Chef\nMenu',
+        onTap: () => Navigator.pushNamed(context, AppRoutes.bookChefCatalogue),
+      ),
+      _QuickAction(
+        emoji: '🍳',
+        label: 'Book\nChef',
+        onTap: () {
+          if (!SessionManager().isAuthenticated) {
+            Navigator.pushNamed(context, AppRoutes.login);
+            return;
+          }
+          if (_healthPassStage == HealthPassStage.mealsAssigned) {
+            Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
+          } else {
+            Navigator.pushNamed(context, AppRoutes.bookChef);
+          }
+        },
+      ),
+      _QuickAction(
+        emoji: '🥗',
+        label: 'Diet\nPlan',
+        onTap: () {
+          if (!SessionManager().isAuthenticated) {
+            Navigator.pushNamed(context, AppRoutes.login);
+            return;
+          }
+          Navigator.pushNamed(context, AppRoutes.dietPlan);
+        },
+      ),
+      _QuickAction(
+        emoji: '👩‍⚕️',
+        label: 'Dietitian',
+        onTap: () {
+          if (!SessionManager().isAuthenticated) {
+            Navigator.pushNamed(context, AppRoutes.login);
+            return;
+          }
+          Navigator.pushNamed(context, AppRoutes.dietitian);
+        },
+      ),
+      _QuickAction(
+        emoji: '❤️',
+        label: 'Health\nHub',
+        onTap: () => widget.onNavigateTab?.call(1),
+      ),
+    ];
+
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Quick Actions',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.slate900),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : AppColors.slate900,
+          ),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickActionItem(
-                emoji: '🍳',
-                label: 'Book Chef',
-                onTap: () {
-                  if (_healthPassStage == HealthPassStage.mealsAssigned) {
-                    Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
-                  } else {
-                    Navigator.pushNamed(context, AppRoutes.bookChef);
-                  }
-                },
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildQuickActionItem(
-                emoji: '🥗',
-                label: 'Diet Plan',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.dietPlan),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildQuickActionItem(
-                emoji: '👩‍⚕️',
-                label: 'Dietitian',
-                onTap: () => Navigator.pushNamed(context, AppRoutes.dietitian),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildQuickActionItem(
-                emoji: '❤️',
-                label: 'Health Hub',
-                onTap: () => widget.onNavigateTab?.call(1),
-              ),
-            ),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (int i = 0; i < actions.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: _buildQuickActionItem(
+                    action: actions[i],
+                    isDark: isDark,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     );
   }
 
   Widget _buildQuickActionItem({
-    required String emoji,
-    required String label,
-    required VoidCallback onTap,
+    required _QuickAction action,
+    required bool isDark,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+    return GestureDetector(
+      onTap: action.onTap,
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? AppColors.slate900 : Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.slate200),
+          border: Border.all(
+            color: isDark ? AppColors.slate700 : AppColors.slate200,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
+            Text(action.emoji, style: const TextStyle(fontSize: 22)),
             const SizedBox(height: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.slate800,
+            SizedBox(
+              height: 26,
+              child: Center(
+                child: Text(
+                  action.label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppColors.slate200 : AppColors.slate800,
+                    height: 1.2,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
             ),
           ],
         ),
@@ -1424,13 +1864,28 @@ class _HomeScreenState extends State<HomeScreen> {
   // ───────────────────────── 5. Health Snapshot & Progress Card ─────────────────────────
 
   Widget _buildHealthSnapshotCard() {
-    final snapshot = _homeData?['health_snapshot'] as Map<String, dynamic>?;
-    final weight = snapshot?['weight'] ?? 68.5;
-    final steps = snapshot?['steps'] ?? 7420;
-    final sleep = snapshot?['sleep'] ?? '7.5h';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final hydrationRatio = (_loggedWaterLiters / _targetWaterLiters).clamp(0.0, 1.0);
-    final stepRatio = ((steps as num) / 10000).clamp(0.0, 1.0);
+    // 1. Guest / Not Logged In State -> Dedicated Preview Card
+    if (!SessionManager().isAuthenticated) {
+      return _buildGuestHealthSnapshotCard(isDark);
+    }
+
+    final snapshot = _homeData?['health_snapshot'] as Map<String, dynamic>?;
+    final num? weightNum = snapshot?['weight'] as num?;
+    final num? stepsNum = snapshot?['steps'] as num?;
+    final dynamic rawSleep = snapshot?['sleep'];
+    final String? sleepStr = rawSleep != null
+        ? (rawSleep.toString().endsWith('h') ? rawSleep.toString() : '${rawSleep}h')
+        : null;
+    final num? adherenceNum = (snapshot?['adherence'] ?? snapshot?['dietAdherence']) as num?;
+
+    final bool hasVitals = weightNum != null || stepsNum != null || sleepStr != null || _loggedWaterLiters > 0;
+
+    final hydrationRatio = _targetWaterLiters > 0
+        ? (_loggedWaterLiters / _targetWaterLiters).clamp(0.0, 1.0)
+        : 0.0;
+    final stepRatio = stepsNum != null ? (stepsNum / 10000).clamp(0.0, 1.0) : 0.0;
 
     return EbicCard(
       child: Column(
@@ -1440,10 +1895,17 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
-                children: const [
-                  Icon(Icons.monitor_heart_outlined, color: AppColors.primary, size: 18),
-                  SizedBox(width: 8),
-                  Text('Health Progress & Vitals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                children: [
+                  const Icon(Icons.monitor_heart_outlined, color: AppColors.primary, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Health Progress & Vitals',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: isDark ? Colors.white : AppColors.slate900,
+                    ),
+                  ),
                 ],
               ),
               TextButton(
@@ -1467,8 +1929,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       const Text('💧', style: TextStyle(fontSize: 14)),
                       const SizedBox(width: 6),
                       Text(
-                        'Daily Hydration (${_loggedWaterLiters.toStringAsFixed(1)} / ${_targetWaterLiters.toStringAsFixed(0)}L)',
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.slate800),
+                        _loggedWaterLiters > 0
+                            ? 'Daily Hydration (${_loggedWaterLiters.toStringAsFixed(1)} / ${_targetWaterLiters.toStringAsFixed(0)}L)'
+                            : 'Daily Hydration (0.0 / ${_targetWaterLiters.toStringAsFixed(0)}L)',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? AppColors.slate200 : AppColors.slate800,
+                        ),
                       ),
                     ],
                   ),
@@ -1478,7 +1946,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
+                        color: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.5) : const Color(0xFFEFF6FF),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: const Color(0xFF93C5FD)),
                       ),
@@ -1493,7 +1961,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: LinearProgressIndicator(
                   value: hydrationRatio,
                   minHeight: 7,
-                  backgroundColor: AppColors.slate200,
+                  backgroundColor: isDark ? AppColors.slate800 : AppColors.slate200,
                   valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
                 ),
               ),
@@ -1513,14 +1981,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       const Text('👟', style: TextStyle(fontSize: 14)),
                       const SizedBox(width: 6),
                       Text(
-                        'Active Steps ($steps / 10,000)',
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.slate800),
+                        stepsNum != null
+                            ? 'Active Steps ($stepsNum / 10,000)'
+                            : 'Active Steps (— / 10,000)',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? AppColors.slate200 : AppColors.slate800,
+                        ),
                       ),
                     ],
                   ),
                   Text(
-                    '${(stepRatio * 100).toInt()}%',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate600),
+                    stepsNum != null ? '${(stepRatio * 100).toInt()}%' : '0%',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? AppColors.slate400 : AppColors.slate600,
+                    ),
                   ),
                 ],
               ),
@@ -1530,7 +2008,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: LinearProgressIndicator(
                   value: stepRatio,
                   minHeight: 7,
-                  backgroundColor: AppColors.slate200,
+                  backgroundColor: isDark ? AppColors.slate800 : AppColors.slate200,
                   valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                 ),
               ),
@@ -1542,18 +2020,60 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildSnapshotMetric('Weight', '$weight kg', '🎯 Target: 65 kg'),
-              Container(width: 1, height: 36, color: AppColors.slate200),
-              _buildSnapshotMetric('Sleep', '$sleep', '😴 Restful'),
-              Container(width: 1, height: 36, color: AppColors.slate200),
-              _buildSnapshotMetric('Diet Adherence', '85%', '🥗 Verified'),
+              _buildSnapshotMetric(
+                'Weight',
+                weightNum != null ? '${weightNum.toStringAsFixed(1)} kg' : '—',
+                weightNum != null ? '🎯 Target: 65 kg' : 'Tap to log',
+                isDark: isDark,
+              ),
+              Container(width: 1, height: 36, color: isDark ? AppColors.slate800 : AppColors.slate200),
+              _buildSnapshotMetric(
+                'Sleep',
+                sleepStr ?? '—',
+                sleepStr != null ? '😴 Restful' : 'Tap to log',
+                isDark: isDark,
+              ),
+              Container(width: 1, height: 36, color: isDark ? AppColors.slate800 : AppColors.slate200),
+              _buildSnapshotMetric(
+                'Diet Adherence',
+                adherenceNum != null ? '${adherenceNum.toInt()}%' : (_hasActiveHealthPass ? '100%' : '—'),
+                adherenceNum != null ? '🥗 Verified' : (_hasActiveHealthPass ? '🥗 In Progress' : 'No plan active'),
+                isDark: isDark,
+              ),
             ],
           ),
           const SizedBox(height: 14),
+
+          if (!hasVitals) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No vitals logged yet today. Tap below or quick-log water above!',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark ? AppColors.slate300 : AppColors.slate700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           SizedBox(
             width: double.infinity,
             child: EbicButton(
-              label: 'Log Health Vitals',
+              label: hasVitals ? 'Update Health Vitals' : 'Log Health Vitals',
               icon: Icons.add_chart_rounded,
               onPressed: () => widget.onNavigateTab?.call(1),
             ),
@@ -1563,21 +2083,277 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSnapshotMetric(String label, String value, String hint) {
+  // ───────────────────────── Guest State: Health Progress & Vitals ─────────────────────────
+
+  Widget _buildGuestHealthSnapshotCard(bool isDark) {
+    return EbicCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.monitor_heart_outlined, color: AppColors.primary, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Health Progress & Vitals',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: isDark ? Colors.white : AppColors.slate900,
+                        ),
+                      ),
+                      Text(
+                        'Guest Mode • Real-time Tracking',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                ),
+                child: const Text(
+                  'SYNC OFF',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          Text(
+            'Track your daily hydration, active steps, sleep, and diet adherence seamlessly with an EBIC account.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: isDark ? AppColors.slate300 : AppColors.slate600,
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // 4 Vitals Preview Tiles
+          Row(
+            children: [
+              Expanded(
+                child: _buildGuestMetricTile(
+                  icon: '💧',
+                  title: 'Hydration',
+                  value: '—',
+                  goal: '3.0 L goal',
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildGuestMetricTile(
+                  icon: '👟',
+                  title: 'Steps',
+                  value: '—',
+                  goal: '10k goal',
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildGuestMetricTile(
+                  icon: '⚖️',
+                  title: 'Weight',
+                  value: '—',
+                  goal: 'Target log',
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildGuestMetricTile(
+                  icon: '😴',
+                  title: 'Sleep',
+                  value: '—',
+                  goal: '8h restful',
+                  isDark: isDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Informational Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF064E3B).withValues(alpha: 0.25) : const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark ? const Color(0xFF047857).withValues(alpha: 0.35) : const Color(0xFFBBF7D0),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Sign in to link fitness wearables and save your personal vitals.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? AppColors.slate200 : const Color(0xFF166534),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Action Buttons
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: EbicButton(
+                  label: 'Sign In to Log Vitals',
+                  icon: Icons.login_rounded,
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.login),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: OutlinedButton(
+                  onPressed: () => widget.onNavigateTab?.call(1),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(
+                      color: isDark ? AppColors.slate700 : AppColors.slate300,
+                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(
+                    'Health Hub',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : AppColors.slate800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuestMetricTile({
+    required String icon,
+    required String title,
+    required String value,
+    required String goal,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate800.withValues(alpha: 0.6) : AppColors.slate50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? AppColors.slate700 : AppColors.slate200,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 16)),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.slate300 : AppColors.slate700,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            goal,
+            style: TextStyle(
+              fontSize: 8.5,
+              color: isDark ? AppColors.slate500 : AppColors.slate400,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSnapshotMetric(String label, String value, String hint, {bool isDark = false}) {
     return Column(
       children: [
         Text(
           value,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.slate900),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : AppColors.slate900,
+          ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: AppColors.slate500, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? AppColors.slate400 : AppColors.slate500,
+            fontWeight: FontWeight.w500,
+          ),
         ),
         Text(
           hint,
-          style: const TextStyle(fontSize: 9.5, color: AppColors.slate400),
+          style: TextStyle(
+            fontSize: 9.5,
+            color: isDark ? AppColors.slate500 : AppColors.slate400,
+          ),
         ),
       ],
     );
@@ -2230,3 +3006,17 @@ class _HomeScreenState extends State<HomeScreen> {
     return DateFormat('dd MMM • hh:mm a').format(dt);
   }
 }
+
+/// Lightweight data holder for quick-action tiles on the home screen.
+class _QuickAction {
+  final String emoji;
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickAction({
+    required this.emoji,
+    required this.label,
+    required this.onTap,
+  });
+}
+

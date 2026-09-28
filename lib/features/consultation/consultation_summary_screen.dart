@@ -48,10 +48,12 @@ class ConsultationSummaryScreen extends StatelessWidget {
                                 consultation.dietitianName,
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
-                              Text(
-                                consultation.dietitianSpecialization ?? 'Clinical Dietitian',
-                                style: const TextStyle(color: AppColors.slate500, fontSize: 12),
-                              ),
+                              if (consultation.dietitianSpecialization != null &&
+                                  consultation.dietitianSpecialization!.trim().isNotEmpty)
+                                Text(
+                                  consultation.dietitianSpecialization!,
+                                  style: const TextStyle(color: AppColors.slate500, fontSize: 12),
+                                ),
                             ],
                           ),
                         ),

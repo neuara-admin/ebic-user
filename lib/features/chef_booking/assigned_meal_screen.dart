@@ -45,58 +45,6 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
   Map<String, dynamic>? _hpEntitlements;
   bool _isHpChecking = false;
 
-  // Curated fallback dishes in case a member has no diet plan assigned yet
-  final List<Map<String, dynamic>> _fallbackDishes = [
-    {
-      'dishId': 'dish-grilled-chicken',
-      'name': 'Herb Grilled Chicken Breast',
-      'portion': '150g • 34g Protein',
-      'cookTimeMin': 25,
-      'calories': 285,
-      'proteinG': 34,
-      'carbsG': 2,
-      'fatG': 6,
-      'tags': ['High Protein', 'Gluten-Free'],
-      'occasion': 'LUNCH',
-    },
-    {
-      'dishId': 'dish-lentil-veg',
-      'name': 'Slow-Cooked Lentil & Veg Bowl',
-      'portion': '200g • High Fibre',
-      'cookTimeMin': 20,
-      'calories': 240,
-      'proteinG': 14,
-      'carbsG': 36,
-      'fatG': 3,
-      'tags': ['Vegetarian', 'High Fibre'],
-      'occasion': 'LUNCH',
-    },
-    {
-      'dishId': 'dish-balanced-thali',
-      'name': 'Balanced Home Thali (Paneer & Rice)',
-      'portion': 'Paneer + Basmati Rice',
-      'cookTimeMin': 35,
-      'calories': 480,
-      'proteinG': 22,
-      'carbsG': 58,
-      'fatG': 14,
-      'tags': ['Vegetarian', 'Balanced'],
-      'occasion': 'DINNER',
-    },
-    {
-      'dishId': 'dish-scrambled-eggs',
-      'name': 'Herbed Egg White Scramble & Toast',
-      'portion': '3 Eggs • 20g Protein',
-      'cookTimeMin': 15,
-      'calories': 220,
-      'proteinG': 20,
-      'carbsG': 18,
-      'fatG': 5,
-      'tags': ['High Protein', 'Breakfast'],
-      'occasion': 'BREAKFAST',
-    },
-  ];
-
   static const List<Map<String, dynamic>> _occasionOptions = [
     {
       'id': 'BREAKFAST',
@@ -153,14 +101,21 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
 
     try {
       // 1. Fetch Household members
-      final membersRes = await _api.get<List<dynamic>>(ApiEndpoints.householdMembers);
+      final membersRes = await _api.get<List<dynamic>>(
+        ApiEndpoints.householdMembers,
+      );
       if (membersRes.success && membersRes.data != null) {
         _members = membersRes.data!
-            .map((m) => HouseholdMemberModel.fromJson(m as Map<String, dynamic>))
+            .map(
+              (m) => HouseholdMemberModel.fromJson(m as Map<String, dynamic>),
+            )
             .toList();
         if (_members.isNotEmpty) {
           // Default: select the primary self member
-          final selfMember = _members.firstWhere((m) => m.isSelf, orElse: () => _members.first);
+          final selfMember = _members.firstWhere(
+            (m) => m.isSelf,
+            orElse: () => _members.first,
+          );
           _selectedMemberIds.add(selfMember.id);
         }
       }
@@ -185,14 +140,17 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
   Future<void> _fetchAddressesInternal() async {
     setState(() => _isLoadingAddresses = true);
     try {
-      final addrRes = await _api.get<List<dynamic>>(ApiEndpoints.customerAddresses);
+      final addrRes = await _api.get<List<dynamic>>(
+        ApiEndpoints.customerAddresses,
+      );
       if (addrRes.success && addrRes.data != null) {
         _addresses = addrRes.data!
             .map((a) => AddressModel.fromJson(a as Map<String, dynamic>))
             .toList();
 
         if (_addresses.isNotEmpty) {
-          if (_selectedAddress == null || !_addresses.any((a) => a.id == _selectedAddress!.id)) {
+          if (_selectedAddress == null ||
+              !_addresses.any((a) => a.id == _selectedAddress!.id)) {
             _selectedAddress = _addresses.firstWhere(
               (a) => a.isDefault,
               orElse: () => _addresses.first,
@@ -254,11 +212,14 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
   bool _isMealMatchingOccasion(String mealOccasion) {
     switch (_selectedOccasion) {
       case 'BREAKFAST':
-        return mealOccasion.contains('BREAKFAST') || mealOccasion.contains('MORNING');
+        return mealOccasion.contains('BREAKFAST') ||
+            mealOccasion.contains('MORNING');
       case 'LUNCH':
-        return mealOccasion.contains('LUNCH') || mealOccasion.contains('MID_DAY');
+        return mealOccasion.contains('LUNCH') ||
+            mealOccasion.contains('MID_DAY');
       case 'DINNER':
-        return mealOccasion.contains('DINNER') || mealOccasion.contains('EVENING');
+        return mealOccasion.contains('DINNER') ||
+            mealOccasion.contains('EVENING');
       case 'BREAKFAST_LUNCH':
         return mealOccasion.contains('BREAKFAST') ||
             mealOccasion.contains('LUNCH') ||
@@ -358,10 +319,17 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                     children: [
                       const Text(
                         'Select Service Kitchen',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate900),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.slate900,
+                        ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: AppColors.slate500),
+                        icon: const Icon(
+                          Icons.close,
+                          color: AppColors.slate500,
+                        ),
                         onPressed: () => Navigator.pop(modalCtx),
                       ),
                     ],
@@ -387,17 +355,28 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                       ),
                       child: Column(
                         children: [
-                          const Icon(Icons.location_off_outlined, size: 36, color: AppColors.slate400),
+                          const Icon(
+                            Icons.location_off_outlined,
+                            size: 36,
+                            color: AppColors.slate400,
+                          ),
                           const SizedBox(height: 10),
                           const Text(
                             'No saved kitchens found',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate800),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: AppColors.slate800,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           const Text(
                             'Add your delivery kitchen address to proceed with booking.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: AppColors.slate500),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.slate500,
+                            ),
                           ),
                         ],
                       ),
@@ -421,10 +400,14 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: isSelected ? AppColors.primarySubtle : AppColors.slate50,
+                                color: isSelected
+                                    ? AppColors.primarySubtle
+                                    : AppColors.slate50,
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: isSelected ? AppColors.primary : AppColors.slate200,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : AppColors.slate200,
                                   width: isSelected ? 1.5 : 1,
                                 ),
                               ),
@@ -432,13 +415,16 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                 children: [
                                   Icon(
                                     addr.kitchenIcon,
-                                    color: isSelected ? AppColors.primary : AppColors.slate600,
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.slate600,
                                     size: 24,
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
@@ -447,16 +433,23 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                               style: TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 14,
-                                                color: isSelected ? AppColors.primaryDark : AppColors.slate900,
+                                                color: isSelected
+                                                    ? AppColors.primaryDark
+                                                    : AppColors.slate900,
                                               ),
                                             ),
                                             if (addr.isDefault) ...[
                                               const SizedBox(width: 6),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: AppColors.emerald50,
-                                                  borderRadius: BorderRadius.circular(4),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
                                                 ),
                                                 child: const Text(
                                                   'PRIMARY',
@@ -473,7 +466,10 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                         const SizedBox(height: 2),
                                         Text(
                                           addr.formattedAddress,
-                                          style: const TextStyle(fontSize: 12, color: AppColors.slate600),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.slate600,
+                                          ),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -482,8 +478,12 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   Icon(
-                                    isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                                    color: isSelected ? AppColors.primary : AppColors.slate400,
+                                    isSelected
+                                        ? Icons.radio_button_checked
+                                        : Icons.radio_button_off,
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.slate400,
                                     size: 20,
                                   ),
                                 ],
@@ -499,20 +499,31 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () async {
                         Navigator.pop(modalCtx);
-                        final added = await Navigator.pushNamed(context, AppRoutes.addressForm);
+                        final added = await Navigator.pushNamed(
+                          context,
+                          AppRoutes.addressForm,
+                        );
                         if (added == true) {
                           await _fetchAddressesInternal();
                         }
                       },
-                      icon: const Icon(Icons.add_location_alt_outlined, color: AppColors.primary),
+                      icon: const Icon(
+                        Icons.add_location_alt_outlined,
+                        color: AppColors.primary,
+                      ),
                       label: const Text(
                         'Add New Kitchen Address',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
                       ),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: AppColors.primary),
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -556,43 +567,24 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
       }
     }
 
-    // If no dishes were added from diet plans (or member has no plan), add selected fallback dishes
-    if (result.isEmpty) {
-      for (final f in _fallbackDishes) {
-        if (_isMealMatchingOccasion(f['occasion'])) {
-          result.add({
-            'dishId': f['dishId'],
-            'name': f['name'],
-            'servings': 1,
-            'baseCookTimeMin': f['cookTimeMin'],
-          });
-        }
-      }
-      // Guarantee at least 1 dish
-      if (result.isEmpty && _fallbackDishes.isNotEmpty) {
-        result.add({
-          'dishId': _fallbackDishes[0]['dishId'],
-          'name': _fallbackDishes[0]['name'],
-          'servings': 1,
-          'baseCookTimeMin': _fallbackDishes[0]['cookTimeMin'],
-        });
-      }
-    }
-
     return result;
   }
 
-  void _proceedToQuote() {
+  Future<void> _proceedToQuote() async {
     if (_selectedMemberIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one household member.')),
+        const SnackBar(
+          content: Text('Please select at least one household member.'),
+        ),
       );
       return;
     }
 
     if (_selectedAddress == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select or add a service kitchen address.')),
+        const SnackBar(
+          content: Text('Please select or add a service kitchen address.'),
+        ),
       );
       return;
     }
@@ -600,17 +592,23 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
     final dishesToCook = _collectSelectedDishesForBooking();
     if (dishesToCook.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one meal dish to prepare.')),
+        const SnackBar(
+          content: Text('Please select at least one meal dish to prepare.'),
+        ),
       );
       return;
     }
 
-    final selectedMembers = _members.where((m) => _selectedMemberIds.contains(m.id)).toList();
-    final primaryMember = selectedMembers.isNotEmpty ? selectedMembers.first : null;
+    final selectedMembers = _members
+        .where((m) => _selectedMemberIds.contains(m.id))
+        .toList();
+    final primaryMember = selectedMembers.isNotEmpty
+        ? selectedMembers.first
+        : null;
     final memberNames = selectedMembers.map((m) => m.name).join(', ');
     final bookingOptionCode = _getBookingOptionCode();
 
-    Navigator.pushNamed(
+    final result = await Navigator.pushNamed(
       context,
       AppRoutes.bookChefQuote,
       arguments: {
@@ -628,13 +626,24 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
         'dishes': dishesToCook,
       },
     );
+
+    if (result == true || result == 'confirmed') {
+      if (mounted) {
+        setState(() {
+          _selectedDishes.clear();
+          _dishServings.clear();
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: LoadingView(message: 'Loading assigned diet meal & family profiles...'),
+        body: LoadingView(
+          message: 'Loading assigned diet meal & family profiles...',
+        ),
       );
     }
 
@@ -663,12 +672,20 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.medical_information_rounded, color: AppColors.primary, size: 22),
+                    Icon(
+                      Icons.medical_information_rounded,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Select covered family members and choose meals from their clinical diet plans.',
-                        style: TextStyle(fontSize: 12, color: AppColors.primaryDark, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primaryDark,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -718,7 +735,8 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
 
               // Bottom CTA
               EbicButton(
-                label: 'Calculate Cooking Time & Review ($selectedDishesCount Dishes)',
+                label:
+                    'Calculate Cooking Time & Review ($selectedDishesCount Dishes)',
                 icon: Icons.calculate_outlined,
                 onPressed: _proceedToQuote,
               ),
@@ -746,14 +764,22 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
               child: Center(
                 child: Text(
                   stepNum,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: AppColors.slate900,
+              ),
             ),
           ],
         ),
@@ -790,14 +816,19 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
           children: [
             Text(
               '${_selectedMemberIds.length} of ${_members.length} Selected',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
             ),
             TextButton(
               onPressed: () {
                 setState(() {
                   if (_selectedMemberIds.length == _members.length) {
                     _selectedMemberIds.clear();
-                    if (_members.isNotEmpty) _selectedMemberIds.add(_members.first.id);
+                    if (_members.isNotEmpty)
+                      _selectedMemberIds.add(_members.first.id);
                   } else {
                     _selectedMemberIds.addAll(_members.map((m) => m.id));
                   }
@@ -805,8 +836,13 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                 _refreshPlansForSelectedMembers();
               },
               child: Text(
-                _selectedMemberIds.length == _members.length ? 'Reset to Self' : 'Select All Members',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                _selectedMemberIds.length == _members.length
+                    ? 'Reset to Self'
+                    : 'Select All Members',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -840,12 +876,17 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   width: 150,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected ? AppColors.primarySubtle : Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: isSelected ? AppColors.primary : AppColors.slate200,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.slate200,
                       width: isSelected ? 2 : 1,
                     ),
                     boxShadow: isSelected
@@ -854,7 +895,7 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                               color: AppColors.primary.withOpacity(0.12),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
-                            )
+                            ),
                           ]
                         : [],
                   ),
@@ -864,11 +905,17 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                         children: [
                           CircleAvatar(
                             radius: 18,
-                            backgroundColor: isSelected ? AppColors.primary : AppColors.slate200,
+                            backgroundColor: isSelected
+                                ? AppColors.primary
+                                : AppColors.slate200,
                             child: Text(
-                              member.name.isNotEmpty ? member.name[0].toUpperCase() : 'M',
+                              member.name.isNotEmpty
+                                  ? member.name[0].toUpperCase()
+                                  : 'M',
                               style: TextStyle(
-                                color: isSelected ? Colors.white : AppColors.slate700,
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppColors.slate700,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
                               ),
@@ -881,7 +928,11 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                               child: CircleAvatar(
                                 radius: 6,
                                 backgroundColor: Colors.white,
-                                child: Icon(Icons.check_circle, size: 12, color: AppColors.primary),
+                                child: Icon(
+                                  Icons.check_circle,
+                                  size: 12,
+                                  color: AppColors.primary,
+                                ),
                               ),
                             ),
                         ],
@@ -897,7 +948,9 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
-                                color: isSelected ? AppColors.primaryDark : AppColors.slate900,
+                                color: isSelected
+                                    ? AppColors.primaryDark
+                                    : AppColors.slate900,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -905,7 +958,10 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                             const SizedBox(height: 2),
                             Text(
                               member.relationship.toLowerCase(),
-                              style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.slate500,
+                              ),
                             ),
                             if (member.isCoveredByHealthPass)
                               const Text(
@@ -973,11 +1029,18 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                             color: color.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Icon(occ['icon'] as IconData, size: 18, color: color),
+                          child: Icon(
+                            occ['icon'] as IconData,
+                            size: 18,
+                            color: color,
+                          ),
                         ),
                         if (isCombo)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: color,
                               borderRadius: BorderRadius.circular(6),
@@ -1014,7 +1077,10 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                     const SizedBox(height: 2),
                     Text(
                       occ['time'] as String,
-                      style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.slate500,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1041,14 +1107,19 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 10),
-              Text('Fetching clinical diet meals...', style: TextStyle(fontSize: 12, color: AppColors.slate500)),
+              Text(
+                'Fetching clinical diet meals...',
+                style: TextStyle(fontSize: 12, color: AppColors.slate500),
+              ),
             ],
           ),
         ),
       );
     }
 
-    final selectedMembers = _members.where((m) => _selectedMemberIds.contains(m.id)).toList();
+    final selectedMembers = _members
+        .where((m) => _selectedMemberIds.contains(m.id))
+        .toList();
 
     return Column(
       children: selectedMembers.map((member) {
@@ -1081,30 +1152,47 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                         backgroundColor: AppColors.primarySubtle,
                         child: Text(
                           member.name[0],
-                          style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         member.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppColors.slate900,
+                        ),
                       ),
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
-                      color: plan != null ? AppColors.emerald50 : AppColors.slate100,
+                      color: plan != null
+                          ? AppColors.emerald50
+                          : AppColors.slate100,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       _isHpChecking
                           ? 'CHECKING...'
-                          : (plan != null ? 'DIETITIAN APPROVED' : 'RECOMMENDED DISHES'),
+                          : (plan != null
+                                ? 'DIETITIAN APPROVED'
+                                : 'RECOMMENDED DISHES'),
                       style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
-                        color: plan != null ? AppColors.emerald700 : AppColors.slate600,
+                        color: plan != null
+                            ? AppColors.emerald700
+                            : AppColors.slate600,
                       ),
                     ),
                   ),
@@ -1114,10 +1202,15 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
 
               if (matchingMeals.isNotEmpty) ...[
                 ...matchingMeals.map((meal) {
-                  final mealTitle = meal['title']?.toString() ?? 'Assigned Meal';
-                  final calories = meal['plannedNutrition']?['calories']?.toString() ?? '450';
-                  final protein = meal['plannedNutrition']?['proteinG']?.toString() ?? '28';
-                  final carbs = meal['plannedNutrition']?['carbsG']?.toString() ?? '45';
+                  final mealTitle =
+                      meal['title']?.toString() ?? 'Assigned Meal';
+                  final calories =
+                      meal['plannedNutrition']?['calories']?.toString() ??
+                      '450';
+                  final protein =
+                      meal['plannedNutrition']?['proteinG']?.toString() ?? '28';
+                  final carbs =
+                      meal['plannedNutrition']?['carbsG']?.toString() ?? '45';
                   final dishes = (meal['dishes'] as List<dynamic>?) ?? [];
 
                   return Column(
@@ -1129,12 +1222,20 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                           Expanded(
                             child: Text(
                               mealTitle,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.slate800),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: AppColors.slate800,
+                              ),
                             ),
                           ),
                           Text(
                             '$calories kcal • ${protein}g P • ${carbs}g C',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ],
                       ),
@@ -1152,7 +1253,9 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                             color: isChecked ? AppColors.slate50 : Colors.white,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: isChecked ? AppColors.primary.withOpacity(0.3) : AppColors.slate200,
+                              color: isChecked
+                                  ? AppColors.primary.withOpacity(0.3)
+                                  : AppColors.slate200,
                             ),
                           ),
                           child: Row(
@@ -1161,7 +1264,9 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                 value: isChecked,
                                 activeColor: AppColors.primary,
                                 onChanged: (val) {
-                                  setState(() => _selectedDishes[key] = val ?? false);
+                                  setState(
+                                    () => _selectedDishes[key] = val ?? false,
+                                  );
                                 },
                               ),
                               Expanded(
@@ -1173,13 +1278,20 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,
-                                        color: isChecked ? AppColors.slate900 : AppColors.slate400,
-                                        decoration: isChecked ? null : TextDecoration.lineThrough,
+                                        color: isChecked
+                                            ? AppColors.slate900
+                                            : AppColors.slate400,
+                                        decoration: isChecked
+                                            ? null
+                                            : TextDecoration.lineThrough,
                                       ),
                                     ),
                                     Text(
                                       '${d['servingQuantity'] ?? 1} ${d['servingUnit'] ?? "serving"} • 20 mins',
-                                      style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.slate500,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1188,21 +1300,38 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                 Row(
                                   children: [
                                     IconButton(
-                                      icon: const Icon(Icons.remove_circle_outline, size: 18, color: AppColors.slate600),
+                                      icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                        size: 18,
+                                        color: AppColors.slate600,
+                                      ),
                                       onPressed: () {
                                         if (servings > 1) {
-                                          setState(() => _dishServings[key] = servings - 1);
+                                          setState(
+                                            () => _dishServings[key] =
+                                                servings - 1,
+                                          );
                                         }
                                       },
                                     ),
                                     Text(
                                       '$servings',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.add_circle_outline, size: 18, color: AppColors.primary),
+                                      icon: const Icon(
+                                        Icons.add_circle_outline,
+                                        size: 18,
+                                        color: AppColors.primary,
+                                      ),
                                       onPressed: () {
-                                        setState(() => _dishServings[key] = servings + 1);
+                                        setState(
+                                          () =>
+                                              _dishServings[key] = servings + 1,
+                                        );
                                       },
                                     ),
                                   ],
@@ -1217,7 +1346,7 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                   );
                 }),
               ] else ...[
-                // Fallback curated meals when member doesn't have an active plan for this occasion
+                // Member has no active diet plan for this occasion
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -1229,37 +1358,20 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                     children: [
                       Text(
                         'No specific plan scheduled for ${member.name} for $_selectedOccasion.',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.slate800),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.slate800,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'We have loaded chef-recommended balanced healthy dishes below:',
-                        style: TextStyle(fontSize: 11, color: AppColors.slate500),
+                        'Ask your dietitian to assign a plan, or pick dishes from the catalogue instead.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.slate500,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      ..._fallbackDishes
-                          .where((f) => _isMealMatchingOccasion(f['occasion']))
-                          .map((f) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.check_circle_rounded, size: 14, color: AppColors.primary),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  '${f['name']} (${f['portion']})',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.slate800),
-                                ),
-                              ),
-                              Text(
-                                '${f['cookTimeMin']}m',
-                                style: const TextStyle(fontSize: 11, color: AppColors.slate500),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
                     ],
                   ),
                 ),
@@ -1281,11 +1393,18 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withOpacity(0.5), width: 1.5),
+            border: Border.all(
+              color: AppColors.primary.withOpacity(0.5),
+              width: 1.5,
+            ),
           ),
           child: const Row(
             children: [
-              Icon(Icons.add_location_alt_rounded, color: AppColors.primary, size: 28),
+              Icon(
+                Icons.add_location_alt_rounded,
+                color: AppColors.primary,
+                size: 28,
+              ),
               SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -1293,7 +1412,11 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                   children: [
                     Text(
                       'Select Service Kitchen Address',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: AppColors.slate900,
+                      ),
                     ),
                     Text(
                       'Tap to choose saved kitchen or add new address',
@@ -1302,7 +1425,11 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.primary),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: AppColors.primary,
+              ),
             ],
           ),
         ),
@@ -1341,19 +1468,30 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                     children: [
                       Text(
                         addr.kitchenLabelDisplayName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppColors.slate900,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: addr.isServiceable ? AppColors.emerald50 : AppColors.rose50,
+                          color: addr.isServiceable
+                              ? AppColors.emerald50
+                              : AppColors.rose50,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           addr.isServiceable ? 'SERVICEABLE' : 'CHECKING',
                           style: TextStyle(
-                            color: addr.isServiceable ? AppColors.emerald700 : AppColors.danger,
+                            color: addr.isServiceable
+                                ? AppColors.emerald700
+                                : AppColors.danger,
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1364,7 +1502,11 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                   const SizedBox(height: 4),
                   Text(
                     addr.formattedAddress,
-                    style: const TextStyle(fontSize: 12, color: AppColors.slate600, height: 1.3),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.slate600,
+                      height: 1.3,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1374,7 +1516,10 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
             const SizedBox(width: 8),
             TextButton(
               onPressed: _showAddressPickerSheet,
-              child: const Text('Change', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              child: const Text(
+                'Change',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
             ),
           ],
         ),

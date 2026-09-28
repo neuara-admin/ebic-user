@@ -40,7 +40,7 @@ class GenderSelectionWidget extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
+            Expanded(child: Row(
               children: [
                 const Icon(
                   Icons.wc_rounded,
@@ -48,7 +48,7 @@ class GenderSelectionWidget extends StatelessWidget {
                   color: AppColors.primary,
                 ),
                 const SizedBox(width: 6),
-                Text(
+                Flexible(child: Text(
                   label.toUpperCase(),
                   style: const TextStyle(
                     fontSize: 11,
@@ -56,9 +56,9 @@ class GenderSelectionWidget extends StatelessWidget {
                     color: AppColors.slate500,
                     letterSpacing: 0.8,
                   ),
-                ),
+                )),
               ],
-            ),
+            )),
             if (selectedGender.isNotEmpty)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

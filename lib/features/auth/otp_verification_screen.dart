@@ -303,9 +303,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               ],
 
               // 6 PIN Input Cells
+              // Cells share the width (max 48 each) so 6 digits fit on narrow phones
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (index) => _buildPinCell(index)),
+                children: List.generate(
+                  11,
+                  (i) => i.isOdd
+                      ? const Flexible(child: SizedBox(width: 8))
+                      : Flexible(
+                          flex: 6,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 48),
+                            child: _buildPinCell(i ~/ 2),
+                          ),
+                        ),
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -317,13 +328,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   children: [
                     Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
                     SizedBox(width: 6),
-                    Text(
+                    Flexible(
+                      child: Text(
                       'Wrong number? Change contact details',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: AppColors.primary,
                       ),
+                    ),
                     ),
                   ],
                 ),
@@ -378,7 +392,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   Widget _buildPinCell(int index) {
     return SizedBox(
-      width: 48,
+      width: double.infinity,
       height: 56,
       child: Focus(
         onKeyEvent: (node, event) {

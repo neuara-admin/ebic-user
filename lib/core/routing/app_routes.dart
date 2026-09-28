@@ -78,6 +78,8 @@ class AppRoutes {
   static const String healthDocumentPreview = '/health/documents/preview';
   static const String healthProgress = '/health/progress';
   static const String progressTimeline = '/health/progress/timeline';
+  static const String connectedSources = '/health/connected-sources';
+  static const String healthMetricDetail = '/health/metric-detail';
 
   // Profile & Management
   static const String editProfile = '/profile/edit';
@@ -87,6 +89,7 @@ class AppRoutes {
   static const String addressForm = '/profile/addresses/address-form';
   static const String preferences = '/profile/preferences';
   static const String walletCredits = '/profile/wallet';
+  static const String creditTransactionDetail = '/profile/credits/detail';
   static const String promotions = '/promotions';
   static const String referrals = '/referrals';
   static const String referralHistory = '/referrals/history';
@@ -107,4 +110,3 @@ class AppRoutes {
   static const String videoConsultation = consultationVideo;
   static const String purchasePass = healthPassPurchase;
 }
-

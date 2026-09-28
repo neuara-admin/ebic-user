@@ -46,10 +46,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                       children: [
                         Icon(Icons.shield_rounded, color: AppColors.primaryDark, size: 20),
                         SizedBox(width: 8),
-                        Text(
+                        Flexible(child: Text(
                           'Member-Specific Health Isolation',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryDark),
-                        ),
+                        )),
                       ],
                     ),
                     SizedBox(height: 6),

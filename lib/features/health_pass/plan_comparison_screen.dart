@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/analytics/analytics_service.dart';
+import '../../core/auth/session_manager.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/health_pass_model.dart';
@@ -173,6 +174,10 @@ class _HealthPassComparisonScreenState extends State<HealthPassComparisonScreen>
                           const SizedBox(height: 8),
                           InkWell(
                             onTap: () {
+                              if (!SessionManager().isAuthenticated) {
+                                Navigator.pushNamed(context, AppRoutes.login);
+                                return;
+                              }
                               Navigator.pushNamed(
                                 context,
                                 AppRoutes.healthPassConfigure,

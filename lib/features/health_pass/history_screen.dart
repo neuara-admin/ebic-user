@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/health_pass_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../shared/services/invoice_download_service.dart';
 import 'data/health_pass_repository.dart';
 
 /// Module 4 — Section 48: Health Pass History Screen
@@ -357,6 +359,29 @@ class _HealthPassHistoryScreenState extends State<HealthPassHistoryScreen> {
                         arguments: {'healthPassId': item.id},
                       );
                     },
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Download / Share Invoice Button
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate300),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: Icon(Icons.download_rounded, size: 16, color: isDark ? Colors.white70 : AppColors.slate700),
+                    label: Text(
+                      'Download / Share Invoice',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.slate700),
+                    ),
+                    onPressed: () => InvoiceDownloadService.downloadAndShare(
+                      ctx,
+                      endpoint: ApiEndpoints.healthPassInvoicePdf(item.id),
+                      fileName: 'EBIC-HealthPass-Invoice-${item.id.substring(0, 8)}.pdf',
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),

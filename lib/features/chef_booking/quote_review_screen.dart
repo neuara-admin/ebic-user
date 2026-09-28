@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
@@ -8,6 +10,7 @@ import '../../shared/models/quote_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/loading_view.dart';
 import '../../shared/widgets/status_badge.dart';
+import '../catalogue/cart_service.dart';
 
 class QuoteReviewScreen extends StatefulWidget {
   final Map<String, dynamic> bookingConfig;
@@ -25,6 +28,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
   bool _isLoading = true;
   String? _errorMessage;
+  Timer? _quoteRefreshDebounce;
 
   QuoteModel? _quote;
   Map<String, dynamic>? _cookingTimeData;
@@ -46,11 +50,17 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
   bool get _isFreeChefBooking {
     if (_quote != null && _quote!.total <= 0.0) return true;
-    if (_hasFreeChefEntitlement && (_quote?.itemCharges ?? 0.0) <= 0.0) return true;
-    if (_currentIsHealthPassCovered && (_quote?.itemCharges ?? 0.0) <= 0.0) return true;
-    final isAssigned = widget.bookingConfig['mode'] == 'ASSIGNED_MEAL' ||
+    if (_hasFreeChefEntitlement && (_quote?.itemCharges ?? 0.0) <= 0.0)
+      return true;
+    if (_currentIsHealthPassCovered && (_quote?.itemCharges ?? 0.0) <= 0.0)
+      return true;
+    final isAssigned =
+        widget.bookingConfig['mode'] == 'ASSIGNED_MEAL' ||
         widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL';
-    if (isAssigned && (_quote?.itemCharges ?? 0.0) <= 0.0 && (_quote?.total ?? 0.0) <= 0.0) return true;
+    if (isAssigned &&
+        (_quote?.itemCharges ?? 0.0) <= 0.0 &&
+        (_quote?.total ?? 0.0) <= 0.0)
+      return true;
     return false;
   }
 
@@ -65,69 +75,13 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     'Extra crispy',
   ];
 
-  String _selectedChefId = 'auto';
-  String _selectedChefName = 'Auto-Assign Nearest Certified Chef';
-  Map<String, dynamic>? _selectedChefData;
-
-  // Available Verified Home Chefs
-  final List<Map<String, dynamic>> _availableChefs = [
-    {
-      'id': 'auto',
-      'name': 'Auto-Assign Nearest Certified Chef',
-      'title': 'Fastest Dispatch • AI Algorithm Match',
-      'rating': 4.9,
-      'reviews': 340,
-      'experienceYears': 7,
-      'specialties': ['Multi-Cuisine', 'Diet Compliance', 'Speed Cooking'],
-      'distanceKm': 1.2,
-      'etaMins': 25,
-      'badge': 'RECOMMENDED',
-      'isAuto': true,
-    },
-    {
-      'id': 'chef-1',
-      'name': 'Chef Rajesh Sharma',
-      'title': 'Executive Nutrition Chef',
-      'rating': 4.9,
-      'reviews': 128,
-      'experienceYears': 8,
-      'specialties': ['North Indian', 'Balanced Diabetic Meals', 'Low Sodium'],
-      'distanceKm': 1.5,
-      'etaMins': 28,
-      'badge': 'HYGIENE CERTIFIED',
-      'isAuto': false,
-    },
-    {
-      'id': 'chef-2',
-      'name': 'Chef Anita Kulkarni',
-      'title': 'Clinical Diet Specialist',
-      'rating': 4.8,
-      'reviews': 94,
-      'experienceYears': 6,
-      'specialties': ['South Indian', 'Low GI Diets', 'High Fibre'],
-      'distanceKm': 2.1,
-      'etaMins': 32,
-      'badge': 'NUTRITION PRO',
-      'isAuto': false,
-    },
-    {
-      'id': 'chef-3',
-      'name': 'Chef Sameer Verma',
-      'title': 'Gourmet Fitness Chef',
-      'rating': 4.9,
-      'reviews': 156,
-      'experienceYears': 10,
-      'specialties': ['Continental', 'High-Protein', 'Clean Keto'],
-      'distanceKm': 2.8,
-      'etaMins': 35,
-      'badge': 'TOP RATED',
-      'isAuto': false,
-    },
-  ];
+  // Chefs are always auto-assigned by the backend dispatch engine after payment.
+  static const String _autoAssignChefLabel = 'Nearest available certified chef';
 
   @override
   void initState() {
     super.initState();
+    _normalizeDishes();
     _initMemberState();
     _loadSavedAddress();
     _loadAvailablePromotions();
@@ -138,19 +92,64 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   void didUpdateWidget(QuoteReviewScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.bookingConfig != widget.bookingConfig) {
+      _normalizeDishes();
       _initMemberState();
       _loadSavedAddress();
       _fetchDynamicCookingTimeAndQuote();
     }
   }
 
+  int _asInt(dynamic v, [int fallback = 1]) {
+    if (v == null) return fallback;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fallback;
+  }
+
+  void _normalizeDishes() {
+    final rawDishes = widget.bookingConfig['dishes'];
+    if (rawDishes is List) {
+      widget.bookingConfig['dishes'] = rawDishes.map<Map<String, dynamic>>((item) {
+        if (item is Map) {
+          final m = Map<String, dynamic>.from(item);
+          final servings = _asInt(m['servings'] ?? m['quantity'], 1);
+          m['servings'] = servings;
+          m['quantity'] = servings;
+          return m;
+        }
+        return <String, dynamic>{};
+      }).where((m) => m.isNotEmpty).toList();
+    }
+  }
+
+  /// Per-serving dish price from the backend quote (0 until quoted).
+  double _dishUnitPrice(Map d) {
+    final id = (d['dishId'] ?? d['id'])?.toString();
+    for (final item in _quote?.items ?? const <QuoteItemModel>[]) {
+      if (item.itemType == 'DISH' && item.referenceId == id) return item.unitPrice;
+    }
+    return 0.0;
+  }
+
+  /// Quantities changed — re-quote from the backend (debounced).
+  void _scheduleQuoteRefresh() {
+    _quoteRefreshDebounce?.cancel();
+    _quoteRefreshDebounce = Timer(
+      const Duration(milliseconds: 400),
+      _fetchDynamicCookingTimeAndQuote,
+    );
+  }
+
   void _initMemberState() {
     _currentMemberId = widget.bookingConfig['memberId']?.toString() ?? '';
-    _currentMemberName = widget.bookingConfig['memberName']?.toString() ?? 'Self';
-    _currentMemberRelation = widget.bookingConfig['memberRelation']?.toString() ?? 'SELF';
-    _currentIsHealthPassCovered = widget.bookingConfig['isHealthPassCovered'] == true;
+    _currentMemberName =
+        widget.bookingConfig['memberName']?.toString() ?? 'Self';
+    _currentMemberRelation =
+        widget.bookingConfig['memberRelation']?.toString() ?? 'SELF';
+    _currentIsHealthPassCovered =
+        widget.bookingConfig['isHealthPassCovered'] == true;
 
-    final rawAddress = widget.bookingConfig['addressLine']?.toString() ??
+    final rawAddress =
+        widget.bookingConfig['addressLine']?.toString() ??
         widget.bookingConfig['address']?['addressLine']?.toString() ??
         '';
     if (rawAddress.isNotEmpty && rawAddress != 'Default Residence Kitchen') {
@@ -173,16 +172,23 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   Future<void> _loadSavedAddress() async {
-    if (_currentAddressLine.isNotEmpty && _currentAddressLine != 'Default Residence Kitchen') return;
     try {
       final res = await _api.get<List<dynamic>>(ApiEndpoints.addresses);
       if (res.success && res.data != null && res.data!.isNotEmpty) {
-        final addresses = res.data!.map((item) => AddressModel.fromJson(item as Map<String, dynamic>)).toList();
-        final defaultAddr = addresses.firstWhere((a) => a.isDefault, orElse: () => addresses.first);
+        final addresses = res.data!
+            .map((item) => AddressModel.fromJson(item as Map<String, dynamic>))
+            .toList();
+        final defaultAddr = addresses.firstWhere(
+          (a) => a.isDefault,
+          orElse: () => addresses.first,
+        );
         if (mounted) {
           setState(() {
-            _selectedAddress = defaultAddr;
-            _currentAddressLine = defaultAddr.formattedAddress;
+            _selectedAddress ??= defaultAddr;
+            if (_currentAddressLine.isEmpty ||
+                _currentAddressLine == 'Default Residence Kitchen') {
+              _currentAddressLine = defaultAddr.formattedAddress;
+            }
           });
         }
       }
@@ -201,17 +207,26 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         if (raw is List) {
           list = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         } else if (raw is Map && raw['items'] is List) {
-          list = (raw['items'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          list = (raw['items'] as List)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
         }
         if (list.isNotEmpty && mounted) {
           setState(() {
             _availableOffers.clear();
             for (final p in list) {
-              final val = (p['discountValue'] as num?)?.toDouble() ?? 50.0;
+              final val = (p['discountValue'] as num?)?.toDouble() ?? 0.0;
               _availableOffers.add({
                 'code': p['code']?.toString() ?? 'OFFER',
-                'title': p['title']?.toString() ?? p['name']?.toString() ?? 'Special Offer',
-                'desc': p['desc']?.toString() ?? p['description']?.toString() ?? p['terms']?.toString() ?? '',
+                'title':
+                    p['title']?.toString() ??
+                    p['name']?.toString() ??
+                    'Special Offer',
+                'desc':
+                    p['desc']?.toString() ??
+                    p['description']?.toString() ??
+                    p['terms']?.toString() ??
+                    '',
                 'discount': val,
                 'badge': p['formattedDiscount']?.toString() ?? 'OFFER',
               });
@@ -239,56 +254,73 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   void _updateDishQuantity(Map<String, dynamic> dish, int newQty) {
     final dishes = (widget.bookingConfig['dishes'] as List<dynamic>?) ?? [];
 
-    final targetId = dish['dishId'] ?? dish['recipeId'] ?? dish['id'] ?? dish['name'];
-    final targetMember = dish['memberId'] ?? dish['memberName'];
-
-    dynamic targetEntry;
-    for (final item in dishes) {
-      if (identical(item, dish)) {
-        targetEntry = item;
-        break;
-      }
-      if (item is Map) {
-        final itemId = item['dishId'] ?? item['recipeId'] ?? item['id'] ?? item['name'];
-        final itemMember = item['memberId'] ?? item['memberName'];
-        final idMatches = (itemId != null && targetId != null && itemId.toString() == targetId.toString()) ||
-            (item['name'] != null && dish['name'] != null && item['name'].toString() == dish['name'].toString());
-        final memberMatches = targetMember == null || itemMember == null || itemMember.toString() == targetMember.toString();
-        if (idMatches && memberMatches) {
-          targetEntry = item;
-          break;
-        }
-      }
-    }
+    final targetId =
+        (dish['dishId'] ?? dish['recipeId'] ?? dish['id'] ?? dish['name'])?.toString();
+    final targetMember =
+        (dish['memberId'] ?? dish['memberName'])?.toString();
 
     if (newQty <= 0) {
-      if (dishes.length <= 1) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('At least one dish must remain in your booking.'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-        return;
-      }
       setState(() {
-        if (targetEntry != null) {
-          dishes.remove(targetEntry);
-        } else {
-          dishes.remove(dish);
-        }
+        dishes.removeWhere((item) {
+          if (identical(item, dish)) return true;
+          if (item is Map) {
+            final itemId =
+                (item['dishId'] ?? item['recipeId'] ?? item['id'] ?? item['name'])?.toString();
+            final itemMember =
+                (item['memberId'] ?? item['memberName'])?.toString();
+            final idMatches = (itemId != null && targetId != null && itemId == targetId) ||
+                (item['name'] != null && dish['name'] != null && item['name'] == dish['name']);
+            final memberMatches = targetMember == null ||
+                itemMember == null ||
+                itemMember == targetMember;
+            return idMatches && memberMatches;
+          }
+          return false;
+        });
         dish['servings'] = 0;
         dish['quantity'] = 0;
+        _scheduleQuoteRefresh();
       });
+
+      // Synchronize with CartService so it doesn't reappear
+      if (targetId != null) {
+        try {
+          CartService().removeDish(targetId);
+        } catch (_) {}
+      }
     } else {
       setState(() {
-        if (targetEntry is Map) {
-          targetEntry['servings'] = newQty;
-          targetEntry['quantity'] = newQty;
-        }
         dish['servings'] = newQty;
         dish['quantity'] = newQty;
+        for (final item in dishes) {
+          if (identical(item, dish)) {
+            item['servings'] = newQty;
+            item['quantity'] = newQty;
+          } else if (item is Map) {
+            final itemId =
+                (item['dishId'] ?? item['recipeId'] ?? item['id'] ?? item['name'])?.toString();
+            final itemMember =
+                (item['memberId'] ?? item['memberName'])?.toString();
+            final idMatches = (itemId != null && targetId != null && itemId == targetId) ||
+                (item['name'] != null && dish['name'] != null && item['name'] == dish['name']);
+            final memberMatches = targetMember == null ||
+                itemMember == null ||
+                itemMember == targetMember;
+            if (idMatches && memberMatches) {
+              item['servings'] = newQty;
+              item['quantity'] = newQty;
+            }
+          }
+        }
+        _scheduleQuoteRefresh();
       });
+
+      // Synchronize with CartService
+      if (targetId != null) {
+        try {
+          CartService().updateServings(targetId, newQty);
+        } catch (_) {}
+      }
     }
 
     _fetchDynamicCookingTimeAndQuote();
@@ -305,7 +337,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
   Widget _buildAddMoreDishesSheet() {
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -320,7 +354,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               width: 44,
               height: 4,
               margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(color: AppColors.slate300, borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                color: AppColors.slate300,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           Row(
@@ -328,7 +365,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
             children: [
               const Text(
                 'Add More Dishes',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.slate900),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: AppColors.slate900,
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.close, size: 20),
@@ -364,7 +405,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       color: AppColors.primary,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.restaurant_menu_rounded, color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.restaurant_menu_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -373,17 +418,28 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       children: const [
                         Text(
                           "Browse Chef's Menu",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.slate900,
+                          ),
                         ),
                         SizedBox(height: 2),
                         Text(
                           'Explore 50+ diet-tailored recipes and customize portions',
-                          style: TextStyle(fontSize: 11, color: AppColors.slate600),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.slate600,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.primaryDark),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                    color: AppColors.primaryDark,
+                  ),
                 ],
               ),
             ),
@@ -395,9 +451,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
   void _showDishQuantitySheet(Map<String, dynamic> d) {
     final name = d['name']?.toString() ?? 'Dish';
-    int currentServings = (d['servings'] as num?)?.toInt() ?? 1;
-    final unitPrice = (d['unitPrice'] as num?)?.toDouble() ?? 120.0;
-    final isAssigned = widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL';
+    int currentServings = _asInt(d['servings'] ?? d['quantity'], 1);
+    final unitPrice = _dishUnitPrice(d);
+    final isAssigned = widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL' ||
+        widget.bookingConfig['mode'] == 'ASSIGNED_MEAL';
 
     showModalBottomSheet(
       context: context,
@@ -422,7 +479,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       width: 40,
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(color: AppColors.slate300, borderRadius: BorderRadius.circular(2)),
+                      decoration: BoxDecoration(
+                        color: AppColors.slate300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                   Row(
@@ -431,7 +491,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       Expanded(
                         child: Text(
                           name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.slate900),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: AppColors.slate900,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -442,8 +506,13 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    isAssigned ? 'Covered by Plan' : '₹${unitPrice.toStringAsFixed(0)} per portion',
-                    style: const TextStyle(fontSize: 12, color: AppColors.slate600),
+                    isAssigned
+                        ? 'Covered by Plan'
+                        : '₹${unitPrice.toStringAsFixed(0)} per portion',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.slate600,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -451,7 +520,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     children: [
                       const Text(
                         'Number of Portions',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate800),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppColors.slate800,
+                        ),
                       ),
                       Container(
                         decoration: BoxDecoration(
@@ -471,7 +544,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                             ),
                             Text(
                               '$currentServings',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             IconButton(
                               icon: const Icon(Icons.add, size: 18),
@@ -488,10 +564,22 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total for this dish:', style: TextStyle(fontSize: 13, color: AppColors.slate600)),
+                      const Text(
+                        'Total for this dish:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.slate600,
+                        ),
+                      ),
                       Text(
-                        lineTotal > 0 ? '₹${lineTotal.toStringAsFixed(0)}' : 'Covered',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                        lineTotal > 0
+                            ? '₹${lineTotal.toStringAsFixed(0)}'
+                            : 'Covered',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryDark,
+                        ),
                       ),
                     ],
                   ),
@@ -507,11 +595,16 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: Text(
                         'Update Portions ($currentServings)',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ),
@@ -524,14 +617,27 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         Navigator.pop(ctx);
                         _updateDishQuantity(d, 0);
                       },
-                      icon: const Icon(Icons.delete_outline_rounded, size: 17, color: AppColors.danger),
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        size: 17,
+                        color: AppColors.danger,
+                      ),
                       label: const Text(
                         'Remove Dish from Booking',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.danger),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: AppColors.danger,
+                        ),
                       ),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.danger, width: 1.1),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: const BorderSide(
+                          color: AppColors.danger,
+                          width: 1.1,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -546,16 +652,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
   @override
   void dispose() {
+    _quoteRefreshDebounce?.cancel();
     _couponController.dispose();
     _chefNotesController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchDynamicCookingTimeAndQuote() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (_quote == null) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     final dishes = (widget.bookingConfig['dishes'] as List<dynamic>?) ?? [];
 
@@ -565,7 +674,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         'dishes': dishes.map((d) {
           return {
             'dishId': d['dishId'] ?? d['id'],
-            'servings': (d['servings'] as num?)?.toInt() ?? 1,
+            'servings': _asInt(d['servings'] ?? d['quantity'], 1),
           };
         }).toList(),
       };
@@ -579,13 +688,16 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         _cookingTimeData = cookRes.data;
       }
 
-      final estimatedCookMinutes = (_cookingTimeData?['totalMinutes'] as num?)?.toInt() ?? 35;
+      final estimatedCookMinutes =
+          _asInt(_cookingTimeData?['totalMinutes'], 0);
 
       // 2. Fetch authoritative Health Pass Quote Context (Section 50 & 54)
       Map<String, dynamic>? hpQuoteContext;
-      final serviceDate = (widget.bookingConfig['serviceDate'] as String?) ??
+      final serviceDate =
+          (widget.bookingConfig['serviceDate'] as String?) ??
           DateTime.now().toIso8601String().split('T')[0];
-      final mealType = (widget.bookingConfig['bookingOption'] as String?) ?? 'L';
+      final mealType =
+          (widget.bookingConfig['bookingOption'] as String?) ?? 'L';
 
       if (_currentMemberId.isNotEmpty) {
         final hpCtxRes = await _api.get<Map<String, dynamic>>(
@@ -605,27 +717,36 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       }
 
       // 3. Build Authoritative Dynamic Quote (Section 35 & 36, Module 12)
-      final isAssigned = widget.bookingConfig['mode'] == 'ASSIGNED_MEAL';
+      final isAssigned = widget.bookingConfig['mode'] == 'ASSIGNED_MEAL' ||
+          widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL';
       final quoteItems = dishes.map((d) {
         return {
           'itemType': 'DISH',
           'referenceId': d['dishId'] ?? d['id'],
           'description': d['name'] ?? 'Dish Portion',
-          'quantity': (d['servings'] as num?)?.toInt() ?? 1,
-          'unitPrice': isAssigned ? 0.0 : ((d['unitPrice'] as num?)?.toDouble() ?? 120.0),
+          'quantity': _asInt(d['servings'] ?? d['quantity'], 1),
         };
       }).toList();
 
       // Add Chef visit item
-      quoteItems.insert(0, {
-        'itemType': 'CHEF_VISIT',
-        'description': 'Certified Home Chef Service Fee',
-        'quantity': 1,
-        'unitPrice': 249.0,
-      });
+      if (dishes.isNotEmpty) {
+        quoteItems.insert(0, {
+          'itemType': 'CHEF_VISIT',
+          'description': 'Home Chef Base Visit Charge',
+          'quantity': 1,
+        });
+
+        if (estimatedCookMinutes > 0) {
+          quoteItems.add({
+            'itemType': 'COOKING_TIME',
+            'description': 'Live Cooking ($estimatedCookMinutes mins)',
+            'quantity': estimatedCookMinutes,
+          });
+        }
+      }
 
       final quotePayload = {
-        'serviceType': 'CHEF_VISIT',
+        'serviceType': isAssigned ? 'ASSIGNED_MEAL' : 'CHEF_VISIT',
         'items': quoteItems,
         'couponCode': _appliedCoupon,
         'currency': 'INR',
@@ -640,113 +761,30 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         body: quotePayload,
       );
 
-      final hasFreeVisitEntitlement = hpQuoteContext?['entitlement_available'] == true ||
-          (isAssigned && widget.bookingConfig['hpEligibility']?['entitlement_available'] == true) ||
+      final hasFreeVisitEntitlement =
+          hpQuoteContext?['entitlement_available'] == true ||
+          (isAssigned &&
+              widget.bookingConfig['hpEligibility']?['entitlement_available'] ==
+                  true) ||
           _currentIsHealthPassCovered;
       _hasFreeChefEntitlement = hasFreeVisitEntitlement;
 
-      final calculatedDishCharge = isAssigned
-          ? 0.0
-          : dishes.fold<double>(
-              0.0,
-              (sum, d) =>
-                  sum +
-                  (((d['servings'] as num?)?.toInt() ?? 1) *
-                      ((d['unitPrice'] as num?)?.toDouble() ?? 120.0)),
-            );
-
       if (quoteRes.success && quoteRes.data != null) {
         final rawQuote = quoteRes.data!;
-        final hpBenefit = (rawQuote['healthPassBenefit'] as num?)?.toDouble() ??
-            (hasFreeVisitEntitlement ? 249.0 : 0.0);
-        final chefCharge = (rawQuote['chefServiceCharge'] as num?)?.toDouble() ?? 249.0;
-        final rawItemCharge = (rawQuote['itemCharges'] as num?)?.toDouble();
-        final itemCharge = (rawItemCharge != null && rawItemCharge > 0)
-            ? rawItemCharge
-            : calculatedDishCharge;
-        final rawDiscount = (rawQuote['discount'] as num?)?.toDouble() ?? 0.0;
-        final disc = rawDiscount > 0 ? rawDiscount : _couponDiscount;
-        final promo = (rawQuote['promotion'] as num?)?.toDouble() ?? 0.0;
-        final subtotal = (rawQuote['subtotal'] as num?)?.toDouble() ?? (chefCharge + itemCharge);
-        final taxable = (subtotal - hpBenefit - disc - promo).clamp(0.0, 999999.0);
-        final tax = (rawQuote['tax'] as num?)?.toDouble() ?? (taxable * 0.05);
-        final rawTotal = (rawQuote['total'] as num?)?.toDouble();
-        final total = (disc > 0 && rawDiscount == 0.0 && rawTotal != null)
-            ? (rawTotal - disc).clamp(0.0, 999999.0)
-            : (rawTotal ?? (taxable + tax));
-
-        _quote = QuoteModel(
-          quoteId: rawQuote['quoteId']?.toString() ?? 'quote_${DateTime.now().millisecondsSinceEpoch}',
-          cookingTimeMinutes: estimatedCookMinutes,
-          chefServiceCharge: chefCharge,
-          itemCharges: itemCharge,
-          healthPassBenefit: hpBenefit,
-          discount: disc,
-          promotion: promo,
-          tax: tax,
-          subtotal: subtotal,
-          total: total,
-          currency: 'INR',
-        );
+        _quote = QuoteModel.fromJson(rawQuote);
+        if (_quote != null) {
+          _couponDiscount = _quote!.discount;
+        }
       } else {
-        // Fallback commercial calculation adhering to Section 29 & 36
-        final dishCharge = calculatedDishCharge;
-        const chefFee = 249.0;
-        final subtotal = chefFee + dishCharge;
-        final discount = _couponDiscount;
-        final hpBenefit = hasFreeVisitEntitlement ? chefFee : 0.0;
-        final taxable = (subtotal - discount - hpBenefit).clamp(0.0, 99999.0);
-        final gst = taxable * 0.05;
-        final total = taxable + gst;
-
-        _quote = QuoteModel(
-          quoteId: 'quote_${DateTime.now().millisecondsSinceEpoch}',
-          cookingTimeMinutes: estimatedCookMinutes,
-          chefServiceCharge: chefFee,
-          itemCharges: dishCharge,
-          healthPassBenefit: hpBenefit,
-          discount: discount,
-          promotion: 0.0,
-          tax: gst,
-          subtotal: subtotal,
-          total: total,
-          currency: 'INR',
-        );
+        // Prices come only from the backend pricing engine — never estimated here.
+        _quote = null;
+        _errorMessage = quoteRes.error?.message ??
+            quoteRes.message ??
+            'Unable to calculate a quote right now. Please try again.';
       }
     } catch (e) {
-      _errorMessage = e.toString();
-      final dishes = (widget.bookingConfig['dishes'] as List<dynamic>?) ?? [];
-      final isAssigned = widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL' ||
-          widget.bookingConfig['mode'] == 'ASSIGNED_MEAL';
-      final dishCharge = isAssigned
-          ? 0.0
-          : dishes.fold<double>(
-              0.0,
-              (sum, d) =>
-                  sum +
-                  (((d['servings'] as num?)?.toInt() ?? 1) *
-                      ((d['unitPrice'] as num?)?.toDouble() ?? 120.0)),
-            );
-      const chefFee = 249.0;
-      final hpBenefit = (_currentIsHealthPassCovered || isAssigned) ? chefFee : 0.0;
-      final subtotal = chefFee + dishCharge;
-      final taxable = (subtotal - _couponDiscount - hpBenefit).clamp(0.0, 99999.0);
-      final gst = taxable * 0.05;
-      final total = taxable + gst;
-
-      _quote ??= QuoteModel(
-        quoteId: 'quote_${DateTime.now().millisecondsSinceEpoch}',
-        cookingTimeMinutes: 35,
-        chefServiceCharge: chefFee,
-        itemCharges: dishCharge,
-        healthPassBenefit: hpBenefit,
-        discount: _couponDiscount,
-        promotion: 0.0,
-        tax: gst,
-        subtotal: subtotal,
-        total: total,
-        currency: 'INR',
-      );
+      _quote = null;
+      _errorMessage = 'Unable to calculate a quote right now. Please try again.';
     }
 
     if (mounted) {
@@ -761,46 +799,35 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final res = await _api.post<Map<String, dynamic>>(
-        ApiEndpoints.promotionsValidate,
-        body: {
-          'couponCode': cleanCode,
-          'orderTotal': _quote?.total ?? 300.0,
-          'serviceType': 'CHEF_VISIT',
-        },
-      );
+      _appliedCoupon = cleanCode;
+      await _fetchDynamicCookingTimeAndQuote();
 
-      if (res.success && res.data != null && res.data!['valid'] == true) {
-        final serverDiscount = (res.data!['discountAmount'] as num?)?.toDouble() ?? 0.0;
-        setState(() {
-          _appliedCoupon = cleanCode;
-          _couponDiscount = serverDiscount;
-        });
-
-        await _fetchDynamicCookingTimeAndQuote();
-
+      if (_quote != null && _quote!.discount > 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(res.data!['message']?.toString() ?? 'Coupon "$cleanCode" applied! Saved ₹${serverDiscount.toInt()}.'),
+              content: Text(
+                'Coupon "$cleanCode" applied! Saved ₹${_quote!.discount.toInt()}.',
+              ),
               backgroundColor: AppColors.primary,
             ),
           );
         }
       } else {
-        final errMsg = res.data?['message']?.toString() ?? res.message ?? 'Invalid or expired coupon code.';
-        setState(() => _isLoading = false);
+        _appliedCoupon = null;
+        await _fetchDynamicCookingTimeAndQuote();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(errMsg),
+              content: Text('Coupon "$cleanCode" is not applicable or invalid.'),
               backgroundColor: AppColors.danger,
             ),
           );
         }
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      _appliedCoupon = null;
+      await _fetchDynamicCookingTimeAndQuote();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -808,6 +835,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
             backgroundColor: AppColors.danger,
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -882,7 +913,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                           ],
                         ),
                         child: const Center(
-                          child: Icon(Icons.confirmation_number_rounded, color: Colors.white, size: 20),
+                          child: Icon(
+                            Icons.confirmation_number_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -891,11 +926,18 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         children: [
                           Text(
                             'Available Offers & Coupons',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16.5, color: AppColors.slate900),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16.5,
+                              color: AppColors.slate900,
+                            ),
                           ),
                           Text(
                             'Tap apply to claim your discount',
-                            style: TextStyle(fontSize: 11, color: AppColors.slate500),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.slate500,
+                            ),
                           ),
                         ],
                       ),
@@ -925,10 +967,14 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: isApplied ? AppColors.primarySubtle : AppColors.slate50,
+                      color: isApplied
+                          ? AppColors.primarySubtle
+                          : AppColors.slate50,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: isApplied ? AppColors.primary : AppColors.slate200,
+                        color: isApplied
+                            ? AppColors.primary
+                            : AppColors.slate200,
                         width: isApplied ? 1.5 : 1,
                       ),
                     ),
@@ -938,12 +984,16 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                           width: 38,
                           height: 38,
                           decoration: BoxDecoration(
-                            color: isApplied ? AppColors.primary : const Color(0xFFFEF3C7),
+                            color: isApplied
+                                ? AppColors.primary
+                                : const Color(0xFFFEF3C7),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
                             Icons.confirmation_number_rounded,
-                            color: isApplied ? Colors.white : const Color(0xFFD97706),
+                            color: isApplied
+                                ? Colors.white
+                                : const Color(0xFFD97706),
                             size: 18,
                           ),
                         ),
@@ -958,20 +1008,31 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                   Flexible(
                                     child: Text(
                                       offer['code'] as String,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: AppColors.slate900,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   const SizedBox(width: 6),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: AppColors.primarySubtle,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
                                       offer['badge'] as String,
-                                      style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                                      style: const TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primaryDark,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -979,11 +1040,18 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 offer['title'] as String,
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.slate800),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.slate800,
+                                ),
                               ),
                               Text(
                                 offer['desc'] as String,
-                                style: const TextStyle(fontSize: 11, color: AppColors.slate600),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.slate600,
+                                ),
                               ),
                             ],
                           ),
@@ -995,7 +1063,14 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                   _removeCoupon();
                                   Navigator.pop(ctx);
                                 },
-                                child: const Text('REMOVE', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 11)),
+                                child: const Text(
+                                  'REMOVE',
+                                  style: TextStyle(
+                                    color: AppColors.danger,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
                               )
                             : ElevatedButton(
                                 onPressed: () {
@@ -1005,10 +1080,21 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 6,
+                                  ),
                                 ),
-                                child: const Text('APPLY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                child: const Text(
+                                  'APPLY',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
                               ),
                       ],
                     ),
@@ -1050,7 +1136,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
               // Header
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1059,12 +1148,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       children: const [
                         Text(
                           'Update Covered Family Member',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.slate900),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            color: AppColors.slate900,
+                          ),
                         ),
                         SizedBox(height: 2),
                         Text(
                           'Select who this chef session & health pass is active for',
-                          style: TextStyle(fontSize: 11, color: AppColors.slate500),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.slate500,
+                          ),
                         ),
                       ],
                     ),
@@ -1083,7 +1179,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     ? const Center(
                         child: Text(
                           'No registered household members found.',
-                          style: TextStyle(color: AppColors.slate500, fontSize: 13),
+                          style: TextStyle(
+                            color: AppColors.slate500,
+                            fontSize: 13,
+                          ),
                         ),
                       )
                     : ListView.separated(
@@ -1092,15 +1191,29 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final raw = allMembers[index];
-                          final m = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+                          final m = raw is Map
+                              ? Map<String, dynamic>.from(raw)
+                              : <String, dynamic>{};
                           final id = m['id']?.toString() ?? '';
                           final name = m['name']?.toString() ?? 'Member';
-                          final relation = m['relationship']?.toString() ?? 'FAMILY';
+                          final relation =
+                              m['relationship']?.toString() ?? 'FAMILY';
                           final isCovered = m['isCoveredByHealthPass'] == true;
-                          final diet = (m['dietaryPreferences'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
-                          final allergies = (m['allergies'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
-                          final isSelected = (id.isNotEmpty && id == _currentMemberId) ||
-                              (id.isEmpty && name.toLowerCase() == _currentMemberName.toLowerCase());
+                          final diet =
+                              (m['dietaryPreferences'] as List<dynamic>?)
+                                  ?.map((e) => e.toString())
+                                  .toList() ??
+                              [];
+                          final allergies =
+                              (m['allergies'] as List<dynamic>?)
+                                  ?.map((e) => e.toString())
+                                  .toList() ??
+                              [];
+                          final isSelected =
+                              (id.isNotEmpty && id == _currentMemberId) ||
+                              (id.isEmpty &&
+                                  name.toLowerCase() ==
+                                      _currentMemberName.toLowerCase());
 
                           return InkWell(
                             borderRadius: BorderRadius.circular(14),
@@ -1117,7 +1230,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                               _fetchDynamicCookingTimeAndQuote();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Covered member updated to $name ($relation)'),
+                                  content: Text(
+                                    'Covered member updated to $name ($relation)',
+                                  ),
                                   backgroundColor: AppColors.primary,
                                   duration: const Duration(seconds: 2),
                                 ),
@@ -1126,10 +1241,14 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: isSelected ? AppColors.primarySubtle : Colors.white,
+                                color: isSelected
+                                    ? AppColors.primarySubtle
+                                    : Colors.white,
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: isSelected ? AppColors.primary : AppColors.slate200,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : AppColors.slate200,
                                   width: isSelected ? 2 : 1,
                                 ),
                               ),
@@ -1138,11 +1257,17 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 22,
-                                    backgroundColor: isSelected ? AppColors.primary : AppColors.slate100,
+                                    backgroundColor: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.slate100,
                                     child: Text(
-                                      name.isNotEmpty ? name[0].toUpperCase() : 'M',
+                                      name.isNotEmpty
+                                          ? name[0].toUpperCase()
+                                          : 'M',
                                       style: TextStyle(
-                                        color: isSelected ? Colors.white : AppColors.primaryDark,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : AppColors.primaryDark,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
@@ -1151,7 +1276,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
@@ -1167,15 +1293,26 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                               ),
                                             ),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 color: Colors.white,
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: AppColors.slate300),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: AppColors.slate300,
+                                                ),
                                               ),
                                               child: Text(
                                                 relation.toUpperCase(),
-                                                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.slate600),
+                                                style: const TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.slate600,
+                                                ),
                                               ),
                                             ),
                                             const SizedBox(width: 6),
@@ -1183,12 +1320,24 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                               StatusBadge.success('COVERED')
                                             else
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 5,
+                                                      vertical: 1.5,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: AppColors.slate200,
-                                                  borderRadius: BorderRadius.circular(4),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
                                                 ),
-                                                child: const Text('FAMILY', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.slate700)),
+                                                child: const Text(
+                                                  'FAMILY',
+                                                  style: TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.slate700,
+                                                  ),
+                                                ),
                                               ),
                                           ],
                                         ),
@@ -1196,16 +1345,25 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                         if (diet.isNotEmpty)
                                           Text(
                                             'Diet: ${diet.join(", ")}',
-                                            style: const TextStyle(fontSize: 11, color: AppColors.slate600),
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.slate600,
+                                            ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         Text(
-                                          allergies.isEmpty ? 'No documented allergies' : '⚠️ Allergies: ${allergies.join(", ")}',
+                                          allergies.isEmpty
+                                              ? 'No documented allergies'
+                                              : '⚠️ Allergies: ${allergies.join(", ")}',
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: allergies.isEmpty ? AppColors.slate500 : AppColors.danger,
-                                            fontWeight: allergies.isEmpty ? FontWeight.normal : FontWeight.bold,
+                                            color: allergies.isEmpty
+                                                ? AppColors.slate500
+                                                : AppColors.danger,
+                                            fontWeight: allergies.isEmpty
+                                                ? FontWeight.normal
+                                                : FontWeight.bold,
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -1215,8 +1373,12 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   Icon(
-                                    isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                                    color: isSelected ? AppColors.primary : AppColors.slate400,
+                                    isSelected
+                                        ? Icons.check_circle_rounded
+                                        : Icons.radio_button_unchecked_rounded,
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.slate400,
                                     size: 22,
                                   ),
                                 ],
@@ -1233,283 +1395,85 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     );
   }
 
-  void _showChefSelectionSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.78,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                children: [
-                  // Handle
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(top: 12, bottom: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.slate300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              'Select Certified Home Chef',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.slate900),
-                            ),
-                            Text(
-                              'Verified for Hygiene, Nutrition & Culinary Excellence',
-                              style: TextStyle(fontSize: 11, color: AppColors.slate500),
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.slate600),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-
-                  // Chef List
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _availableChefs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final chef = _availableChefs[index];
-                        final isSelected = _selectedChefId == chef['id'];
-                        final isAuto = chef['isAuto'] == true;
-
-                        return InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () {
-                            setModalState(() {
-                              _selectedChefId = chef['id'] as String;
-                              _selectedChefName = chef['name'] as String;
-                              _selectedChefData = chef;
-                            });
-                            setState(() {});
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: isSelected ? AppColors.primarySubtle : Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: isSelected ? AppColors.primary : AppColors.slate300,
-                                width: isSelected ? 2 : 1,
-                              ),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  radius: 24,
-                                  backgroundColor: isAuto ? AppColors.primary : AppColors.slate100,
-                                  child: Icon(
-                                    isAuto ? Icons.bolt_rounded : Icons.person_rounded,
-                                    color: isAuto ? Colors.white : AppColors.primary,
-                                    size: 26,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              chef['name'] as String,
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: AppColors.slate900),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: isAuto ? AppColors.primary : AppColors.accentSubtle,
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              chef['badge'] as String,
-                                              style: TextStyle(
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.bold,
-                                                color: isAuto ? Colors.white : AppColors.amber700,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        chef['title'] as String,
-                                        style: const TextStyle(fontSize: 12, color: AppColors.slate600, fontWeight: FontWeight.w500),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            '${chef["rating"]} (${chef["reviews"]})',
-                                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.slate800),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          const Icon(Icons.location_on_rounded, color: AppColors.slate500, size: 14),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            '${chef["distanceKm"]} km • ETA ${chef["etaMins"]}m',
-                                            style: const TextStyle(fontSize: 11.5, color: AppColors.slate600),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 6,
-                                        children: (chef['specialties'] as List<dynamic>).map((s) {
-                                          return Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.slate100,
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              s.toString(),
-                                              style: const TextStyle(fontSize: 10, color: AppColors.slate700),
-                                            ),
-                                          );
-                                        }).toList(),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Radio<String>(
-                                  value: chef['id'] as String,
-                                  groupValue: _selectedChefId,
-                                  activeColor: AppColors.primary,
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setModalState(() {
-                                        _selectedChefId = chef['id'] as String;
-                                        _selectedChefName = chef['name'] as String;
-                                        _selectedChefData = chef;
-                                      });
-                                      setState(() {});
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  // Bottom Proceed Button
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(top: BorderSide(color: AppColors.slate200)),
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 46,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _proceedToPayment();
-                        },
-                        icon: const Icon(Icons.payment_rounded, size: 18),
-                        label: Text(
-                          _quote == null
-                              ? 'Proceed to Payment'
-                              : _quote!.total == 0.0
-                                  ? 'Confirm Chef Visit (Covered)'
-                                  : 'Confirm Chef & Pay ₹${_quote!.total.toStringAsFixed(0)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _proceedToPayment() {
+  Future<void> _proceedToPayment() async {
     if (_quote == null) return;
+
+    final resolvedAddressId =
+        _selectedAddress?.id ??
+        widget.bookingConfig['addressId'] ??
+        widget.bookingConfig['address']?['id'];
+    if (resolvedAddressId == null || resolvedAddressId.toString().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select or add your kitchen delivery address before proceeding.',
+          ),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      _selectOrChangeAddress();
+      return;
+    }
 
     final notes = _chefNotesController.text.trim();
     final dishes = (widget.bookingConfig['dishes'] as List<dynamic>?) ?? [];
+    if (dishes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select at least one dish before proceeding to checkout.',
+          ),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      _showAddMoreDishesOptions();
+      return;
+    }
+
     final memberIds = dishes
         .map((d) => d['memberId']?.toString())
         .where((id) => id != null && id.isNotEmpty)
         .toSet()
         .toList();
 
-    Navigator.pushNamed(
+    final result = await Navigator.pushNamed(
       context,
       AppRoutes.bookChefPayment,
       arguments: {
         ...widget.bookingConfig,
-        'addressId': _selectedAddress?.id ?? widget.bookingConfig['addressId'] ?? widget.bookingConfig['address']?['id'],
+        'addressId':
+            _selectedAddress?.id ??
+            widget.bookingConfig['addressId'] ??
+            widget.bookingConfig['address']?['id'],
         'memberId': _currentMemberId,
         'memberName': _currentMemberName,
-        'memberIds': memberIds.isNotEmpty ? memberIds : (_currentMemberId.isNotEmpty ? [_currentMemberId] : []),
+        'memberIds': memberIds.isNotEmpty
+            ? memberIds
+            : (_currentMemberId.isNotEmpty ? [_currentMemberId] : []),
         'quote': _quote,
         'quoteId': _quote!.quoteId,
         'cookingTime': _quote!.cookingTimeMinutes,
         'finalAmount': _quote!.total,
         'chefNotes': notes.isNotEmpty ? notes : null,
-        'selectedChefId': _selectedChefId,
-        'chefName': _selectedChefName,
-        'selectedChef': _selectedChefData ?? _availableChefs.first,
+        'chefName': _autoAssignChefLabel,
         'addressLine': _currentAddressLine,
         'address': _selectedAddress?.toJson(),
         'dishes': dishes,
-        'bookingOption': widget.bookingConfig['bookingOption'] ?? widget.bookingConfig['mealType'] ?? 'L',
+        'bookingOption':
+            widget.bookingConfig['bookingOption'] ??
+            widget.bookingConfig['mealType'] ??
+            'L',
       },
     );
+
+    if (result == true || result == 'confirmed') {
+      if (mounted) Navigator.pop(context, true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (_isLoading && _quote == null) {
       return const Scaffold(
         backgroundColor: AppColors.slate50,
         body: LoadingView(message: 'Calculating quote & chef schedule...'),
@@ -1518,7 +1482,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
     final quote = _quote;
     final dishes = (widget.bookingConfig['dishes'] as List<dynamic>?) ?? [];
-    final allMembers = (widget.bookingConfig['allMembers'] as List<dynamic>?) ?? [];
+    final allMembers =
+        (widget.bookingConfig['allMembers'] as List<dynamic>?) ?? [];
 
     return Scaffold(
       backgroundColor: AppColors.slate50,
@@ -1529,7 +1494,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         iconTheme: const IconThemeData(color: AppColors.slate900),
         title: const Text(
           'Review Booking',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.slate900),
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: AppColors.slate900,
+          ),
         ),
       ),
       body: SafeArea(
@@ -1551,12 +1520,20 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 20),
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            color: AppColors.danger,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(color: AppColors.danger, fontSize: 12.5, fontWeight: FontWeight.w500),
+                              style: const TextStyle(
+                                color: AppColors.danger,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ],
@@ -1620,9 +1597,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     );
   }
 
-
-
-  Widget _buildMemberProfileCard(List<dynamic> allMembers, List<dynamic> dishes) {
+  Widget _buildMemberProfileCard(
+    List<dynamic> allMembers,
+    List<dynamic> dishes,
+  ) {
     // Collect unique household members participating in this session
     final participatingMemberNames = dishes
         .map((d) => d['memberName']?.toString() ?? 'Self')
@@ -1653,7 +1631,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       });
     }
 
-    final coveredCount = activeMembers.where((m) => m['isCoveredByHealthPass'] == true).length;
+    final coveredCount = activeMembers
+        .where((m) => m['isCoveredByHealthPass'] == true)
+        .length;
 
     return EbicCard(
       padding: const EdgeInsets.all(16),
@@ -1666,12 +1646,20 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               Expanded(
                 child: Row(
                   children: [
-                    const Icon(Icons.people_alt_rounded, color: AppColors.primary, size: 18),
+                    const Icon(
+                      Icons.people_alt_rounded,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
                         'Covered Family (${activeMembers.length})',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: AppColors.slate900,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1683,20 +1671,33 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 onTap: () => _showMemberSelectionSheet(allMembers),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primarySubtle,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.35)),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.35),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: const [
-                      Icon(Icons.swap_horiz_rounded, size: 14, color: AppColors.primaryDark),
+                      Icon(
+                        Icons.swap_horiz_rounded,
+                        size: 14,
+                        color: AppColors.primaryDark,
+                      ),
                       SizedBox(width: 4),
                       Text(
                         'Update',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryDark,
+                        ),
                       ),
                     ],
                   ),
@@ -1710,7 +1711,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               Expanded(
                 child: Text(
                   'Active clinical profile & health pass benefits for this chef session',
-                  style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.slate500,
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
@@ -1721,8 +1725,14 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
-                  coveredCount > 0 ? '$coveredCount Health Pass Active' : 'Household Verified',
-                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                  coveredCount > 0
+                      ? '$coveredCount Health Pass Active'
+                      : 'Household Verified',
+                  style: const TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDark,
+                  ),
                 ),
               ),
             ],
@@ -1732,22 +1742,46 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           ...activeMembers.map((m) {
             final name = m['name']?.toString() ?? 'Member';
             final relation = m['relationship']?.toString() ?? 'MEMBER';
-            final isPrimary = name.toLowerCase() == _currentMemberName.toLowerCase();
-            final isCovered = (isPrimary && _currentIsHealthPassCovered) || m['isCoveredByHealthPass'] == true;
-            final dietary = (m['dietaryPreferences'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
-            final allergies = (m['allergies'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+            final isPrimary =
+                name.toLowerCase() == _currentMemberName.toLowerCase();
+            final isCovered =
+                (isPrimary && _currentIsHealthPassCovered) ||
+                m['isCoveredByHealthPass'] == true;
+            final dietary =
+                (m['dietaryPreferences'] as List<dynamic>?)
+                    ?.map((e) => e.toString())
+                    .toList() ??
+                [];
+            final allergies =
+                (m['allergies'] as List<dynamic>?)
+                    ?.map((e) => e.toString())
+                    .toList() ??
+                [];
 
-            final memberDishes = dishes.where((d) => (d['memberName']?.toString() ?? 'Self').toLowerCase() == name.toLowerCase()).toList();
-            final portions = memberDishes.fold<int>(0, (sum, d) => sum + ((d['servings'] as num?)?.toInt() ?? 1));
+            final memberDishes = dishes
+                .where(
+                  (d) =>
+                      (d['memberName']?.toString() ?? 'Self').toLowerCase() ==
+                      name.toLowerCase(),
+                )
+                .toList();
+            final portions = memberDishes.fold<int>(
+              0,
+              (sum, d) => sum + ((d['servings'] as num?)?.toInt() ?? 1),
+            );
 
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isPrimary ? AppColors.primarySubtle.withOpacity(0.3) : AppColors.slate50,
+                color: isPrimary
+                    ? AppColors.primarySubtle.withOpacity(0.3)
+                    : AppColors.slate50,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isPrimary ? AppColors.primary.withOpacity(0.4) : AppColors.slate200,
+                  color: isPrimary
+                      ? AppColors.primary.withOpacity(0.4)
+                      : AppColors.slate200,
                   width: isPrimary ? 1.5 : 1,
                 ),
               ),
@@ -1756,7 +1790,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 children: [
                   CircleAvatar(
                     radius: 18,
-                    backgroundColor: isPrimary ? AppColors.primary : AppColors.slate200,
+                    backgroundColor: isPrimary
+                        ? AppColors.primary
+                        : AppColors.slate200,
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'M',
                       style: TextStyle(
@@ -1778,10 +1814,17 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                           children: [
                             Text(
                               name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppColors.slate900,
+                              ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(4),
@@ -1789,33 +1832,51 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                               ),
                               child: Text(
                                 relation.toUpperCase(),
-                                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.slate600),
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.slate600,
+                                ),
                               ),
                             ),
                             if (isCovered)
                               StatusBadge.success('COVERED')
                             else
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1.5,
+                                ),
                                 decoration: BoxDecoration(
                                   color: AppColors.slate200,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
                                   'FAMILY',
-                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.slate700),
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.slate700,
+                                  ),
                                 ),
                               ),
                             if (isPrimary) ...[
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1.5,
+                                ),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
                                   'PRIMARY',
-                                  style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.white),
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1827,22 +1888,35 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                             padding: const EdgeInsets.only(bottom: 2),
                             child: Text(
                               '${memberDishes.length} ${memberDishes.length == 1 ? "dish" : "dishes"} assigned ($portions ${portions == 1 ? "portion" : "portions"})',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryDark,
+                              ),
                             ),
                           ),
                         if (dietary.isNotEmpty)
                           Text(
                             'Diet: ${dietary.join(", ")}',
-                            style: const TextStyle(fontSize: 11, color: AppColors.slate700),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.slate700,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         Text(
-                          allergies.isEmpty ? 'No documented allergies' : '⚠️ Allergies: ${allergies.join(", ")}',
+                          allergies.isEmpty
+                              ? 'No documented allergies'
+                              : '⚠️ Allergies: ${allergies.join(", ")}',
                           style: TextStyle(
                             fontSize: 11,
-                            color: allergies.isEmpty ? AppColors.slate500 : AppColors.danger,
-                            fontWeight: allergies.isEmpty ? FontWeight.normal : FontWeight.bold,
+                            color: allergies.isEmpty
+                                ? AppColors.slate500
+                                : AppColors.danger,
+                            fontWeight: allergies.isEmpty
+                                ? FontWeight.normal
+                                : FontWeight.bold,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1862,93 +1936,38 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   Widget _buildAssignedChefCard() {
     return EbicCard(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  children: const [
-                    Icon(Icons.restaurant_menu_rounded, color: AppColors.primary, size: 18),
-                    SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'Assigned Certified Chef',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              InkWell(
-                onTap: _showChefSelectionSheet,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.primarySubtle,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.35)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.edit_rounded, size: 13, color: AppColors.primaryDark),
-                      SizedBox(width: 4),
-                      Text(
-                        'Change',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: AppColors.primarySubtle,
+            child: const Icon(
+              Icons.restaurant_menu_rounded,
+              color: AppColors.primary,
+              size: 22,
+            ),
           ),
-          const Divider(height: 18, color: AppColors.slate200),
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: AppColors.primarySubtle,
-                child: const Icon(Icons.person_rounded, color: AppColors.primary, size: 26),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _selectedChefName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Verified for Hygiene, Nutrition & Culinary Excellence',
-                      style: TextStyle(fontSize: 11, color: AppColors.slate500),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: const [
-                        Icon(Icons.star_rounded, color: Colors.amber, size: 15),
-                        SizedBox(width: 2),
-                        Text('4.9 (120+ visits)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate800)),
-                        SizedBox(width: 8),
-                        Icon(Icons.timer_outlined, color: AppColors.slate500, size: 13),
-                        SizedBox(width: 2),
-                        Text('ETA ~25-35 mins', style: TextStyle(fontSize: 11, color: AppColors.slate600)),
-                      ],
-                    ),
-                  ],
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _autoAssignChefLabel,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: AppColors.slate900,
+                  ),
                 ),
-              ),
-            ],
+                SizedBox(height: 2),
+                Text(
+                  'The nearest available verified chef is assigned after payment. '
+                  'You can track them live once assigned.',
+                  style: TextStyle(fontSize: 11, color: AppColors.slate500),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1956,8 +1975,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   Widget _buildLogisticsCard() {
-    final occasion = widget.bookingConfig['occasion']?.toString().replaceAll('_', ' & ') ?? 'Lunch';
-    final serviceDate = widget.bookingConfig['serviceDate']?.toString() ?? 'Today';
+    final occasion =
+        widget.bookingConfig['occasion']?.toString().replaceAll('_', ' & ') ??
+        'Lunch';
+    final serviceDate =
+        widget.bookingConfig['serviceDate']?.toString() ?? 'Today';
     final cookTime = _quote?.cookingTimeMinutes ?? 35;
 
     return EbicCard(
@@ -1971,7 +1993,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               const Expanded(
                 child: Text(
                   'Chef Arrival & Kitchen Address',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: AppColors.slate900,
+                  ),
                   maxLines: 2,
                 ),
               ),
@@ -1984,7 +2010,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 ),
                 child: const Text(
                   'AT-HOME CHEF',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDark,
+                  ),
                 ),
               ),
             ],
@@ -2005,17 +2035,28 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   color: AppColors.amber50,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.wb_sunny_rounded, color: AppColors.amber700, size: 18),
+                child: const Icon(
+                  Icons.wb_sunny_rounded,
+                  color: AppColors.amber700,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Cooking Slot & Meal Time', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
+                    const Text(
+                      'Cooking Slot & Meal Time',
+                      style: TextStyle(fontSize: 11, color: AppColors.slate500),
+                    ),
                     Text(
                       '$occasion • $serviceDate (~$cookTime mins live cook)',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.slate800),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.slate800,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2036,7 +2077,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   color: AppColors.primarySubtle,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 18),
+                child: const Icon(
+                  Icons.location_on_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2048,25 +2093,44 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       spacing: 6,
                       runSpacing: 2,
                       children: [
-                        const Text('Kitchen Address', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
+                        const Text(
+                          'Kitchen Address',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.slate500,
+                          ),
+                        ),
                         if (_selectedAddress != null)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.slate200,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               _selectedAddress!.label.toUpperCase(),
-                              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.slate700),
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.slate700,
+                              ),
                             ),
                           ),
                       ],
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _currentAddressLine.isNotEmpty ? _currentAddressLine : 'Select your kitchen address',
-                      style: const TextStyle(fontSize: 12.5, color: AppColors.slate800, fontWeight: FontWeight.w600),
+                      _currentAddressLine.isNotEmpty
+                          ? _currentAddressLine
+                          : 'Select your kitchen address',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.slate800,
+                        fontWeight: FontWeight.w600,
+                      ),
                       maxLines: 3,
                     ),
                   ],
@@ -2076,15 +2140,24 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               TextButton(
                 onPressed: _selectOrChangeAddress,
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   backgroundColor: AppColors.primarySubtle,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 child: const Text(
                   'Change',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDark,
+                  ),
                 ),
               ),
             ],
@@ -2095,19 +2168,85 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   Widget _buildSelectedDishesCard(List<dynamic> dishes) {
-    final isAssigned = widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL';
+    if (dishes.isEmpty) {
+      return EbicCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                color: AppColors.primarySubtle,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.restaurant_menu_rounded,
+                size: 32,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'No Dishes Selected',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: AppColors.slate900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'All dishes were removed. Add recipes to complete your chef booking.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.slate500,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _showAddMoreDishesOptions,
+                icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                label: const Text(
+                  'Add Dishes to Booking',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final isAssigned = widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL' ||
+        widget.bookingConfig['mode'] == 'ASSIGNED_MEAL';
 
     // Group dishes by member name - keep exact references
     final Map<String, List<Map<String, dynamic>>> dishesByMember = {};
     for (final raw in dishes) {
       if (raw is Map) {
-        final d = (raw is Map<String, dynamic>) ? raw : Map<String, dynamic>.from(raw);
+        final d = (raw is Map<String, dynamic>)
+            ? raw
+            : Map<String, dynamic>.from(raw);
         final member = d['memberName']?.toString() ?? _currentMemberName;
         dishesByMember.putIfAbsent(member, () => []).add(d);
       }
     }
 
-    final totalPortions = dishes.fold<int>(0, (sum, d) => sum + ((d['servings'] as num?)?.toInt() ?? 1));
+    final totalPortions = dishes.fold<int>(
+      0,
+      (sum, d) => sum + _asInt(d['servings'] ?? d['quantity'], 1),
+    );
 
     return EbicCard(
       padding: const EdgeInsets.all(16),
@@ -2123,12 +2262,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   children: [
                     Text(
                       'Selected Menu (${dishes.length} ${dishes.length == 1 ? "Dish" : "Dishes"}, $totalPortions Portions)',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: AppColors.slate900,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       'Personalized for ${dishesByMember.keys.length} family ${dishesByMember.keys.length == 1 ? "member" : "members"}',
-                      style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.slate500,
+                      ),
                     ),
                   ],
                 ),
@@ -2138,20 +2284,33 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 onTap: _showAddMoreDishesOptions,
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primarySubtle,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: const [
-                      Icon(Icons.add_rounded, size: 14, color: AppColors.primaryDark),
+                      Icon(
+                        Icons.add_rounded,
+                        size: 14,
+                        color: AppColors.primaryDark,
+                      ),
                       SizedBox(width: 3),
                       Text(
                         'Add Dishes',
-                        style: TextStyle(fontSize: 11, color: AppColors.primaryDark, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.primaryDark,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -2169,12 +2328,14 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               0.0,
               (sum, d) =>
                   sum +
-                  (((d['servings'] as num?)?.toInt() ?? 1) *
-                      (isAssigned ? 0.0 : ((d['unitPrice'] as num?)?.toDouble() ?? 120.0))),
+                  (_asInt(d['servings'] ?? d['quantity'], 1) *
+                      (isAssigned
+                          ? 0.0
+                          : _dishUnitPrice(d))),
             );
             final memberPortions = memberDishes.fold<int>(
               0,
-              (sum, d) => sum + ((d['servings'] as num?)?.toInt() ?? 1),
+              (sum, d) => sum + _asInt(d['servings'] ?? d['quantity'], 1),
             );
 
             return Container(
@@ -2194,27 +2355,44 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         radius: 12,
                         backgroundColor: AppColors.primary,
                         child: Text(
-                          memberName.isNotEmpty ? memberName[0].toUpperCase() : 'M',
-                          style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                          memberName.isNotEmpty
+                              ? memberName[0].toUpperCase()
+                              : 'M',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Dishes for $memberName',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.slate900),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: AppColors.slate900,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primarySubtle,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           '${memberDishes.length} ${memberDishes.length == 1 ? "dish" : "dishes"} • $memberPortions ${memberPortions == 1 ? "portion" : "portions"}',
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryDark,
+                          ),
                         ),
                       ),
                     ],
@@ -2224,13 +2402,23 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   const SizedBox(height: 6),
                   ...memberDishes.map((d) {
                     final name = d['name']?.toString() ?? 'Recipe';
-                    final servings = (d['servings'] as num?)?.toInt() ?? 1;
-                    final cookTime = (d['baseCookTimeMin'] as num?)?.toInt() ?? 20;
-                    final unitPrice = isAssigned ? 0.0 : ((d['unitPrice'] as num?)?.toDouble() ?? 120.0);
+                    final servings = _asInt(d['servings'] ?? d['quantity'], 1);
+                    final cookTime = _asInt(d['baseCookTimeMin'], 20);
+                    final unitPrice = isAssigned
+                        ? 0.0
+                        : _dishUnitPrice(d);
                     final lineTotal = servings * unitPrice;
 
                     final lower = name.toLowerCase();
-                    final isVeg = !['chicken', 'mutton', 'fish', 'prawn', 'meat', 'egg', 'pork'].any((w) => lower.contains(w));
+                    final isVeg = ![
+                      'chicken',
+                      'mutton',
+                      'fish',
+                      'prawn',
+                      'meat',
+                      'egg',
+                      'pork',
+                    ].any((w) => lower.contains(w));
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 5),
@@ -2247,23 +2435,40 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                 children: [
                                   Text(
                                     name,
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.slate800),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.slate800,
+                                    ),
                                     maxLines: 3,
                                   ),
                                   Row(
                                     children: [
                                       Text(
                                         '~$cookTime mins',
-                                        style: const TextStyle(fontSize: 10.5, color: AppColors.slate500),
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          color: AppColors.slate500,
+                                        ),
                                       ),
-                                      const Text(' • ', style: TextStyle(fontSize: 10.5, color: AppColors.slate400)),
+                                      const Text(
+                                        ' • ',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          color: AppColors.slate400,
+                                        ),
+                                      ),
                                       Flexible(
                                         child: Text(
-                                          unitPrice > 0 ? '₹${unitPrice.toStringAsFixed(0)}/portion' : 'Plan Covered',
+                                          unitPrice > 0
+                                              ? '₹${unitPrice.toStringAsFixed(0)}/portion'
+                                              : 'Plan Covered',
                                           style: TextStyle(
                                             fontSize: 10.5,
                                             fontWeight: FontWeight.w600,
-                                            color: unitPrice > 0 ? AppColors.slate600 : AppColors.successDark,
+                                            color: unitPrice > 0
+                                                ? AppColors.slate600
+                                                : AppColors.successDark,
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -2275,69 +2480,94 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          // Stepper: [-] qty [+]
+                          const SizedBox(width: 6),
+                          // Tactile Stepper: [-] qty [+]
                           Container(
+                            height: 32,
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: AppColors.primarySubtle.withOpacity(0.25),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.primary.withOpacity(0.35)),
+                              border: Border.all(
+                                color: AppColors.primary.withOpacity(0.35),
+                                width: 1,
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 InkWell(
-                                  onTap: () => _updateDishQuantity(d, servings - 1),
-                                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(7)),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
+                                  onTap: () =>
+                                      _updateDishQuantity(d, servings - 1),
+                                  borderRadius: const BorderRadius.horizontal(
+                                    left: Radius.circular(7),
+                                  ),
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    alignment: Alignment.center,
                                     child: Icon(
-                                      servings <= 1 ? Icons.delete_outline_rounded : Icons.remove_rounded,
-                                      size: 14,
-                                      color: servings <= 1 ? AppColors.danger : AppColors.primary,
+                                      servings <= 1
+                                          ? Icons.delete_outline_rounded
+                                          : Icons.remove_rounded,
+                                      size: 18,
+                                      color: servings <= 1
+                                          ? AppColors.danger
+                                          : AppColors.primary,
                                     ),
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  constraints: const BoxConstraints(minWidth: 26),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  alignment: Alignment.center,
                                   child: Text(
                                     '$servings',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.slate900),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.slate900,
+                                    ),
                                   ),
                                 ),
                                 InkWell(
-                                  onTap: () => _updateDishQuantity(d, servings + 1),
-                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(7)),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
-                                    child: Icon(Icons.add_rounded, size: 14, color: AppColors.primary),
+                                  onTap: () =>
+                                      _updateDishQuantity(d, servings + 1),
+                                  borderRadius: const BorderRadius.horizontal(
+                                    right: Radius.circular(7),
+                                  ),
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    alignment: Alignment.center,
+                                    child: const Icon(
+                                      Icons.add_rounded,
+                                      size: 18,
+                                      color: AppColors.primary,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 8),
                           SizedBox(
-                            width: 48,
+                            width: 52,
                             child: Text(
-                              lineTotal > 0 ? '₹${lineTotal.toStringAsFixed(0)}' : 'FREE',
+                              lineTotal > 0
+                                  ? '₹${lineTotal.toStringAsFixed(0)}'
+                                  : 'FREE',
                               textAlign: TextAlign.end,
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
                                 fontWeight: FontWeight.bold,
-                                color: lineTotal > 0 ? AppColors.slate900 : AppColors.successDark,
+                                color: lineTotal > 0
+                                    ? AppColors.slate900
+                                    : AppColors.successDark,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          InkWell(
-                            onTap: () => _updateDishQuantity(d, 0),
-                            borderRadius: BorderRadius.circular(6),
-                            child: const Padding(
-                              padding: EdgeInsets.all(4),
-                              child: Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.danger),
                             ),
                           ),
                         ],
@@ -2346,7 +2576,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   }),
                   const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
@@ -2357,11 +2590,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.receipt_long_rounded, size: 13, color: AppColors.primary),
+                            const Icon(
+                              Icons.receipt_long_rounded,
+                              size: 13,
+                              color: AppColors.primary,
+                            ),
                             const SizedBox(width: 5),
                             Text(
                               'Total for $memberName',
-                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.slate800),
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.slate800,
+                              ),
                             ),
                           ],
                         ),
@@ -2372,7 +2613,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.bold,
-                            color: memberSubtotal > 0 ? AppColors.primaryDark : AppColors.successDark,
+                            color: memberSubtotal > 0
+                                ? AppColors.primaryDark
+                                : AppColors.successDark,
                           ),
                         ),
                       ],
@@ -2390,13 +2633,18 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 0.0,
                 (sum, d) =>
                     sum +
-                    (((d['servings'] as num?)?.toInt() ?? 1) *
-                        (isAssigned ? 0.0 : ((d['unitPrice'] as num?)?.toDouble() ?? 120.0))),
+                    (_asInt(d['servings'] ?? d['quantity'], 1) *
+                        (isAssigned
+                            ? 0.0
+                            : _dishUnitPrice(d))),
               );
 
               return Container(
                 margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.slate100,
                   borderRadius: BorderRadius.circular(10),
@@ -2407,20 +2655,32 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.restaurant_menu_rounded, size: 16, color: AppColors.primary),
+                        const Icon(
+                          Icons.restaurant_menu_rounded,
+                          size: 16,
+                          color: AppColors.primary,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           'Pantry Total (${dishes.length} dishes, $totalPortions portions)',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.slate800),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.slate800,
+                          ),
                         ),
                       ],
                     ),
                     Text(
-                      totalDishesSubtotal > 0 ? '₹${totalDishesSubtotal.toStringAsFixed(0)}' : 'Plan Covered',
+                      totalDishesSubtotal > 0
+                          ? '₹${totalDishesSubtotal.toStringAsFixed(0)}'
+                          : 'Plan Covered',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: totalDishesSubtotal > 0 ? AppColors.slate900 : AppColors.successDark,
+                        color: totalDishesSubtotal > 0
+                            ? AppColors.slate900
+                            : AppColors.successDark,
                       ),
                     ),
                   ],
@@ -2433,15 +2693,28 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: _showAddMoreDishesOptions,
-              icon: const Icon(Icons.add_circle_outline_rounded, size: 18, color: AppColors.primary),
+              icon: const Icon(
+                Icons.add_circle_outline_rounded,
+                size: 18,
+                color: AppColors.primary,
+              ),
               label: const Text(
                 'Add More Dishes to Booking',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: AppColors.primary,
+                ),
               ),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: AppColors.primary.withOpacity(0.4), width: 1.2),
+                side: BorderSide(
+                  color: AppColors.primary.withOpacity(0.4),
+                  width: 1.2,
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 backgroundColor: AppColors.primarySubtle.withOpacity(0.4),
               ),
             ),
@@ -2463,20 +2736,34 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               SizedBox(width: 8),
               Text(
                 'Chef Cooking Notes & Preferences',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: AppColors.slate900,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _chefNotesController,
-            style: const TextStyle(fontSize: 13, color: AppColors.slate900, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.slate900,
+              fontWeight: FontWeight.w500,
+            ),
             decoration: InputDecoration(
               hintText: 'e.g. Mild spice, use olive oil, less salt...',
-              hintStyle: const TextStyle(fontSize: 12.5, color: AppColors.slate400),
+              hintStyle: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.slate400,
+              ),
               filled: true,
               fillColor: AppColors.slate50,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(color: AppColors.slate300),
@@ -2491,7 +2778,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 onTap: () => _addQuickNote(note),
                 child: Container(
                   margin: const EdgeInsets.only(top: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.slate100,
                     borderRadius: BorderRadius.circular(6),
@@ -2499,7 +2789,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   ),
                   child: Text(
                     '+ $note',
-                    style: const TextStyle(fontSize: 11, color: AppColors.slate700, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.slate700,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               );
@@ -2545,7 +2839,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         ],
                       ),
                       child: const Center(
-                        child: Icon(Icons.confirmation_number_rounded, color: Colors.white, size: 20),
+                        child: Icon(
+                          Icons.confirmation_number_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -2555,12 +2853,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         children: [
                           Text(
                             'Offers & Coupons',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: AppColors.slate900,
+                            ),
                           ),
                           SizedBox(height: 1),
                           Text(
                             'Apply coupon for instant savings',
-                            style: TextStyle(fontSize: 11, color: AppColors.slate500),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.slate500,
+                            ),
                           ),
                         ],
                       ),
@@ -2570,20 +2875,34 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               ),
               if (_appliedCoupon != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFECFDF5),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF10B981), width: 1.2),
+                    border: Border.all(
+                      color: const Color(0xFF10B981),
+                      width: 1.2,
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_circle_rounded, size: 13, color: AppColors.primary),
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 13,
+                        color: AppColors.primary,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         _appliedCoupon!,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryDark,
+                        ),
                       ),
                     ],
                   ),
@@ -2621,7 +2940,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       color: AppColors.primary,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -2641,14 +2964,21 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                             ),
                             const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.primary,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
                                 'APPLIED',
-                                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white),
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ],
@@ -2656,7 +2986,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         const SizedBox(height: 2),
                         Text(
                           'You save ₹${_couponDiscount.toStringAsFixed(0)} on this chef visit!',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF065F46)),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF065F46),
+                          ),
                         ),
                       ],
                     ),
@@ -2665,7 +2999,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     onTap: _removeCoupon,
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red.shade50,
                         borderRadius: BorderRadius.circular(8),
@@ -2703,7 +3040,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       color: AppColors.primarySubtle,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.confirmation_number_rounded, size: 16, color: AppColors.primary),
+                    child: const Icon(
+                      Icons.confirmation_number_rounded,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
                   ),
                   Expanded(
                     child: TextField(
@@ -2745,7 +3086,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         onTap: () => _applyCouponCode(_couponController.text),
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
                           child: const Text(
                             'APPLY',
                             style: TextStyle(
@@ -2770,7 +3114,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0FDF4),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFA7F3D0), width: 1.2),
+                  border: Border.all(
+                    color: const Color(0xFFA7F3D0),
+                    width: 1.2,
+                  ),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(11),
@@ -2778,13 +3125,13 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     child: Row(
                       children: [
                         // Emerald Left Accent Strip
-                        Container(
-                          width: 4,
-                          color: AppColors.primary,
-                        ),
+                        Container(width: 4, color: AppColors.primary),
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
                             child: Row(
                               children: [
                                 Container(
@@ -2794,17 +3141,23 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                     color: AppColors.primary.withOpacity(0.12),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Icon(Icons.percent_rounded, color: AppColors.primary, size: 17),
+                                  child: const Icon(
+                                    Icons.percent_rounded,
+                                    color: AppColors.primary,
+                                    size: 17,
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
                                           Text(
-                                            _availableOffers.first['code'] as String,
+                                            _availableOffers.first['code']
+                                                as String,
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w800,
                                               fontSize: 13,
@@ -2814,13 +3167,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                           ),
                                           const SizedBox(width: 6),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 5,
+                                              vertical: 1.5,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: AppColors.primary.withOpacity(0.12),
-                                              borderRadius: BorderRadius.circular(4),
+                                              color: AppColors.primary
+                                                  .withOpacity(0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
                                             ),
                                             child: Text(
-                                              _availableOffers.first['badge'] as String,
+                                              _availableOffers.first['badge']
+                                                  as String,
                                               style: const TextStyle(
                                                 fontSize: 8.5,
                                                 fontWeight: FontWeight.bold,
@@ -2832,7 +3191,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        _availableOffers.first['title'] as String,
+                                        _availableOffers.first['title']
+                                            as String,
                                         style: const TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w600,
@@ -2851,7 +3211,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                     ),
                                     borderRadius: BorderRadius.circular(8),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 13,
+                                        vertical: 7,
+                                      ),
                                       child: const Text(
                                         'APPLY',
                                         style: TextStyle(
@@ -2881,16 +3244,25 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               onTap: _showOffersBottomSheet,
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 12,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.slate50,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.slate200.withOpacity(0.7)),
+                  border: Border.all(
+                    color: AppColors.slate200.withOpacity(0.7),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.confirmation_number_outlined, size: 14, color: AppColors.primary),
+                    const Icon(
+                      Icons.confirmation_number_outlined,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'View all ${_availableOffers.length} available offers & coupons',
@@ -2901,7 +3273,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: AppColors.primary),
+                    const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 10,
+                      color: AppColors.primary,
+                    ),
                   ],
                 ),
               ),
@@ -2913,7 +3289,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   Widget _buildPriceBreakdownCard(QuoteModel q, List<dynamic> dishes) {
-    final isAssigned = widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL';
+    final isAssigned = widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL' ||
+        widget.bookingConfig['mode'] == 'ASSIGNED_MEAL';
 
     // Group dishes by member name and calculate totals
     final Map<String, double> memberDishTotals = {};
@@ -2922,14 +3299,21 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       if (raw is Map) {
         final d = Map<String, dynamic>.from(raw);
         final member = d['memberName']?.toString() ?? _currentMemberName;
-        final servings = (d['servings'] as num?)?.toInt() ?? 1;
-        final unitPrice = isAssigned ? 0.0 : ((d['unitPrice'] as num?)?.toDouble() ?? 120.0);
+        final servings = _asInt(d['servings'] ?? d['quantity'], 1);
+        final unitPrice = isAssigned
+            ? 0.0
+            : _dishUnitPrice(d);
         final lineTotal = servings * unitPrice;
-        memberDishTotals[member] = (memberDishTotals[member] ?? 0.0) + lineTotal;
-        memberPortionTotals[member] = (memberPortionTotals[member] ?? 0) + servings;
+        memberDishTotals[member] =
+            (memberDishTotals[member] ?? 0.0) + lineTotal;
+        memberPortionTotals[member] =
+            (memberPortionTotals[member] ?? 0) + servings;
       }
     }
-    final totalPortions = memberPortionTotals.values.fold<int>(0, (sum, p) => sum + p);
+    final totalPortions = memberPortionTotals.values.fold<int>(
+      0,
+      (sum, p) => sum + p,
+    );
 
     return EbicCard(
       padding: const EdgeInsets.all(16),
@@ -2945,7 +3329,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   children: const [
                     Text(
                       'Bill Details',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.slate900),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: AppColors.slate900,
+                      ),
                     ),
                     SizedBox(height: 2),
                     Text(
@@ -2964,7 +3352,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 ),
                 child: const Text(
                   'BILL SUMMARY',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDark,
+                  ),
                 ),
               ),
             ],
@@ -2995,11 +3387,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 children: [
                   Row(
                     children: const [
-                      Icon(Icons.people_alt_rounded, size: 13, color: AppColors.primary),
+                      Icon(
+                        Icons.people_alt_rounded,
+                        size: 13,
+                        color: AppColors.primary,
+                      ),
                       SizedBox(width: 5),
                       Text(
                         'Dish Cost Breakdown by Family Member:',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate700),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.slate700,
+                        ),
                       ),
                     ],
                   ),
@@ -3015,19 +3415,34 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         children: [
                           Row(
                             children: [
-                              const Text('↳ ', style: TextStyle(fontSize: 11, color: AppColors.slate400, fontWeight: FontWeight.bold)),
+                              const Text(
+                                '↳ ',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.slate400,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               Text(
                                 '$mName ($mPortions ${mPortions == 1 ? "portion" : "portions"})',
-                                style: const TextStyle(fontSize: 11.5, color: AppColors.slate700, fontWeight: FontWeight.w500),
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  color: AppColors.slate700,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),
                           Text(
-                            mTotal > 0 ? '₹${mTotal.toStringAsFixed(0)}' : 'Plan Covered',
+                            mTotal > 0
+                                ? '₹${mTotal.toStringAsFixed(0)}'
+                                : 'Plan Covered',
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.bold,
-                              color: mTotal > 0 ? AppColors.slate800 : AppColors.successDark,
+                              color: mTotal > 0
+                                  ? AppColors.slate800
+                                  : AppColors.successDark,
                             ),
                           ),
                         ],
@@ -3039,22 +3454,82 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
             ),
 
           // Home Chef Visit Fee
-          _buildPriceRow('Chef Visit & Live Cooking Fee', '₹${q.chefServiceCharge.toStringAsFixed(0)}'),
+          // Base Visit Charge (Section 7, 70)
+          if (q.baseVisitCharge > 0)
+            _buildPriceRow(
+              'Base Visit Charge',
+              '₹${q.baseVisitCharge.toStringAsFixed(0)}',
+            ),
 
-          // Health Pass Free Visit Benefit
+          // Live Cooking Charge (Section 8, 70: ₹4/min actual-minute billing)
+          if (q.cookingCharge > 0)
+            _buildPriceRow(
+              'Live Cooking (${q.cookingTimeMinutes} mins @ ₹4/min)',
+              '₹${q.cookingCharge.toStringAsFixed(0)}',
+            ),
+
+          // Surge / Peak Demand (Section 9, 70)
+          if (q.surgeAmount > 0)
+            _buildPriceRow(
+              'High Demand Surge',
+              '₹${q.surgeAmount.toStringAsFixed(0)}',
+            ),
+
+          // Platform Fee (Section 10, 70)
+          if (q.platformFee > 0)
+            _buildPriceRow(
+              'Platform Fee',
+              '₹${q.platformFee.toStringAsFixed(0)}',
+            ),
+
+          // Health Pass Benefit (Section 38, 70)
           if (q.healthPassBenefit > 0)
-            _buildPriceRow('Health Pass Benefit', '-₹${q.healthPassBenefit.toStringAsFixed(0)}', isBenefit: true),
+            _buildPriceRow(
+              'Health Pass Visit Benefit',
+              '-₹${q.healthPassBenefit.toStringAsFixed(0)}',
+              isBenefit: true,
+            ),
+
+          // Time Pack Benefit (Section 34, 70)
+          if (q.timePackBenefit > 0)
+            _buildPriceRow(
+              'Time Pack Covered',
+              '-₹${q.timePackBenefit.toStringAsFixed(0)}',
+              isBenefit: true,
+            ),
+
+          // Free Booking Benefit (Section 36, 70)
+          if (q.freeBookingBenefit > 0)
+            _buildPriceRow(
+              'Free Booking Benefit',
+              '-₹${q.freeBookingBenefit.toStringAsFixed(0)}',
+              isBenefit: true,
+            ),
 
           // Promotional Voucher Discount
-          if (!_isFreeChefBooking && (q.discount > 0 ? q.discount : _couponDiscount) > 0)
+          if (!_isFreeChefBooking &&
+              (q.discount > 0 ? q.discount : _couponDiscount) > 0)
             _buildPriceRow(
-              _appliedCoupon != null ? 'Coupon Discount ($_appliedCoupon)' : 'Coupon Discount',
+              _appliedCoupon != null
+                  ? 'Coupon Discount ($_appliedCoupon)'
+                  : 'Coupon Discount',
               '-₹${(q.discount > 0 ? q.discount : _couponDiscount).toStringAsFixed(0)}',
               isDiscount: true,
             ),
 
-          // Statutory Tax
-          _buildPriceRow('Taxes & Govt. GST (5%)', '₹${q.tax.toStringAsFixed(0)}'),
+          // EBIC Credits Applied (Section 70, 74)
+          if (q.creditsApplied > 0)
+            _buildPriceRow(
+              'EBIC Credits Applied',
+              '-₹${q.creditsApplied.toStringAsFixed(0)}',
+              isBenefit: true,
+            ),
+
+          // Statutory Tax (Section 11, 70: 5% GST)
+          _buildPriceRow(
+            'Taxes & Govt. GST (5%)',
+            '₹${q.tax.toStringAsFixed(0)}',
+          ),
 
           const Divider(height: 22, color: AppColors.slate200),
 
@@ -3075,19 +3550,30 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     children: [
                       const Text(
                         'Total Amount to Pay',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: AppColors.slate900,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Inclusive of all taxes & charges',
-                        style: const TextStyle(fontSize: 11, color: AppColors.slate600),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.slate600,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 Text(
                   '₹${q.total.toStringAsFixed(0)}',
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: AppColors.primaryDark),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 24,
+                    color: AppColors.primaryDark,
+                  ),
                 ),
               ],
             ),
@@ -3097,7 +3583,12 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     );
   }
 
-  Widget _buildPriceRow(String label, String amount, {bool isDiscount = false, bool isBenefit = false}) {
+  Widget _buildPriceRow(
+    String label,
+    String amount, {
+    bool isDiscount = false,
+    bool isBenefit = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -3124,8 +3615,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               color: isBenefit
                   ? AppColors.primary
                   : isDiscount
-                      ? AppColors.successDark
-                      : AppColors.slate900,
+                  ? AppColors.successDark
+                  : AppColors.slate900,
             ),
           ),
         ],
@@ -3144,7 +3635,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: const [
-          _TrustPill(icon: Icons.verified_user_rounded, text: 'Certified Chefs'),
+          _TrustPill(
+            icon: Icons.verified_user_rounded,
+            text: 'Certified Chefs',
+          ),
           _TrustPill(icon: Icons.sanitizer_rounded, text: 'Hygienic Prep'),
           _TrustPill(icon: Icons.replay_rounded, text: '100% Guaranteed'),
         ],
@@ -3169,7 +3663,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               SizedBox(width: 8),
               Text(
                 'Chef Booking Terms & Conditions',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.slate900),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.slate900,
+                ),
               ),
             ],
           ),
@@ -3177,19 +3675,22 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           _buildPolicyBullet(
             icon: Icons.check_circle_outline_rounded,
             title: 'Free Cancellation',
-            subtitle: '100% refund if cancelled at least 2 hours before scheduled chef arrival time.',
+            subtitle:
+                '100% refund if cancelled at least 2 hours before scheduled chef arrival time.',
           ),
           const SizedBox(height: 6),
           _buildPolicyBullet(
             icon: Icons.soup_kitchen_outlined,
             title: 'Kitchen & Cookware',
-            subtitle: 'Host provides basic cookware, stove and running water. Chef brings sanitized knives & apron.',
+            subtitle:
+                'Host provides basic cookware, stove and running water. Chef brings sanitized knives & apron.',
           ),
           const SizedBox(height: 6),
           _buildPolicyBullet(
             icon: Icons.verified_outlined,
             title: 'Hygiene & Verification',
-            subtitle: 'All chefs undergo thorough criminal background checks and mandatory medical health certifications.',
+            subtitle:
+                'All chefs undergo thorough criminal background checks and mandatory medical health certifications.',
           ),
           const SizedBox(height: 10),
           InkWell(
@@ -3210,7 +3711,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     ),
                   ),
                   SizedBox(width: 4),
-                  Icon(Icons.open_in_new_rounded, size: 13, color: AppColors.primary),
+                  Icon(
+                    Icons.open_in_new_rounded,
+                    size: 13,
+                    color: AppColors.primary,
+                  ),
                 ],
               ),
             ),
@@ -3220,7 +3725,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     );
   }
 
-  Widget _buildPolicyBullet({required IconData icon, required String title, required String subtitle}) {
+  Widget _buildPolicyBullet({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3229,9 +3738,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         Expanded(
           child: RichText(
             text: TextSpan(
-              style: const TextStyle(fontSize: 11.5, color: AppColors.slate700, height: 1.3),
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.slate700,
+                height: 1.3,
+              ),
               children: [
-                TextSpan(text: '$title: ', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.slate900)),
+                TextSpan(
+                  text: '$title: ',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.slate900,
+                  ),
+                ),
                 TextSpan(text: subtitle),
               ],
             ),
@@ -3248,7 +3767,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return Container(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -3262,7 +3783,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   width: 44,
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(color: AppColors.slate300, borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(
+                    color: AppColors.slate300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
               Row(
@@ -3270,7 +3794,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 children: [
                   const Text(
                     'Chef Service Terms & Policies',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.slate900),
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.slate900,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
@@ -3286,27 +3814,32 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     children: const [
                       _TermsSection(
                         title: '1. Service Scope & Live Cooking',
-                        body: 'Our certified home chefs prepare the selected meals live inside your home kitchen. The estimated cooking duration is dynamically calculated based on the number of portions and complexity of recipes. Chefs prepare only items ordered in the confirmed booking.',
+                        body:
+                            'Our certified home chefs prepare the selected meals live inside your home kitchen. The estimated cooking duration is dynamically calculated based on the number of portions and complexity of recipes. Chefs prepare only items ordered in the confirmed booking.',
                       ),
                       SizedBox(height: 14),
                       _TermsSection(
                         title: '2. Cancellation & Rescheduling',
-                        body: '• Free cancellation up to 2 hours prior to scheduled arrival time with 100% refund.\n• Cancellations within 2 hours of arrival window incur a 50% chef dispatch fee.\n• No refunds are permitted once the chef has arrived at your residence.',
+                        body:
+                            '• Free cancellation up to 2 hours prior to scheduled arrival time with 100% refund.\n• Cancellations within 2 hours of arrival window incur a 50% chef dispatch fee.\n• No refunds are permitted once the chef has arrived at your residence.',
                       ),
                       SizedBox(height: 14),
                       _TermsSection(
                         title: '3. Kitchen Readiness & Safety',
-                        body: 'The customer is responsible for providing a clean cooking environment, functional stove or cooktop, running water, basic cookware, and basic seasoning/oil as required by the chosen dishes.',
+                        body:
+                            'The customer is responsible for providing a clean cooking environment, functional stove or cooktop, running water, basic cookware, and basic seasoning/oil as required by the chosen dishes.',
                       ),
                       SizedBox(height: 14),
                       _TermsSection(
                         title: '4. Ingredients & Portions',
-                        body: 'Meal portions adhere to standardized clinical nutrition weight metrics. Any extra portions requested directly to the chef on-site will be billed through the app.',
+                        body:
+                            'Meal portions adhere to standardized clinical nutrition weight metrics. Any extra portions requested directly to the chef on-site will be billed through the app.',
                       ),
                       SizedBox(height: 14),
                       _TermsSection(
                         title: '5. Hygiene, Conduct & Trust Guarantee',
-                        body: 'All chefs hold valid FSSAI food handler certificates and background verifications. In the rare event of food dissatisfaction or non-arrival, our 100% satisfaction guarantee ensures immediate replacement or full refund.',
+                        body:
+                            'All chefs hold valid FSSAI food handler certificates and background verifications. In the rare event of food dissatisfaction or non-arrival, our 100% satisfaction guarantee ensures immediate replacement or full refund.',
                       ),
                       SizedBox(height: 20),
                     ],
@@ -3321,9 +3854,14 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: const Text('I Understand & Agree', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  child: const Text(
+                    'I Understand & Agree',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
                 ),
               ),
             ],
@@ -3334,7 +3872,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   Widget _buildStickyBottomCheckout(QuoteModel q, List<dynamic> dishes) {
-    final totalPortions = dishes.fold<int>(0, (sum, d) => sum + ((d['servings'] as num?)?.toInt() ?? 1));
+    final totalPortions = dishes.fold<int>(
+      0,
+      (sum, d) => sum + _asInt(d['servings'] ?? d['quantity'], 1),
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -3361,18 +3902,29 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   children: [
                     Text(
                       '₹${q.total.toStringAsFixed(0)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.white),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 22,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.primaryLight.withOpacity(0.25),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text(
                         'TOTAL',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5, color: AppColors.primaryLight),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 9.5,
+                          color: AppColors.primaryLight,
+                        ),
                       ),
                     ),
                   ],
@@ -3395,12 +3947,17 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
               label: Text(
                 q.total == 0.0 ? 'Confirm Booking' : 'Proceed to Pay',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 elevation: 3,
               ),
@@ -3451,7 +4008,11 @@ class _TrustPill extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           text,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate800),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: AppColors.slate800,
+          ),
         ),
       ],
     );
@@ -3469,11 +4030,24 @@ class _TermsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.slate900)),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.bold,
+            color: AppColors.slate900,
+          ),
+        ),
         const SizedBox(height: 4),
-        Text(body, style: const TextStyle(fontSize: 12, color: AppColors.slate600, height: 1.4)),
+        Text(
+          body,
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.slate600,
+            height: 1.4,
+          ),
+        ),
       ],
     );
   }
 }
-

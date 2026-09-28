@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/auth/session_manager.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/order_model.dart';
@@ -41,6 +42,16 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   }
 
   Future<void> _fetchOrders() async {
+    if (!SessionManager().isAuthenticated) {
+      if (mounted) {
+        setState(() {
+          _orders = [];
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -298,6 +309,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     required Color textMuted,
   }) {
     if (items.isEmpty) {
+      final isAuthed = SessionManager().isAuthenticated;
+      final displayTitle = isAuthed ? emptyTitle : 'Sign in to view orders';
+      final displaySubtitle = isAuthed
+          ? emptySubtitle
+          : 'Your active and past chef bookings will appear here once you sign in.';
+
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -311,27 +328,39 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   color: isDark ? AppColors.slate800 : AppColors.slate200,
                   shape: BoxShape.circle,
                 ),
-                child: Center(child: Icon(Icons.soup_kitchen_outlined, size: 36, color: textMuted)),
+                child: Center(
+                  child: Icon(
+                    isAuthed ? Icons.soup_kitchen_outlined : Icons.lock_outline_rounded,
+                    size: 36,
+                    color: textMuted,
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               Text(
-                emptyTitle,
+                displayTitle,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textPrimary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
               Text(
-                emptySubtitle,
+                displaySubtitle,
                 style: TextStyle(fontSize: 12, color: textSecondary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 18),
               SizedBox(
-                width: 160,
+                width: isAuthed ? 160 : 190,
                 child: EbicButton(
-                  label: 'Book a Chef',
-                  icon: Icons.add,
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.bookChef),
+                  label: isAuthed ? 'Book a Chef' : 'Sign In to Account',
+                  icon: isAuthed ? Icons.add : Icons.login_rounded,
+                  onPressed: () {
+                    if (!isAuthed) {
+                      Navigator.pushNamed(context, AppRoutes.login);
+                      return;
+                    }
+                    Navigator.pushNamed(context, AppRoutes.bookChef);
+                  },
                 ),
               ),
             ],
@@ -396,31 +425,60 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                       ),
                     ],
                   ),
-                  if (order.startOtp != null && isActive)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFECFDF5),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF10B981)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.key_rounded, size: 11, color: Color(0xFF047857)),
-                          const SizedBox(width: 4),
-                          Text(
-                            'OTP: ${order.startOtp}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF047857),
-                              letterSpacing: 0.8,
+                  if (isActive) ...[
+                    if (order.statusStepIndex >= 4) ...[
+                      // Real code only — hidden until the backend has provided it
+                      if (order.completionOtp != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFAF5FF),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFA855F7)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.verified_rounded, size: 11, color: Color(0xFF7E22CE)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'END OTP: ${order.completionOtp}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF7E22CE),
+                                letterSpacing: 0.8,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ] else if (order.startOtp != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF10B981)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.key_rounded, size: 11, color: Color(0xFF047857)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'START OTP: ${order.startOtp}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF047857),
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ],
               ),
 

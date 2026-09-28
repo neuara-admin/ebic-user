@@ -47,49 +47,13 @@ class _CancelBookingDialogState extends State<CancelBookingDialog> {
   bool _isEvaluating = true;
   String? _errorMessage;
 
-  String? _selectedReason = 'CUSTOMER_CHANGED_PLANS';
+  String? _selectedReason;
   final TextEditingController _noteController = TextEditingController();
 
   Map<String, dynamic>? _eligibility;
 
-  // Controlled cancellation reason codes (Section 257) with dynamic backend directory sync
-  List<Map<String, String>> _reasons = [
-    {
-      'code': 'CUSTOMER_CHANGED_PLANS',
-      'label': 'Change of plans / personal scheduling',
-      'icon': 'calendar_today',
-    },
-    {
-      'code': 'WRONG_BOOKING',
-      'label': 'Wrong booking / duplicate selection',
-      'icon': 'content_copy',
-    },
-    {
-      'code': 'NO_LONGER_REQUIRED',
-      'label': 'No longer required',
-      'icon': 'highlight_off',
-    },
-    {
-      'code': 'PAYMENT_ISSUE',
-      'label': 'Payment or billing issue',
-      'icon': 'payments_outlined',
-    },
-    {
-      'code': 'ADDRESS_ISSUE',
-      'label': 'Address / kitchen location problem',
-      'icon': 'location_on_outlined',
-    },
-    {
-      'code': 'TIMING_ISSUE',
-      'label': 'Timing / schedule conflict',
-      'icon': 'schedule',
-    },
-    {
-      'code': 'OTHER',
-      'label': 'Other personal reason',
-      'icon': 'more_horiz',
-    },
-  ];
+  // Cancellation reason codes come from the backend reasons directory (Section 257).
+  List<Map<String, String>> _reasons = [];
 
   @override
   void initState() {
@@ -136,7 +100,7 @@ class _CancelBookingDialogState extends State<CancelBookingDialog> {
         }
       }
     } catch (_) {
-      // Gracefully fall back to local controlled reason codes
+      // Leave the list empty; the dialog asks the user to retry.
     }
   }
 
@@ -180,6 +144,10 @@ class _CancelBookingDialogState extends State<CancelBookingDialog> {
   }
 
   Future<void> _submitCancellation() async {
+    if (_selectedReason == null) {
+      setState(() => _errorMessage = 'Please choose a cancellation reason.');
+      return;
+    }
     if (_eligibility?['allowed'] == false) {
       setState(() {
         _errorMessage = _eligibility?['reason'] ?? 'Cancellation is not allowed for this booking.';
@@ -502,6 +470,12 @@ class _CancelBookingDialogState extends State<CancelBookingDialog> {
                   ),
                   const SizedBox(height: 10),
 
+                  if (_reasons.isEmpty)
+                    Text(
+                      'Cancellation reasons could not be loaded. Please close and try again.',
+                      style: TextStyle(fontSize: 12, color: textPrimary),
+                    ),
+
                   ..._reasons.map((r) {
                     final isSelected = _selectedReason == r['code'];
                     return Padding(
@@ -643,7 +617,7 @@ class _CancelBookingDialogState extends State<CancelBookingDialog> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         elevation: 0,
                       ),
-                      onPressed: (allowed && !_isLoading) ? _submitCancellation : null,
+                      onPressed: (allowed && !_isLoading && _selectedReason != null) ? _submitCancellation : null,
                       child: _isLoading
                           ? const SizedBox(
                               width: 18,
