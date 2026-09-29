@@ -4,6 +4,7 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dish_model.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../shared/widgets/ebic_dish_image.dart';
 
 class AddItemsSheet extends StatefulWidget {
   final String orderId;
@@ -229,6 +230,15 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
 
                       return Row(
                         children: [
+                          EBICDishImage(
+                            imageUrl: dish.imageUrl,
+                            width: 50,
+                            height: 50,
+                            borderRadius: 10,
+                            isVegetarian: dish.isVegetarian,
+                            showVegIndicator: true,
+                          ),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,7 +249,9 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '+${dish.prepTimeMinutes + dish.cookTimeMinutes} mins • ₹${dish.basePrice.toStringAsFixed(0)}',
+                                  // Price is quoted server-side once the dish is added.
+                                  '+${dish.cookTimeMinutes} mins'
+                                  '${dish.nutrition != null ? ' • ${dish.nutrition!.calories.round()} kcal' : ''}',
                                   style: const TextStyle(color: AppColors.slate500, fontSize: 12),
                                 ),
                               ],

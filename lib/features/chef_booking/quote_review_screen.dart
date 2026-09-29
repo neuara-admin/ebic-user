@@ -6,11 +6,17 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/address_model.dart';
+import '../../shared/models/dish_model.dart';
 import '../../shared/models/quote_model.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../shared/widgets/ebic_dish_image.dart';
 import '../../shared/widgets/loading_view.dart';
 import '../../shared/widgets/status_badge.dart';
+import '../../shared/models/available_chef_model.dart';
+import '../../shared/widgets/ebic_avatar.dart';
 import '../catalogue/cart_service.dart';
+import '../catalogue/dish_detail_screen.dart';
+import 'choose_chef_screen.dart';
 
 class QuoteReviewScreen extends StatefulWidget {
   final Map<String, dynamic> bookingConfig;
@@ -48,19 +54,37 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   bool _currentIsHealthPassCovered = false;
   bool _hasFreeChefEntitlement = false;
 
+  bool get _isComboMealOccasion {
+    final occ = (widget.bookingConfig['occasion'] ??
+            widget.bookingConfig['bookingOption'])
+        ?.toString()
+        .toUpperCase() ??
+        '';
+    return occ == 'BL' ||
+        occ == 'LD' ||
+        occ == 'BREAKFAST_LUNCH' ||
+        occ == 'LUNCH_DINNER' ||
+        occ == 'ALL_DAY';
+  }
+
   bool get _isFreeChefBooking {
+    // Free chef visits via Health Pass apply only to single meals (B, L, D). Multi-meals (BL, LD) require standard booking fee.
+    if (_isComboMealOccasion) return false;
     if (_quote != null && _quote!.total <= 0.0) return true;
-    if (_hasFreeChefEntitlement && (_quote?.itemCharges ?? 0.0) <= 0.0)
+    if (_hasFreeChefEntitlement && (_quote?.itemCharges ?? 0.0) <= 0.0) {
       return true;
-    if (_currentIsHealthPassCovered && (_quote?.itemCharges ?? 0.0) <= 0.0)
+    }
+    if (_currentIsHealthPassCovered && (_quote?.itemCharges ?? 0.0) <= 0.0) {
       return true;
+    }
     final isAssigned =
         widget.bookingConfig['mode'] == 'ASSIGNED_MEAL' ||
         widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL';
     if (isAssigned &&
         (_quote?.itemCharges ?? 0.0) <= 0.0 &&
-        (_quote?.total ?? 0.0) <= 0.0)
+        (_quote?.total ?? 0.0) <= 0.0) {
       return true;
+    }
     return false;
   }
 
@@ -75,8 +99,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     'Extra crispy',
   ];
 
-  // Chefs are always auto-assigned by the backend dispatch engine after payment.
+  // Without a pick, the backend dispatch engine assigns the best free chef
+  // after payment. A picked chef is tried first under the same rules.
   static const String _autoAssignChefLabel = 'Nearest available certified chef';
+  AvailableChefModel? _preferredChef;
+  bool _isConfirming = false;
 
   @override
   void initState() {
@@ -245,13 +272,59 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     );
     if (selected is AddressModel) {
       setState(() {
+        // Who can reach the kitchen depends on the address — re-pick.
+        if (selected.id != _selectedAddress?.id) _preferredChef = null;
         _selectedAddress = selected;
         _currentAddressLine = selected.formattedAddress;
       });
     }
   }
 
+  String? get _resolvedAddressId {
+    final id = _selectedAddress?.id ??
+        widget.bookingConfig['addressId'] ??
+        widget.bookingConfig['address']?['id'];
+    final s = id?.toString();
+    return (s == null || s.isEmpty) ? null : s;
+  }
+
+  Future<void> _openChefPicker() async {
+    final addressId = _resolvedAddressId;
+    if (addressId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select your kitchen address first so we can find chefs near you.'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      _selectOrChangeAddress();
+      return;
+    }
+    final choice = await Navigator.push<ChefChoice>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChooseChefScreen(
+          addressId: addressId,
+          quoteId: _quote?.quoteId,
+          cookMinutes: _quote?.cookingTimeMinutes,
+          selectedChefId: _preferredChef?.id,
+        ),
+      ),
+    );
+    if (choice != null && mounted) {
+      setState(() => _preferredChef = choice.chef);
+    }
+  }
+
+  /// Dietitian-assigned meal: the dishes and portions are the prescription
+  /// (the backend cooks exactly what the plan says), so the customer can't
+  /// add dishes or change quantities, and nothing touches the catalogue cart.
+  bool get _isAssignedFlow =>
+      widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL' ||
+      widget.bookingConfig['mode'] == 'ASSIGNED_MEAL';
+
   void _updateDishQuantity(Map<String, dynamic> dish, int newQty) {
+    if (_isAssignedFlow) return;
     final dishes = (widget.bookingConfig['dishes'] as List<dynamic>?) ?? [];
 
     final targetId =
@@ -327,6 +400,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   void _showAddMoreDishesOptions() {
+    if (_isAssignedFlow) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -450,11 +524,27 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   void _showDishQuantitySheet(Map<String, dynamic> d) {
+    if (_isAssignedFlow) return;
     final name = d['name']?.toString() ?? 'Dish';
     int currentServings = _asInt(d['servings'] ?? d['quantity'], 1);
     final unitPrice = _dishUnitPrice(d);
     final isAssigned = widget.bookingConfig['bookingFlow'] == 'ASSIGNED_MEAL' ||
         widget.bookingConfig['mode'] == 'ASSIGNED_MEAL';
+
+    final rawImg = d['imageUrl']?.toString() ??
+        d['dish']?['imageUrl']?.toString() ??
+        d['image']?.toString() ??
+        d['photoUrl']?.toString();
+    final lower = name.toLowerCase();
+    final isVeg = ![
+      'chicken',
+      'mutton',
+      'fish',
+      'prawn',
+      'meat',
+      'egg',
+      'pork',
+    ].any((w) => lower.contains(w));
 
     showModalBottomSheet(
       context: context,
@@ -486,16 +576,43 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     ),
                   ),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      EBICDishImage(
+                        imageUrl: rawImg,
+                        width: 48,
+                        height: 48,
+                        borderRadius: 10,
+                        isVegetarian: isVeg,
+                        showVegIndicator: true,
+                      ),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: AppColors.slate900,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppColors.slate900,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              isAssigned
+                                  ? 'Covered by Plan'
+                                  : '₹${unitPrice.toStringAsFixed(0)} per portion',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.slate600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       IconButton(
@@ -503,16 +620,6 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    isAssigned
-                        ? 'Covered by Plan'
-                        : '₹${unitPrice.toStringAsFixed(0)} per portion',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.slate600,
-                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -725,6 +832,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           'referenceId': d['dishId'] ?? d['id'],
           'description': d['name'] ?? 'Dish Portion',
           'quantity': _asInt(d['servings'] ?? d['quantity'], 1),
+          // Assigned meals are validated per member against their diet plan.
+          if (d['memberId'] != null) 'memberId': d['memberId'].toString(),
         };
       }).toList();
 
@@ -745,6 +854,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         }
       }
 
+      final occasion = (widget.bookingConfig['occasion'] ??
+              widget.bookingConfig['bookingOption'] ??
+              mealType)
+          ?.toString();
+
       final quotePayload = {
         'serviceType': isAssigned ? 'ASSIGNED_MEAL' : 'CHEF_VISIT',
         'items': quoteItems,
@@ -752,6 +866,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         'currency': 'INR',
         'memberId': _currentMemberId,
         'serviceDate': serviceDate,
+        'occasion': occasion,
+        'mealType': mealType,
         'healthPassId': hpQuoteContext?['health_pass_id'],
         'entitlementId': hpQuoteContext?['entitlement_id'],
       };
@@ -761,12 +877,13 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         body: quotePayload,
       );
 
-      final hasFreeVisitEntitlement =
-          hpQuoteContext?['entitlement_available'] == true ||
-          (isAssigned &&
-              widget.bookingConfig['hpEligibility']?['entitlement_available'] ==
-                  true) ||
-          _currentIsHealthPassCovered;
+      final hasFreeVisitEntitlement = !_isComboMealOccasion &&
+          (hpQuoteContext?['entitlement_available'] == true ||
+              (isAssigned &&
+                  widget.bookingConfig['hpEligibility']
+                          ?['entitlement_available'] ==
+                      true) ||
+              _currentIsHealthPassCovered);
       _hasFreeChefEntitlement = hasFreeVisitEntitlement;
 
       if (quoteRes.success && quoteRes.data != null) {
@@ -1395,6 +1512,134 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     );
   }
 
+  static String _normalizeBookingOption(String raw) {
+    if (const ['B', 'L', 'D', 'BL', 'LD'].contains(raw)) return raw;
+    final upper = raw.toUpperCase();
+    if (upper.startsWith('B') && upper.contains('L')) return 'BL';
+    if (upper.startsWith('L') && upper.contains('D')) return 'LD';
+    if (upper.startsWith('B')) return 'B';
+    if (upper.startsWith('D')) return 'D';
+    return 'L';
+  }
+
+  /// ₹0 booking: create the order from the accepted quote and let the
+  /// backend confirm it (it skips payment and starts chef dispatch when
+  /// nothing is payable). Falls back to Payment & Checkout only if the
+  /// backend says payment is needed after all.
+  Future<void> _confirmFreeBooking(Map<String, dynamic> args) async {
+    setState(() => _isConfirming = true);
+    try {
+      final orderRes = await _api.post<Map<String, dynamic>>(
+        ApiEndpoints.orders,
+        body: {
+          'addressId': args['addressId'].toString(),
+          'bookingOption': _normalizeBookingOption(args['bookingOption'].toString()),
+          'memberIds': args['memberIds'],
+          'quoteId': args['quoteId'],
+          if (_preferredChef != null) 'preferredChefId': _preferredChef!.id,
+        },
+      );
+      if (!mounted) return;
+
+      if (orderRes.error?.code == 'PREFERRED_CHEF_UNAVAILABLE') {
+        setState(() => _isConfirming = false);
+        final choice = await _askPreferredChefUnavailable(orderRes.error!.message);
+        if (!mounted) return;
+        if (choice == 'pick') {
+          setState(() => _preferredChef = null);
+          _openChefPicker();
+        } else if (choice == 'auto') {
+          setState(() => _preferredChef = null);
+          await _proceedToPayment();
+        }
+        return;
+      }
+      final orderId = orderRes.data?['id']?.toString();
+      if (!orderRes.success || orderId == null) {
+        _showError(orderRes.error?.message ?? orderRes.message ?? 'Could not confirm your booking. Please try again.');
+        return;
+      }
+
+      final initRes = await _api.post<Map<String, dynamic>>(
+        ApiEndpoints.orderPayInitiate(orderId),
+        body: {'method': 'GATEWAY'},
+        requiresIdempotency: true,
+        explicitIdempotencyKey: 'confirm_$orderId',
+      );
+      if (!mounted) return;
+      if (!initRes.success || initRes.data == null) {
+        _showError(initRes.error?.message ?? initRes.message ?? 'Could not confirm your booking. Please try again.');
+        return;
+      }
+      if (initRes.data!['requiresPayment'] == true) {
+        // Price changed server-side — pay through the normal checkout.
+        setState(() => _isConfirming = false);
+        _showError('This booking now needs payment. Please review the amount and pay.');
+        await _fetchDynamicCookingTimeAndQuote();
+        return;
+      }
+
+      final isCatalogue = !_isAssignedFlow;
+      if (isCatalogue) CartService().clear();
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.bookChefConfirmation,
+        (route) => route.isFirst,
+        arguments: {
+          'orderId': orderId,
+          'bookingType': 'Instant Home Chef',
+          'cookingTime': _quote?.cookingTimeMinutes ?? 35,
+          'total': 0.0,
+          'chefName': args['chefName'],
+          'dishes': args['dishes'],
+          'quote': _quote,
+          'address': args['address'],
+          'addressLine': args['addressLine'],
+          'memberId': args['memberId'],
+          'memberName': args['memberName'],
+          'paymentMethod': 'HEALTH_PASS',
+        },
+      );
+    } catch (_) {
+      _showError('Could not confirm your booking. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isConfirming = false);
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppColors.danger),
+    );
+  }
+
+  Future<String?> _askPreferredChefUnavailable(String message) {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Chef no longer available',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+        content: Text(message, style: const TextStyle(fontSize: 13.5, height: 1.4)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'pick'),
+            child: const Text('Pick another chef'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'auto'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Auto-assign'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _proceedToPayment() async {
     if (_quote == null) return;
 
@@ -1436,10 +1681,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         .toSet()
         .toList();
 
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.bookChefPayment,
-      arguments: {
+    final checkoutArgs = <String, dynamic>{
         ...widget.bookingConfig,
         'addressId':
             _selectedAddress?.id ??
@@ -1455,7 +1697,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         'cookingTime': _quote!.cookingTimeMinutes,
         'finalAmount': _quote!.total,
         'chefNotes': notes.isNotEmpty ? notes : null,
-        'chefName': _autoAssignChefLabel,
+        'chefName': _preferredChef?.name ?? _autoAssignChefLabel,
+        'preferredChefId': _preferredChef?.id,
         'addressLine': _currentAddressLine,
         'address': _selectedAddress?.toJson(),
         'dishes': dishes,
@@ -1463,11 +1706,27 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
             widget.bookingConfig['bookingOption'] ??
             widget.bookingConfig['mealType'] ??
             'L',
-      },
+    };
+
+    // Nothing to pay (Health Pass free visit / fully covered): confirm right
+    // here — no Payment & Checkout step.
+    if (_quote!.total <= 0 && (checkoutArgs['memberIds'] as List).isNotEmpty) {
+      await _confirmFreeBooking(checkoutArgs);
+      return;
+    }
+
+    final result = await Navigator.pushNamed(
+      context,
+      AppRoutes.bookChefPayment,
+      arguments: checkoutArgs,
     );
 
     if (result == true || result == 'confirmed') {
       if (mounted) Navigator.pop(context, true);
+    } else if (result == 'chef_unavailable' && mounted) {
+      // Checkout found the picked chef no longer free — pick again.
+      setState(() => _preferredChef = null);
+      _openChefPicker();
     }
   }
 
@@ -1934,41 +2193,119 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   Widget _buildAssignedChefCard() {
+    final chef = _preferredChef;
     return EbicCard(
       padding: const EdgeInsets.all(16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: AppColors.primarySubtle,
-            child: const Icon(
-              Icons.restaurant_menu_rounded,
-              color: AppColors.primary,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _autoAssignChefLabel,
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Your Chef',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 15,
                     color: AppColors.slate900,
                   ),
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'The nearest available verified chef is assigned after payment. '
-                  'You can track them live once assigned.',
-                  style: TextStyle(fontSize: 11, color: AppColors.slate500),
+              ),
+              TextButton.icon(
+                onPressed: _openChefPicker,
+                icon: Icon(
+                  chef == null ? Icons.person_search_rounded : Icons.swap_horiz_rounded,
+                  size: 16,
                 ),
-              ],
+                label: Text(chef == null ? 'Choose chef' : 'Change'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primaryDark,
+                  textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: _openChefPicker,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: chef == null ? AppColors.slate50 : AppColors.primarySubtle,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: chef == null
+                      ? AppColors.slate200
+                      : AppColors.primary.withOpacity(0.4),
+                ),
+              ),
+              child: Row(
+                children: [
+                  if (chef == null)
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 24),
+                    )
+                  else
+                    EBICAvatar(name: chef.name, imageUrl: chef.photoUrl, radius: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          chef?.name ?? 'Auto-assign best available chef',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.slate900,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          chef == null
+                              ? 'Nearest free certified chef, assigned after payment. Tap to pick a chef yourself.'
+                              : [
+                                  if (chef.rating != null)
+                                    '★ ${chef.rating!.toStringAsFixed(1)} (${chef.ratingCount})'
+                                  else
+                                    'New chef',
+                                  if (chef.etaMinutes != null) '~${chef.etaMinutes} min away',
+                                  if (chef.cookedForYouCount > 0)
+                                    'cooked for you ${chef.cookedForYouCount}×',
+                                ].join('  ·  '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11.5, color: AppColors.slate600, height: 1.3),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.chevron_right_rounded, color: AppColors.slate400),
+                ],
+              ),
             ),
           ),
+          if (chef != null) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Confirmed when payment completes. If they’re booked by someone else first, '
+              'we’ll assign the best available chef.',
+              style: TextStyle(fontSize: 11, color: AppColors.slate500, height: 1.35),
+            ),
+          ],
         ],
       ),
     );
@@ -2195,10 +2532,12 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'All dishes were removed. Add recipes to complete your chef booking.',
+            Text(
+              _isAssignedFlow
+                  ? 'No plan meals are selected. Go back and choose the diet-plan meals to cook.'
+                  : 'All dishes were removed. Add recipes to complete your chef booking.',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.slate500,
               ),
@@ -2207,11 +2546,18 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _showAddMoreDishesOptions,
-                icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                label: const Text(
-                  'Add Dishes to Booking',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                onPressed: _isAssignedFlow
+                    ? () => Navigator.pop(context)
+                    : _showAddMoreDishesOptions,
+                icon: Icon(
+                  _isAssignedFlow
+                      ? Icons.arrow_back_rounded
+                      : Icons.add_circle_outline_rounded,
+                  size: 18,
+                ),
+                label: Text(
+                  _isAssignedFlow ? 'Back to Plan Meals' : 'Add Dishes to Booking',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
@@ -2254,32 +2600,92 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Selected Menu (${dishes.length} ${dishes.length == 1 ? "Dish" : "Dishes"}, $totalPortions Portions)',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                    const Text(
+                      'Selected Menu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
                         color: AppColors.slate900,
+                        letterSpacing: -0.2,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    Text(
-                      'Personalized for ${dishesByMember.keys.length} family ${dishesByMember.keys.length == 1 ? "member" : "members"}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.slate500,
-                      ),
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primarySubtle,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${dishes.length} ${dishes.length == 1 ? "Dish" : "Dishes"}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primaryDark,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$totalPortions ${totalPortions == 1 ? "Portion" : "Portions"} • ${dishesByMember.keys.length} ${dishesByMember.keys.length == 1 ? "Member" : "Members"}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.slate500,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
+              if (isAssigned)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.slate100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.slate200),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.lock_outline_rounded,
+                        size: 13,
+                        color: AppColors.slate600,
+                      ),
+                      SizedBox(width: 3),
+                      Text(
+                        'Dietitian Plan',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.slate600,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
               InkWell(
                 onTap: _showAddMoreDishesOptions,
                 borderRadius: BorderRadius.circular(8),
@@ -2377,6 +2783,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
@@ -2387,7 +2794,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          '${memberDishes.length} ${memberDishes.length == 1 ? "dish" : "dishes"} • $memberPortions ${memberPortions == 1 ? "portion" : "portions"}',
+                          '${memberDishes.length} ${memberDishes.length == 1 ? "dish" : "dishes"} • ${memberPortions}p',
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -2420,18 +2827,66 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       'pork',
                     ].any((w) => lower.contains(w));
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
+                    final rawImg = d['imageUrl']?.toString() ??
+                        d['dish']?['imageUrl']?.toString() ??
+                        d['image']?.toString() ??
+                        d['photoUrl']?.toString();
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.slate50.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.slate200.withOpacity(0.6),
+                        ),
+                      ),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildVegIndicator(isVeg),
+                          GestureDetector(
+                            onTap: () {
+                              final dishId = (d['dishId'] ?? d['recipeId'] ?? d['id'] ?? '')?.toString() ?? '';
+                              final dishModel = DishModel(
+                                id: dishId,
+                                name: name,
+                                category: d['category']?.toString() ?? 'BALANCED',
+                                imageUrl: rawImg,
+                                baseCookTimeMin: cookTime,
+                                description: d['description']?.toString(),
+                                dietaryTags: (d['dietaryTags'] as List<dynamic>?)?.map((t) => t.toString()).toList() ??
+                                    [isVeg ? 'Vegetarian' : 'Non-Vegetarian'],
+                              );
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DishDetailScreen(dish: dishModel),
+                                ),
+                              );
+                            },
+                            child: EBICDishImage(
+                              imageUrl: rawImg,
+                              width: 48,
+                              height: 48,
+                              borderRadius: 8,
+                              isVegetarian: isVeg,
+                              showVegIndicator: true,
+                            ),
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: InkWell(
-                              onTap: () => _showDishQuantitySheet(d),
+                              onTap: isAssigned
+                                  ? null
+                                  : () => _showDishQuantitySheet(d),
                               borderRadius: BorderRadius.circular(6),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
                                     name,
@@ -2439,39 +2894,43 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.slate800,
+                                      height: 1.25,
                                     ),
-                                    maxLines: 3,
+                                    maxLines: 4,
+                                    softWrap: true,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  Row(
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 5,
+                                    runSpacing: 2,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
                                     children: [
                                       Text(
                                         '~$cookTime mins',
                                         style: const TextStyle(
-                                          fontSize: 10.5,
+                                          fontSize: 11,
                                           color: AppColors.slate500,
                                         ),
                                       ),
-                                      const Text(
-                                        ' • ',
-                                        style: TextStyle(
-                                          fontSize: 10.5,
+                                      Container(
+                                        width: 3,
+                                        height: 3,
+                                        decoration: const BoxDecoration(
                                           color: AppColors.slate400,
+                                          shape: BoxShape.circle,
                                         ),
                                       ),
-                                      Flexible(
-                                        child: Text(
-                                          unitPrice > 0
-                                              ? '₹${unitPrice.toStringAsFixed(0)}/portion'
-                                              : 'Plan Covered',
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: unitPrice > 0
-                                                ? AppColors.slate600
-                                                : AppColors.successDark,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                      Text(
+                                        unitPrice > 0
+                                            ? '₹${unitPrice.toStringAsFixed(0)}/ptn'
+                                            : 'Plan Covered',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: unitPrice > 0
+                                              ? AppColors.slate600
+                                              : AppColors.successDark,
                                         ),
                                       ),
                                     ],
@@ -2480,95 +2939,121 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          // Tactile Stepper: [-] qty [+]
-                          Container(
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: AppColors.primarySubtle.withOpacity(0.25),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppColors.primary.withOpacity(0.35),
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                InkWell(
-                                  onTap: () =>
-                                      _updateDishQuantity(d, servings - 1),
-                                  borderRadius: const BorderRadius.horizontal(
-                                    left: Radius.circular(7),
-                                  ),
-                                  child: Container(
-                                    width: 32,
-                                    height: 32,
-                                    alignment: Alignment.center,
-                                    child: Icon(
-                                      servings <= 1
-                                          ? Icons.delete_outline_rounded
-                                          : Icons.remove_rounded,
-                                      size: 18,
-                                      color: servings <= 1
-                                          ? AppColors.danger
-                                          : AppColors.primary,
-                                    ),
-                                  ),
-                                ),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Prescribed portions are fixed for plan meals.
+                              if (isAssigned)
                                 Container(
-                                  constraints: const BoxConstraints(minWidth: 26),
+                                  height: 28,
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
+                                    horizontal: 8,
                                   ),
                                   alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.slate100,
+                                    borderRadius: BorderRadius.circular(7),
+                                    border: Border.all(
+                                      color: AppColors.slate200,
+                                    ),
+                                  ),
                                   child: Text(
-                                    '$servings',
+                                    '$servings ${servings == 1 ? 'portion' : 'portions'}',
                                     style: const TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.bold,
-                                      color: AppColors.slate900,
+                                      color: AppColors.slate700,
                                     ),
                                   ),
-                                ),
-                                InkWell(
-                                  onTap: () =>
-                                      _updateDishQuantity(d, servings + 1),
-                                  borderRadius: const BorderRadius.horizontal(
-                                    right: Radius.circular(7),
+                                )
+                              else
+                              // Tactile Stepper: [-] qty [+]
+                              Container(
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primarySubtle.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(7),
+                                  border: Border.all(
+                                    color: AppColors.primary.withOpacity(0.35),
+                                    width: 1,
                                   ),
-                                  child: Container(
-                                    width: 32,
-                                    height: 32,
-                                    alignment: Alignment.center,
-                                    child: const Icon(
-                                      Icons.add_rounded,
-                                      size: 18,
-                                      color: AppColors.primary,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    InkWell(
+                                      onTap: () =>
+                                          _updateDishQuantity(d, servings - 1),
+                                      borderRadius: const BorderRadius.horizontal(
+                                        left: Radius.circular(6),
+                                      ),
+                                      child: Container(
+                                        width: 26,
+                                        height: 28,
+                                        alignment: Alignment.center,
+                                        child: Icon(
+                                          servings <= 1
+                                              ? Icons.delete_outline_rounded
+                                              : Icons.remove_rounded,
+                                          size: 15,
+                                          color: servings <= 1
+                                              ? AppColors.danger
+                                              : AppColors.primary,
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    Container(
+                                      constraints: const BoxConstraints(minWidth: 20),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        '$servings',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.slate900,
+                                        ),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () =>
+                                          _updateDishQuantity(d, servings + 1),
+                                      borderRadius: const BorderRadius.horizontal(
+                                        right: Radius.circular(6),
+                                      ),
+                                      child: Container(
+                                        width: 26,
+                                        height: 28,
+                                        alignment: Alignment.center,
+                                        child: const Icon(
+                                          Icons.add_rounded,
+                                          size: 15,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 52,
-                            child: Text(
-                              lineTotal > 0
-                                  ? '₹${lineTotal.toStringAsFixed(0)}'
-                                  : 'FREE',
-                              textAlign: TextAlign.end,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: lineTotal > 0
-                                    ? AppColors.slate900
-                                    : AppColors.successDark,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                              const SizedBox(height: 5),
+                              Text(
+                                lineTotal > 0
+                                    ? '₹${lineTotal.toStringAsFixed(0)}'
+                                    : 'FREE',
+                                textAlign: TextAlign.end,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: lineTotal > 0
+                                      ? AppColors.slate900
+                                      : AppColors.successDark,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -2588,24 +3073,30 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.receipt_long_rounded,
-                              size: 13,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              'Total for $memberName',
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.slate800,
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.receipt_long_rounded,
+                                size: 13,
+                                color: AppColors.primary,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  'Total for $memberName',
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.slate800,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           memberSubtotal > 0
                               ? '₹${memberSubtotal.toStringAsFixed(0)} ($memberPortions ${memberPortions == 1 ? "portion" : "portions"})'
@@ -2653,24 +3144,30 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.restaurant_menu_rounded,
-                          size: 16,
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Pantry Total (${dishes.length} dishes, $totalPortions portions)',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.slate800,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.restaurant_menu_rounded,
+                            size: 16,
+                            color: AppColors.primary,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Pantry Total (${dishes.length} dishes, $totalPortions portions)',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.slate800,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       totalDishesSubtotal > 0
                           ? '₹${totalDishesSubtotal.toStringAsFixed(0)}'
@@ -3363,6 +3860,63 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           ),
           const Divider(height: 20, color: AppColors.slate200),
 
+          if (_isComboMealOccasion)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Icon(Icons.schedule_rounded, size: 16, color: Color(0xFFD97706)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Multi-Meal Cooking Notice: Breakfast + Lunch (BL) and Lunch + Dinner (LD) take longer to cook and require standard chef fees. Health Pass free visits cover single meal sessions (B, L, D).',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF92400E),
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (_isFreeChefBooking)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Icon(Icons.verified_rounded, size: 16, color: Color(0xFF16A34A)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Health Pass 100% Free Chef Visit Applied! Single meal cooking covered under your active monthly plan quota.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF166534),
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Dishes / Ingredient Charges
           _buildPriceRow(
             'Dishes & Ingredients ($totalPortions portions)',
@@ -3943,10 +4497,20 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           SizedBox(
             height: 44,
             child: ElevatedButton.icon(
-              onPressed: _proceedToPayment,
-              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              onPressed: _isConfirming ? null : _proceedToPayment,
+              icon: _isConfirming
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Icon(q.total <= 0 ? Icons.check_rounded : Icons.arrow_forward_rounded, size: 18),
               label: Text(
-                q.total == 0.0 ? 'Confirm Booking' : 'Proceed to Pay',
+                _isConfirming
+                    ? 'Confirming…'
+                    : q.total <= 0
+                        ? 'Confirm Booking'
+                        : 'Proceed to Pay',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -3964,31 +4528,6 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildVegIndicator(bool isVeg) {
-    return Container(
-      width: 14,
-      height: 14,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(
-          color: isVeg ? const Color(0xFF388E3C) : const Color(0xFFD32F2F),
-          width: 1.5,
-        ),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Center(
-        child: Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: isVeg ? const Color(0xFF388E3C) : const Color(0xFFD32F2F),
-            shape: BoxShape.circle,
-          ),
-        ),
       ),
     );
   }

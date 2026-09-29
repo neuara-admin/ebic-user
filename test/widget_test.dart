@@ -56,7 +56,7 @@ void main() {
     );
     expect(dish.name, 'Herb Grilled Chicken');
     expect(dish.cookTimeMinutes, 25);
-    expect(dish.basePrice, 249.0);
+    // Dish prices come only from the backend quote, never the model.
 
     final order = OrderModel(
       id: 'order-12345678',

@@ -626,7 +626,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
             // Action Button
             SizedBox(
               width: double.infinity,
-              height: 40,
+              height: 42,
               child: isPrimary
                   ? ElevatedButton(
                       onPressed: onTap,
@@ -634,12 +634,27 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(buttonText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                buttonText,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  letterSpacing: 0.2,
+                                ),
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
                           const SizedBox(width: 6),
                           const Icon(Icons.arrow_forward_rounded, size: 15),
                         ],
@@ -649,13 +664,28 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
                       onPressed: onTap,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: accentColor,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
                         side: BorderSide(color: accentColor.withOpacity(0.5)),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(buttonText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                buttonText,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  letterSpacing: 0.2,
+                                ),
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
                           const SizedBox(width: 6),
                           const Icon(Icons.arrow_forward_rounded, size: 15),
                         ],

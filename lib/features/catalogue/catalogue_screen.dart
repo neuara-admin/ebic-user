@@ -12,6 +12,7 @@ import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/loading_view.dart';
 import 'cart_service.dart';
 import 'dish_detail_screen.dart';
+import '../../shared/widgets/ebic_dish_image.dart';
 
 class CatalogueScreen extends StatefulWidget {
   const CatalogueScreen({super.key});
@@ -28,6 +29,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
   bool _isLoading = true;
   List<DishModel> _dishes = [];
+  int _totalDishes = 0;
+  // Filter options served by GET /catalogue/filters (live catalogue data).
+  List<Map<String, dynamic>> _cuisineOptions = [];
+  List<Map<String, dynamic>> _dietaryTagOptions = [];
+  List<Map<String, dynamic>> _allergenOptions = [];
+  String? _selectedDietaryTagId;
+  final Set<String> _excludedAllergenIds = {};
   List<HouseholdMemberModel> _members = [];
   HouseholdMemberModel? _selectedMember;
   List<Map<String, dynamic>> _categories = [];
@@ -74,49 +82,111 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
     try {
       // 1. Fetch Household Members (Section 8)
-      if (SessionManager().isAuthenticated) {
-        final membersRes = await _api.get<List<dynamic>>(
-          ApiEndpoints.householdMembers,
-        );
-        if (membersRes.success && membersRes.data != null) {
-          _members = membersRes.data!
-              .map(
-                (m) => HouseholdMemberModel.fromJson(m as Map<String, dynamic>),
-              )
-              .toList();
-        }
-      }
-
-      if (_members.isEmpty) {
-        _members = [
-          HouseholdMemberModel(
-            id: 'member_self',
-            name: 'Self',
-            relationship: 'SELF',
-            isCoveredByHealthPass: true,
-            dietaryPreferences: ['Vegetarian'],
-          ),
-        ];
-      }
-
+      await _loadMembers();
       if (_members.isNotEmpty) {
-        _selectedMember = _members.first;
+        _selectedMember = _members.firstWhere(
+          (m) => m.isSelf,
+          orElse: () => _members.first,
+        );
         _cart.setMember(_selectedMember!.id, _selectedMember!.name);
       }
 
-      // 2. Fetch Dynamic Catalogue Categories (Section 11)
-      final catRes = await _api.get<List<dynamic>>(ApiEndpoints.categories);
-      if (catRes.success && catRes.data != null) {
-        _categories = catRes.data!
-            .map((c) => c as Map<String, dynamic>)
-            .toList();
-      }
+      // 2. Catalogue categories + filter options (Section 11), both live data
+      await Future.wait([_loadCategories(), _loadFilterOptions()]);
 
       // 3. Fetch Dishes from Backend (Section 51)
       await _loadDishes();
     } catch (_) {}
 
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadMembers() async {
+    if (!SessionManager().isAuthenticated) return;
+    final membersRes = await _api.get<List<dynamic>>(
+      ApiEndpoints.householdMembers,
+    );
+    if (membersRes.success && membersRes.data != null) {
+      _members = membersRes.data!
+          .map((m) => HouseholdMemberModel.fromJson(m as Map<String, dynamic>))
+          .toList();
+    }
+  }
+
+  Future<void> _loadCategories() async {
+    final catRes = await _api.get<List<dynamic>>(ApiEndpoints.categories);
+    if (catRes.success && catRes.data != null) {
+      // Only active categories that actually hold active dishes get a chip.
+      _categories = catRes.data!
+          .map((c) => c as Map<String, dynamic>)
+          .where(
+            (c) =>
+                c['status'] != 'INACTIVE' &&
+                ((c['activeDishesCount'] as num?) ?? 0) > 0,
+          )
+          .toList();
+    }
+  }
+
+  Future<void> _loadFilterOptions() async {
+    final res = await _api.get<Map<String, dynamic>>(
+      ApiEndpoints.catalogueFilters,
+    );
+    if (res.success && res.data != null) {
+      List<Map<String, dynamic>> list(String key) =>
+          ((res.data![key] as List<dynamic>?) ?? [])
+              .map((e) => e as Map<String, dynamic>)
+              .toList();
+      _cuisineOptions = list('cuisines');
+      _dietaryTagOptions = list('dietaryTags');
+      _allergenOptions = list('allergens');
+    }
+  }
+
+  /// Every filter below is applied server-side (GET /catalogue/dishes), so
+  /// counts and results come from the whole catalogue, not one page.
+  Map<String, dynamic> _buildDishQuery() {
+    final query = <String, dynamic>{'limit': 100};
+
+    if (_cart.selectedOccasion.isNotEmpty) {
+      query['meal_type'] = _cart.occasionCode;
+    }
+    if (_selectedCategory != 'ALL') {
+      query['category'] = _selectedCategory;
+    }
+    if (_searchQuery.isNotEmpty) {
+      query['search'] = _searchQuery;
+    }
+
+    // Quick pills and the modal diet choice both map to the same `diet` param;
+    // the explicit modal choice wins when both are set.
+    final diet = _dietaryFilter != 'ALL'
+        ? _dietaryFilter
+        : (_quickFilter == 'VEG' || _quickFilter == 'NON_VEG'
+              ? _quickFilter
+              : null);
+    if (diet != null) query['diet'] = diet;
+
+    final maxCook = _maxCookTime ?? (_quickFilter == 'QUICK' ? 20 : null);
+    if (maxCook != null) query['maxCookTime'] = maxCook;
+
+    final maxCal = _maxCalories ?? (_quickFilter == 'LOW_CAL' ? 350 : null);
+    if (maxCal != null) query['maxCalories'] = maxCal;
+
+    if (_quickFilter == 'HIGH_PROTEIN') query['minProtein'] = 20;
+
+    if (_selectedCuisines.isNotEmpty) {
+      query['cuisine'] = _selectedCuisines.join(',');
+    }
+    if (_selectedDietaryTagId != null) {
+      query['dietaryTagId'] = _selectedDietaryTagId;
+    }
+    if (_excludedAllergenIds.isNotEmpty) {
+      query['excludeAllergenIds'] = _excludedAllergenIds.join(',');
+    }
+    if (_sortBy != 'RECOMMENDED') query['sort'] = _sortBy;
+
+    return query;
   }
 
   /// Authoritative backend-driven dish query
@@ -126,38 +196,33 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     }
 
     try {
-      final query = <String, dynamic>{'limit': 60};
-
-      // Backend Meal Occasion Filtering
-      if (_cart.selectedOccasion.isNotEmpty) {
-        query['meal_type'] = _cart.occasionCode;
-      }
-
-      // Backend Category Filtering
-      if (_selectedCategory != 'ALL') {
-        query['category'] = _selectedCategory;
-      }
-
-      // Backend Search Filtering
-      if (_searchQuery.isNotEmpty) {
-        query['search'] = _searchQuery;
-      }
-
-      final res = await _api.get<Map<String, dynamic>>(
+      // Paginated endpoints send `data: [...]` + `meta.pagination`; accept the
+      // older `{items, pagination}` body too.
+      final res = await _api.get<dynamic>(
         ApiEndpoints.dishes,
-        queryParameters: query,
+        queryParameters: _buildDishQuery(),
       );
 
       if (res.success && res.data != null) {
-        final items = res.data!['items'] as List<dynamic>? ?? [];
+        final body = res.data;
+        final items = body is List
+            ? body
+            : (body is Map ? body['items'] as List<dynamic>? : null) ?? [];
         _dishes = items
             .map((d) => DishModel.fromJson(d as Map<String, dynamic>))
             .toList();
+        final pagination =
+            res.meta?['pagination'] ?? (body is Map ? body['pagination'] : null);
+        _totalDishes =
+            (pagination is Map ? pagination['total'] as num? : null)?.toInt() ??
+            _dishes.length;
       } else {
         _dishes = [];
+        _totalDishes = 0;
       }
     } catch (_) {
       _dishes = [];
+      _totalDishes = 0;
     }
 
     if (mounted) {
@@ -220,83 +285,24 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     if (_maxCookTime != null) count++;
     if (_maxCalories != null) count++;
     if (_sortBy != 'RECOMMENDED') count++;
+    if (_selectedDietaryTagId != null) count++;
+    count += _excludedAllergenIds.length;
     return count;
   }
 
-  List<DishModel> get _filteredDishes {
-    var list = _dishes.where((d) {
-      // 1. Quick Filter Pills
-      bool matchesQuick = true;
-      if (_quickFilter == 'VEG') {
-        matchesQuick = d.isVegetarian;
-      } else if (_quickFilter == 'NON_VEG') {
-        matchesQuick = !d.isVegetarian;
-      } else if (_quickFilter == 'HIGH_PROTEIN') {
-        matchesQuick = d.isHighProtein;
-      } else if (_quickFilter == 'QUICK') {
-        matchesQuick = d.isQuickPrep;
-      } else if (_quickFilter == 'LOW_CAL') {
-        matchesQuick = d.isLowCalorie;
-      }
+  /// Already filtered and sorted by the backend.
+  List<DishModel> get _filteredDishes => _dishes;
 
-      // 2. Modal Dietary Filter
-      bool matchesDietary = true;
-      if (_dietaryFilter == 'VEG') {
-        matchesDietary = d.isVegetarian;
-      } else if (_dietaryFilter == 'NON_VEG') {
-        matchesDietary = !d.isVegetarian;
-      } else if (_dietaryFilter == 'VEGAN') {
-        matchesDietary = d.isVegan;
-      }
-
-      // 3. Cuisines Multi-select
-      bool matchesCuisine =
-          _selectedCuisines.isEmpty ||
-          (_selectedCuisines.contains(d.cuisine ?? 'Other'));
-
-      // 4. Max Cook Time
-      bool matchesCookTime =
-          _maxCookTime == null || d.baseCookTimeMin <= _maxCookTime!;
-
-      // 5. Max Calories
-      bool matchesCalories =
-          _maxCalories == null ||
-          ((d.nutrition?.calories ?? 0) <= _maxCalories!);
-
-      return matchesQuick &&
-          matchesDietary &&
-          matchesCuisine &&
-          matchesCookTime &&
-          matchesCalories;
-    }).toList();
-
-    // Sorting
-    if (_sortBy == 'COOK_TIME_ASC') {
-      list.sort((a, b) => a.baseCookTimeMin.compareTo(b.baseCookTimeMin));
-    } else if (_sortBy == 'PROTEIN_DESC') {
-      list.sort(
-        (a, b) =>
-            (b.nutrition?.proteinG ?? 0).compareTo(a.nutrition?.proteinG ?? 0),
-      );
-    } else if (_sortBy == 'CALORIES_ASC') {
-      list.sort(
-        (a, b) => (a.nutrition?.calories ?? 999).compareTo(
-          b.nutrition?.calories ?? 999,
-        ),
-      );
-    }
-
-    return list;
-  }
-
-  Set<String> get _availableCuisines {
-    final set = <String>{};
-    for (final d in _dishes) {
-      if (d.cuisine != null && d.cuisine!.isNotEmpty) {
-        set.add(d.cuisine!);
-      }
-    }
-    return set;
+  void _resetAllFilters() {
+    _quickFilter = 'ALL';
+    _selectedCategory = 'ALL';
+    _dietaryFilter = 'ALL';
+    _selectedCuisines.clear();
+    _sortBy = 'RECOMMENDED';
+    _maxCookTime = null;
+    _maxCalories = null;
+    _selectedDietaryTagId = null;
+    _excludedAllergenIds.clear();
   }
 
   Future<void> _proceedToReview() async {
@@ -339,12 +345,16 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         'dishId': item.dish.id,
         'name': item.dish.name,
         'servings': item.servings,
-        'unitPrice': 120.0,
         'quantity': 1,
         'baseCookTimeMin': item.dish.baseCookTimeMin,
         'perServingIncMin': item.dish.perServingIncMin,
         'memberId': item.memberId,
         'memberName': item.memberName,
+        'imageUrl': item.dish.imageUrl,
+        'isVegetarian': item.dish.isVegetarian,
+        'category': item.dish.category,
+        'description': item.dish.description,
+        'dietaryTags': item.dish.dietaryTags,
       };
     }).toList();
 
@@ -383,6 +393,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   }
 
   void _showFilterBottomSheet() {
+    final queryBefore = _buildDishQuery().toString();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -430,13 +441,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         ),
                         TextButton(
                           onPressed: () {
-                            setModalState(() {
-                              _dietaryFilter = 'ALL';
-                              _selectedCuisines.clear();
-                              _sortBy = 'RECOMMENDED';
-                              _maxCookTime = null;
-                              _maxCalories = null;
-                            });
+                            setModalState(_resetAllFilters);
                             setState(() {});
                           },
                           child: const Text(
@@ -640,7 +645,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         const SizedBox(height: 20),
 
                         // Section 5: Cuisines
-                        if (_availableCuisines.isNotEmpty) ...[
+                        if (_cuisineOptions.isNotEmpty) ...[
                           const Text(
                             'Cuisines',
                             style: TextStyle(
@@ -653,12 +658,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
-                            children: _availableCuisines.map((cuisine) {
+                            children: _cuisineOptions.map((c) {
+                              final cuisine = c['name'].toString();
                               final isSelected = _selectedCuisines.contains(
                                 cuisine,
                               );
                               return _buildModalFilterChip(
-                                cuisine,
+                                '$cuisine (${c['count'] ?? 0})',
                                 isSelected,
                                 () {
                                   setModalState(() {
@@ -666,6 +672,78 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                                       _selectedCuisines.remove(cuisine);
                                     } else {
                                       _selectedCuisines.add(cuisine);
+                                    }
+                                  });
+                                  setState(() {});
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+
+                        // Section 6: Dietary tags (curated, from backend)
+                        if (_dietaryTagOptions.isNotEmpty) ...[
+                          const Text(
+                            'Dietary Tags',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: AppColors.slate900,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _dietaryTagOptions.map((t) {
+                              final id = t['id'].toString();
+                              final isSelected = _selectedDietaryTagId == id;
+                              return _buildModalFilterChip(
+                                '${t['name']} (${t['count'] ?? 0})',
+                                isSelected,
+                                () {
+                                  setModalState(
+                                    () => _selectedDietaryTagId = isSelected
+                                        ? null
+                                        : id,
+                                  );
+                                  setState(() {});
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+
+                        // Section 7: Allergen exclusion
+                        if (_allergenOptions.isNotEmpty) ...[
+                          const Text(
+                            'Exclude Allergens',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: AppColors.slate900,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _allergenOptions.map((a) {
+                              final id = a['id'].toString();
+                              final isSelected = _excludedAllergenIds.contains(
+                                id,
+                              );
+                              return _buildModalFilterChip(
+                                'No ${a['name']}',
+                                isSelected,
+                                () {
+                                  setModalState(() {
+                                    if (isSelected) {
+                                      _excludedAllergenIds.remove(id);
+                                    } else {
+                                      _excludedAllergenIds.add(id);
                                     }
                                   });
                                   setState(() {});
@@ -692,7 +770,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                       ),
                     ),
                     child: EbicButton(
-                      label: 'Show ${_filteredDishes.length} Recipes',
+                      label: 'Apply Filters',
                       onPressed: () => Navigator.pop(ctx),
                     ),
                   ),
@@ -702,7 +780,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      if (mounted && _buildDishQuery().toString() != queryBefore) {
+        _loadDishes(showSpinner: true);
+      }
+    });
   }
 
   Widget _buildModalFilterChip(
@@ -822,7 +904,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             tooltip: 'Filters',
             onPressed: _showFilterBottomSheet,
           ),
-          if (!_cart.isEmpty)
+          if (_cart.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: Center(
@@ -932,7 +1014,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${_filteredDishes.length} Recipes Available',
+                        '$_totalDishes Recipes Available',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -982,7 +1064,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             ),
 
             // Floating Bottom Cart Action Bar
-            if (!_cart.isEmpty)
+            if (_cart.isNotEmpty)
               Positioned(
                 left: 16,
                 right: 16,
@@ -1129,227 +1211,24 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     );
   }
 
-  void _showAddMemberModalSheet() {
-    final nameCtrl = TextEditingController();
-    String selectedRelation = 'SPOUSE';
-    String selectedDiet = 'Vegetarian';
-
-    final relations = [
-      {'key': 'SPOUSE', 'label': 'Spouse'},
-      {'key': 'CHILD', 'label': 'Child'},
-      {'key': 'MOTHER', 'label': 'Mother'},
-      {'key': 'FATHER', 'label': 'Father'},
-      {'key': 'SIBLING', 'label': 'Sibling'},
-      {'key': 'OTHER', 'label': 'Other'},
-    ];
-
-    final diets = ['Vegetarian', 'Non-Vegetarian', 'Vegan'];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Container(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                top: 16,
-                left: 20,
-                right: 20,
-              ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: AppColors.slate300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Add Family Member',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 17,
-                          color: AppColors.slate900,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          color: AppColors.slate600,
-                        ),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: nameCtrl,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: 'Member Name',
-                      hintText: 'e.g. Priya, Aarav, Mom',
-                      filled: true,
-                      fillColor: AppColors.slate50,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.slate300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.slate300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.primary,
-                          width: 1.8,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Relationship',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.slate800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    children: relations.map((r) {
-                      final isSel = selectedRelation == r['key'];
-                      return ChoiceChip(
-                        label: Text(r['label']!),
-                        selected: isSel,
-                        selectedColor: AppColors.primarySubtle,
-                        side: BorderSide(
-                          color: isSel ? AppColors.primary : AppColors.slate300,
-                        ),
-                        labelStyle: TextStyle(
-                          color: isSel
-                              ? AppColors.primaryDark
-                              : AppColors.slate800,
-                          fontWeight: isSel
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          fontSize: 12,
-                        ),
-                        onSelected: (sel) {
-                          if (sel)
-                            setSheetState(() => selectedRelation = r['key']!);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Dietary Preference',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.slate800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    children: diets.map((d) {
-                      final isSel = selectedDiet == d;
-                      return ChoiceChip(
-                        label: Text(d),
-                        selected: isSel,
-                        selectedColor: AppColors.primarySubtle,
-                        side: BorderSide(
-                          color: isSel ? AppColors.primary : AppColors.slate300,
-                        ),
-                        labelStyle: TextStyle(
-                          color: isSel
-                              ? AppColors.primaryDark
-                              : AppColors.slate800,
-                          fontWeight: isSel
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          fontSize: 12,
-                        ),
-                        onSelected: (sel) {
-                          if (sel) setSheetState(() => selectedDiet = d);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        final name = nameCtrl.text.trim();
-                        if (name.isEmpty) return;
-
-                        final newMember = HouseholdMemberModel(
-                          id: 'member_${DateTime.now().millisecondsSinceEpoch}',
-                          name: name,
-                          relationship: selectedRelation,
-                          dietaryPreferences: [selectedDiet],
-                          isCoveredByHealthPass: true,
-                        );
-
-                        setState(() {
-                          _members.add(newMember);
-                          _selectedMember = newMember;
-                          _cart.setMember(newMember.id, newMember.name);
-                        });
-
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '$name added! You can now select dishes for $name.',
-                            ),
-                            backgroundColor: AppColors.primary,
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: const Text(
-                        'Save & Select Dishes for Member',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+  /// Members are real household records — adding one goes through the
+  /// profile member form (which persists it) and the list is reloaded.
+  Future<void> _showAddMemberModalSheet() async {
+    if (!SessionManager().isAuthenticated) {
+      Navigator.pushNamed(context, AppRoutes.login);
+      return;
+    }
+    final previousIds = _members.map((m) => m.id).toSet();
+    final added = await Navigator.pushNamed(context, AppRoutes.memberForm);
+    if (added != true || !mounted) return;
+    await _loadMembers();
+    final newMember = _members.where((m) => !previousIds.contains(m.id));
+    if (newMember.isNotEmpty && mounted) {
+      setState(() {
+        _selectedMember = newMember.first;
+        _cart.setMember(newMember.first.id, newMember.first.name);
+      });
+    }
   }
 
   Widget _buildOccasionSwitcher() {
@@ -1528,15 +1407,15 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       {'key': 'ALL', 'label': 'All Dishes', 'isCat': true},
       {'key': 'VEG', 'label': '🥦 Pure Veg', 'isCat': false},
       {'key': 'NON_VEG', 'label': '🍗 Non-Veg', 'isCat': false},
-      {'key': 'HIGH_PROTEIN', 'label': '💪 High Protein', 'isCat': false},
-      {'key': 'HIGH_FIBRE', 'label': '🌾 High Fibre', 'isCat': true},
-      {'key': 'BALANCED', 'label': '🥗 Balanced Meals', 'isCat': true},
-      {'key': 'QUICK', 'label': '⚡ Quick (<20m)', 'isCat': false},
-      {'key': 'LOW_CAL', 'label': '🥗 Low Calorie', 'isCat': false},
+      {'key': 'HIGH_PROTEIN', 'label': '💪 20g+ Protein', 'isCat': false},
+      {'key': 'QUICK', 'label': '⚡ Quick (≤20m)', 'isCat': false},
+      {'key': 'LOW_CAL', 'label': '🥗 ≤350 kcal', 'isCat': false},
+      // Category chips come only from the backend taxonomy (with live counts).
       ..._categories.map(
         (c) => {
           'key': c['code']?.toString() ?? '',
-          'label': c['name']?.toString() ?? '',
+          'label':
+              '${c['name'] ?? ''} (${(c['activeDishesCount'] as num?) ?? 0})',
           'isCat': true,
         },
       ),
@@ -1572,12 +1451,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   _selectedCategory = 'ALL';
                   _loadDishes(showSpinner: true);
                 } else if (isCat) {
-                  _quickFilter = 'ALL';
-                  _selectedCategory = key;
+                  // Category combines with the quick pill server-side.
+                  _selectedCategory = _selectedCategory == key ? 'ALL' : key;
                   _loadDishes(showSpinner: true);
                 } else {
-                  _selectedCategory = 'ALL';
                   _quickFilter = (_quickFilter == key) ? 'ALL' : key;
+                  _loadDishes(showSpinner: true);
                 }
               });
             },
@@ -1640,47 +1519,14 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Dish Culinary Icon Box
-                Stack(
-                  children: [
-                    Container(
-                      width: 86,
-                      height: 86,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: dish.isVegetarian
-                              ? [
-                                  const Color(0xFFE8F5E9),
-                                  const Color(0xFFC8E6C9),
-                                ]
-                              : [
-                                  const Color(0xFFFFF3E0),
-                                  const Color(0xFFFFE0B2),
-                                ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          dish.isVegetarian
-                              ? Icons.eco_rounded
-                              : Icons.restaurant_rounded,
-                          color: dish.isVegetarian
-                              ? AppColors.primary
-                              : AppColors.accent,
-                          size: 38,
-                        ),
-                      ),
-                    ),
-                    // Veg / Non-Veg Indicator
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: _buildVegIndicator(dish.isVegetarian),
-                    ),
-                  ],
+                // Dish Culinary Image Box
+                EBICDishImage(
+                  imageUrl: dish.imageUrl,
+                  width: 88,
+                  height: 88,
+                  borderRadius: 14,
+                  isVegetarian: dish.isVegetarian,
+                  showVegIndicator: true,
                 ),
                 const SizedBox(width: 14),
 
@@ -1980,30 +1826,6 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     );
   }
 
-  Widget _buildVegIndicator(bool isVeg) {
-    return Container(
-      width: 14,
-      height: 14,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(
-          color: isVeg ? const Color(0xFF388E3C) : const Color(0xFFD32F2F),
-          width: 1.5,
-        ),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Center(
-        child: Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: isVeg ? const Color(0xFF388E3C) : const Color(0xFFD32F2F),
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildFloatingCartBar() {
     final distinctCount = _cart.distinctDishCount;
@@ -2125,12 +1947,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 _searchController.clear();
                 setState(() {
                   _searchQuery = '';
-                  _quickFilter = 'ALL';
-                  _selectedCategory = 'ALL';
-                  _dietaryFilter = 'ALL';
-                  _selectedCuisines.clear();
-                  _maxCookTime = null;
-                  _maxCalories = null;
+                  _resetAllFilters();
                 });
                 _loadDishes(showSpinner: true);
               },

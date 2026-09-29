@@ -374,11 +374,18 @@ class ActiveHealthPassModel {
     required this.consultationsUsed,
     required this.consultationsRemaining,
     this.coveredMembers = const [],
+    this.maxCoveredMembers = 4,
+    this.minCoveredMembers = 1,
+    this.freeChefVisitRules,
     this.assignedDietitian,
     this.activeConsultation,
     this.latestCompletedConsultation,
     this.finalAmount = 0.0,
   });
+
+  final int maxCoveredMembers;
+  final int minCoveredMembers;
+  final Map<String, dynamic>? freeChefVisitRules;
 
   bool get isActive => status == 'ACTIVE' || status == 'EXPIRING_SOON';
   int get coveredMembersCount => coveredMembers.length;
@@ -444,6 +451,11 @@ class ActiveHealthPassModel {
       consultationsUsed: int.tryParse(consult['used']?.toString() ?? '0') ?? 0,
       consultationsRemaining: int.tryParse(consult['remaining']?.toString() ?? '0') ?? 0,
       coveredMembers: members,
+      maxCoveredMembers: int.tryParse(json['maxCoveredMembers']?.toString() ?? plan['maxMembers']?.toString() ?? '4') ?? 4,
+      minCoveredMembers: int.tryParse(json['minCoveredMembers']?.toString() ?? '1') ?? 1,
+      freeChefVisitRules: json['freeChefVisitRules'] is Map<String, dynamic>
+          ? json['freeChefVisitRules'] as Map<String, dynamic>
+          : null,
       assignedDietitian: dietitian,
       activeConsultation: activeConsult,
       latestCompletedConsultation: completedConsult,

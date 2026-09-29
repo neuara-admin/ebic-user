@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_button.dart';
-import '../../shared/widgets/ebic_card.dart';
+import '../../shared/widgets/ebic_dish_image.dart';
+import '../../shared/widgets/dish_video_modal.dart';
+import '../catalogue/dish_detail_screen.dart';
 import 'diet_plan_service.dart';
 import 'models/diet_plan_models.dart';
 
@@ -17,7 +19,8 @@ class DietPlanMealDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<DietPlanMealDetailScreen> createState() => _DietPlanMealDetailScreenState();
+  State<DietPlanMealDetailScreen> createState() =>
+      _DietPlanMealDetailScreenState();
 }
 
 class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
@@ -69,7 +72,9 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                 ? 'Great job! Logged as consumed.'
                 : 'Meal marked as skipped.',
           ),
-          backgroundColor: status == 'CONFIRMED_CONSUMED' ? Colors.green : Colors.grey.shade800,
+          backgroundColor: status == 'CONFIRMED_CONSUMED'
+              ? Colors.green
+              : Colors.grey.shade800,
           duration: const Duration(seconds: 2),
         ),
       );
@@ -81,11 +86,31 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
     final notesController = TextEditingController();
 
     final options = [
-      {'key': 'LIKED', 'label': 'Meal liked', 'icon': Icons.thumb_up_alt_outlined},
-      {'key': 'DISLIKED', 'label': 'Meal disliked', 'icon': Icons.thumb_down_alt_outlined},
-      {'key': 'UNABLE_TO_FOLLOW', 'label': 'Unable to follow', 'icon': Icons.schedule},
-      {'key': 'INGREDIENT_UNAVAILABLE', 'label': 'Ingredient unavailable', 'icon': Icons.shopping_basket_outlined},
-      {'key': 'PREFERENCE_CHANGED', 'label': 'Meal preference changed', 'icon': Icons.tune},
+      {
+        'key': 'LIKED',
+        'label': 'Meal liked',
+        'icon': Icons.thumb_up_alt_outlined,
+      },
+      {
+        'key': 'DISLIKED',
+        'label': 'Meal disliked',
+        'icon': Icons.thumb_down_alt_outlined,
+      },
+      {
+        'key': 'UNABLE_TO_FOLLOW',
+        'label': 'Unable to follow',
+        'icon': Icons.schedule,
+      },
+      {
+        'key': 'INGREDIENT_UNAVAILABLE',
+        'label': 'Ingredient unavailable',
+        'icon': Icons.shopping_basket_outlined,
+      },
+      {
+        'key': 'PREFERENCE_CHANGED',
+        'label': 'Meal preference changed',
+        'icon': Icons.tune,
+      },
     ];
 
     showModalBottomSheet(
@@ -114,7 +139,10 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                     children: [
                       const Text(
                         'Meal Feedback for Dietitian',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close),
@@ -131,49 +159,61 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                     final isSel = selectedFeedback == opt['key'];
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(opt['icon'] as IconData, color: isSel ? AppColors.primary : Colors.grey),
+                      leading: Icon(
+                        opt['icon'] as IconData,
+                        color: isSel ? AppColors.primary : Colors.grey,
+                      ),
                       title: Text(
                         opt['label'] as String,
                         style: TextStyle(
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          fontWeight:
+                              isSel ? FontWeight.bold : FontWeight.normal,
                           color: isSel ? AppColors.primary : AppColors.textPrimary,
                         ),
                       ),
                       trailing: isSel
-                          ? const Icon(Icons.check_circle, color: AppColors.primary)
-                          : const Icon(Icons.circle_outlined, color: Colors.grey),
+                          ? const Icon(Icons.check, color: AppColors.primary)
+                          : null,
                       onTap: () {
-                        setModalState(() => selectedFeedback = opt['key'] as String);
+                        setModalState(() {
+                          selectedFeedback = opt['key'] as String;
+                        });
                       },
                     );
                   }),
                   const SizedBox(height: 12),
                   TextField(
                     controller: notesController,
+                    maxLines: 2,
                     decoration: InputDecoration(
                       hintText: 'Additional notes for your dietitian (optional)',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.all(12),
                     ),
-                    maxLines: 2,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   EbicButton(
-                    text: 'Submit Feedback',
+                    label: 'Submit Feedback',
                     onPressed: () async {
                       Navigator.pop(ctx);
                       final ok = await _service.recordMealFeedback(
                         widget.planId,
                         widget.mealId,
                         feedbackType: selectedFeedback,
-                        notes: notesController.text.trim(),
+                        notes: notesController.text.trim().isNotEmpty
+                            ? notesController.text.trim()
+                            : null,
                       );
-                      if (mounted && ok) {
+                      if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Feedback submitted to your dietitian.'),
-                            backgroundColor: Colors.green,
+                          SnackBar(
+                            content: Text(
+                              ok
+                                  ? 'Feedback submitted to your dietitian.'
+                                  : 'Could not submit feedback.',
+                            ),
                           ),
                         );
                       }
@@ -188,12 +228,31 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
     );
   }
 
+  Color _getOccasionColor(String occasion) {
+    switch (occasion.toUpperCase()) {
+      case 'BREAKFAST':
+        return Colors.orange.shade700;
+      case 'LUNCH':
+        return Colors.amber.shade800;
+      case 'DINNER':
+        return Colors.indigo.shade600;
+      case 'SNACK':
+      case 'MORNING_SNACK':
+      case 'EVENING_SNACK':
+        return Colors.teal.shade700;
+      default:
+        return AppColors.primary;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      return Scaffold(
+        appBar: AppBar(title: const Text('Meal Details')),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
       );
     }
 
@@ -205,41 +264,64 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
     }
 
     final meal = _meal!;
+    final occasionColor = _getOccasionColor(meal.occasion);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(meal.occasion.replaceAll('_', ' ')),
+        title: Text(
+          meal.occasion.replaceAll('_', ' '),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
-        foregroundColor: AppColors.textPrimary,
+        foregroundColor: AppColors.slate900,
         actions: [
           IconButton(
-            icon: const Icon(Icons.feedback_outlined),
+            icon: const Icon(Icons.feedback_outlined, size: 20),
             tooltip: 'Give Feedback',
             onPressed: _showFeedbackModal,
           ),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          // Meal Title Hero
-          EbicCard(
-            padding: const EdgeInsets.all(20),
+          // 1. Meal Title & Hero Header
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.slate200),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      meal.occasion.replaceAll('_', ' '),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade700,
-                        letterSpacing: 0.5,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: occasionColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        meal.occasion.replaceAll('_', ' '),
+                        style: TextStyle(
+                          color: occasionColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     if (meal.isCheatMeal)
@@ -253,7 +335,7 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.stars, size: 14, color: Colors.amber.shade900),
+                            Icon(Icons.stars_rounded, size: 14, color: Colors.amber.shade900),
                             const SizedBox(width: 4),
                             Text(
                               'CHEAT MEAL',
@@ -268,20 +350,25 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Text(
                   meal.title,
                   style: const TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.slate900,
+                    letterSpacing: -0.2,
                   ),
                 ),
                 if (meal.description != null && meal.description!.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
                     meal.description!,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: AppColors.slate600,
+                      height: 1.4,
+                    ),
                   ),
                 ],
                 if (meal.isCheatMeal && meal.guidance != null) ...[
@@ -296,12 +383,16 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.info_outline, size: 18, color: Colors.amber.shade900),
+                        Icon(Icons.info_outline_rounded, size: 18, color: Colors.amber.shade900),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Guidance: ${meal.guidance!}',
-                            style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                            'Dietitian Guidance: ${meal.guidance!}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
@@ -311,18 +402,39 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 14),
 
-          const SizedBox(height: 16),
-
-          // Adherence tracking card (Section 84/43)
-          EbicCard(
-            padding: const EdgeInsets.all(16),
+          // 2. Adherence Tracking Card (Section 84/43)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.slate200),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Today\'s Adherence',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Today\'s Adherence',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                    ),
+                    Text(
+                      _adherenceStatus == 'CONFIRMED_CONSUMED'
+                          ? 'Logged as Eaten'
+                          : (_adherenceStatus == 'SKIPPED' ? 'Marked as Skipped' : 'Pending'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: _adherenceStatus == 'CONFIRMED_CONSUMED'
+                            ? AppColors.successDark
+                            : (_adherenceStatus == 'SKIPPED' ? AppColors.danger : AppColors.slate500),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -331,66 +443,74 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           backgroundColor: _adherenceStatus == 'CONFIRMED_CONSUMED'
-                              ? Colors.green.shade50
+                              ? const Color(0xFFF0FDF4)
                               : Colors.white,
                           side: BorderSide(
                             color: _adherenceStatus == 'CONFIRMED_CONSUMED'
-                                ? Colors.green
-                                : Colors.grey.shade300,
-                            width: _adherenceStatus == 'CONFIRMED_CONSUMED' ? 2 : 1,
+                                ? const Color(0xFF16A34A)
+                                : AppColors.slate300,
+                            width: _adherenceStatus == 'CONFIRMED_CONSUMED' ? 1.5 : 1,
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                         icon: Icon(
-                          Icons.check_circle,
+                          Icons.check_circle_rounded,
                           color: _adherenceStatus == 'CONFIRMED_CONSUMED'
-                              ? Colors.green
-                              : Colors.grey.shade400,
+                              ? const Color(0xFF16A34A)
+                              : AppColors.slate400,
                           size: 18,
                         ),
                         label: Text(
-                          _adherenceStatus == 'CONFIRMED_CONSUMED' ? 'Consumed' : 'I Ate This',
+                          _adherenceStatus == 'CONFIRMED_CONSUMED'
+                              ? 'Consumed'
+                              : 'I Ate This',
                           style: TextStyle(
                             color: _adherenceStatus == 'CONFIRMED_CONSUMED'
-                                ? Colors.green.shade900
-                                : AppColors.textPrimary,
+                                ? const Color(0xFF166534)
+                                : AppColors.slate800,
                             fontWeight: FontWeight.bold,
+                            fontSize: 12.5,
                           ),
                         ),
                         onPressed: () => _updateAdherence('CONFIRMED_CONSUMED'),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           backgroundColor: _adherenceStatus == 'SKIPPED'
-                              ? Colors.red.shade50
+                              ? const Color(0xFFFEF2F2)
                               : Colors.white,
                           side: BorderSide(
                             color: _adherenceStatus == 'SKIPPED'
-                                ? Colors.red
-                                : Colors.grey.shade300,
-                            width: _adherenceStatus == 'SKIPPED' ? 2 : 1,
+                                ? const Color(0xFFDC2626)
+                                : AppColors.slate300,
+                            width: _adherenceStatus == 'SKIPPED' ? 1.5 : 1,
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                         icon: Icon(
                           Icons.cancel_outlined,
                           color: _adherenceStatus == 'SKIPPED'
-                              ? Colors.red
-                              : Colors.grey.shade400,
+                              ? const Color(0xFFDC2626)
+                              : AppColors.slate400,
                           size: 18,
                         ),
                         label: Text(
                           _adherenceStatus == 'SKIPPED' ? 'Skipped' : 'Skip Meal',
                           style: TextStyle(
                             color: _adherenceStatus == 'SKIPPED'
-                                ? Colors.red.shade900
-                                : AppColors.textPrimary,
+                                ? const Color(0xFF991B1B)
+                                : AppColors.slate800,
                             fontWeight: FontWeight.bold,
+                            fontSize: 12.5,
                           ),
                         ),
                         onPressed: () => _updateAdherence('SKIPPED'),
@@ -401,216 +521,530 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 14),
 
-          const SizedBox(height: 16),
-
-          // Nutrition Targets / Macros breakdown
+          // 3. Nutrition Snapshot
           if (meal.plannedNutrition != null)
-            EbicCard(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Nutrition Snapshot',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildMacroBadge('Calories', '${meal.plannedNutrition!.calories}', 'kcal', Colors.orange),
-                      _buildMacroBadge('Protein', '${meal.plannedNutrition!.proteinG}', 'g', Colors.red),
-                      _buildMacroBadge('Carbs', '${meal.plannedNutrition!.carbsG}', 'g', Colors.blue),
-                      _buildMacroBadge('Fat', '${meal.plannedNutrition!.fatG}', 'g', Colors.green),
-                      _buildMacroBadge('Fibre', '${meal.plannedNutrition!.fibreG}', 'g', Colors.teal),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 16),
-
-          // Dishes in Meal
-          EbicCard(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Included Dishes & Ingredients',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                const SizedBox(height: 12),
-                ...meal.dishes.map((d) {
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                d.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                              ),
-                            ),
-                            Text(
-                              '${d.servingQuantity} ${d.servingUnit}',
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                        if (d.dietaryTags.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 6,
-                            children: d.dietaryTags.map((tag) {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: Colors.green.shade200),
-                                ),
-                                child: Text(
-                                  tag,
-                                  style: TextStyle(fontSize: 10, color: Colors.green.shade800),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                        if (d.ingredients.isNotEmpty) ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            'Ingredients: ${d.ingredients.map((i) => '${i.name} (${i.quantity}${i.unit})').join(', ')}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Instructions card
-          if (meal.instructions != null && meal.instructions!.isNotEmpty)
-            EbicCard(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Preparation Instructions',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    meal.instructions!,
-                    style: TextStyle(fontSize: 13, height: 1.4, color: AppColors.textPrimary),
-                  ),
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 20),
-
-          // Chef Booking Flow (Section 20, 31 & Rule 2: Diet Plan ≠ Chef Booking)
-          if (meal.bookChefEligible)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.teal.shade50,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.teal.shade200),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.slate200),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Icons.soup_kitchen, color: Colors.teal.shade800, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Want an EBIC Chef to cook this?',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: Colors.teal.shade900,
+                      const Text(
+                        'Meal Nutrition Target',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primarySubtle,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${meal.plannedNutrition!.calories} kcal',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryDark,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'You can book a verified chef to prepare this dietitian-assigned meal at your home.',
-                    style: TextStyle(fontSize: 12, color: Colors.teal.shade800),
-                  ),
                   const SizedBox(height: 12),
-                  EbicButton(
-                    label: 'Book Chef for this Meal',
-                    icon: Icons.calendar_today,
-                    onPressed: () {
-                      // Routes to Chef Booking passing assigned meal details
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.bookChefAssigned,
-                        arguments: {
-                          'dietPlanMealId': meal.id,
-                          'mealTitle': meal.title,
-                          'dishes': meal.dishes.map((d) => {'dishId': d.dishId, 'name': d.name}).toList(),
-                        },
-                      );
-                    },
+                  Row(
+                    children: [
+                      _buildMacroCard('Calories', '${meal.plannedNutrition!.calories}', 'kcal', const Color(0xFFF97316), Icons.local_fire_department_rounded),
+                      const SizedBox(width: 8),
+                      _buildMacroCard('Protein', '${meal.plannedNutrition!.proteinG}', 'g', const Color(0xFF3B82F6), Icons.fitness_center_rounded),
+                      const SizedBox(width: 8),
+                      _buildMacroCard('Carbs', '${meal.plannedNutrition!.carbsG}', 'g', const Color(0xFF10B981), Icons.bolt_rounded),
+                      const SizedBox(width: 8),
+                      _buildMacroCard('Fat', '${meal.plannedNutrition!.fatG}', 'g', const Color(0xFFEC4899), Icons.water_drop_rounded),
+                      const SizedBox(width: 8),
+                      _buildMacroCard('Fibre', '${meal.plannedNutrition!.fibreG}', 'g', const Color(0xFF8B5CF6), Icons.grain_rounded),
+                    ],
                   ),
                 ],
               ),
             ),
+          const SizedBox(height: 16),
 
-          const SizedBox(height: 20),
+          // 4. Detailed Dishes & Ingredients List
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Assigned Dishes (${meal.dishes.length})',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.slate900,
+                ),
+              ),
+              const Text(
+                'Tap dish for full recipe',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: AppColors.slate500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          ...meal.dishes.map((dishItem) => _buildDishItemCard(dishItem)),
+
+          const SizedBox(height: 14),
+
+          const SizedBox(height: 16),
+
+          // 6. Book Certified Chef CTA (Section 20 & 31)
+          if (meal.bookChefEligible)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF042F2E), Color(0xFF0F766E)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F766E).withOpacity(0.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.soup_kitchen_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cook this Meal with an EBIC Chef',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Verified chef cooks in your kitchen with clean hygiene standards',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF042F2E),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                      label: const Text(
+                        'Book Chef for this Meal',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                      ),
+                      onPressed: () {
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.bookChefAssigned,
+                          arguments: {
+                            'dietPlanMealId': meal.id,
+                            'occasion': meal.occasion,
+                            'mealTitle': meal.title,
+                            'dishes': meal.dishes
+                                .map((d) => {
+                                      'dishId': d.dishId.isNotEmpty ? d.dishId : d.id,
+                                      'name': d.name,
+                                      'quantity': d.servingQuantity,
+                                    })
+                                .toList(),
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildMacroBadge(String label, String value, String unit, MaterialColor color) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.shade50,
-            borderRadius: BorderRadius.circular(6),
+  // Dish Card with Image, Video, Portions, and Ingredients
+  Widget _buildDishItemCard(DietPlanDishItemModel dishItem) {
+    final isVeg = dishItem.dietaryTags.any(
+      (t) => t.toLowerCase() == 'vegetarian' || t.toLowerCase() == 'vegan',
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.slate200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-          child: Text(
-            '$value $unit',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              color: color.shade800,
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row: Image, Name, Servings, Video Button
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DishDetailScreen(dish: dishItem.toDishModel()),
+                      ),
+                    );
+                  },
+                  child: EBICDishImage(
+                    imageUrl: dishItem.imageUrl,
+                    width: 64,
+                    height: 64,
+                    borderRadius: 12,
+                    isVegetarian: isVeg,
+                    showVegIndicator: true,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        dishItem.name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.slate900,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primarySubtle,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '${dishItem.servingQuantity} ${dishItem.servingUnit}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryDark,
+                              ),
+                            ),
+                          ),
+                          if (dishItem.cookingTimeMin != null) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '• ~${dishItem.cookingTimeMin} mins',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.slate500,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (dishItem.dietaryTags.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 5,
+                          runSpacing: 4,
+                          children: dishItem.dietaryTags.take(4).map((tag) {
+                            final t = tag.toUpperCase();
+                            Color bg = const Color(0xFFF8FAFC);
+                            Color border = const Color(0xFFE2E8F0);
+                            Color text = const Color(0xFF475569);
+
+                            if (t.contains('PROTEIN')) {
+                              bg = const Color(0xFFEFF6FF);
+                              border = const Color(0xFFBFDBFE);
+                              text = const Color(0xFF1D4ED8);
+                            } else if (t.contains('CARB') || t.contains('KETO')) {
+                              bg = const Color(0xFFF5F3FF);
+                              border = const Color(0xFFDDD6FE);
+                              text = const Color(0xFF6D28D9);
+                            } else if (t.contains('VEG')) {
+                              bg = const Color(0xFFECFDF5);
+                              border = const Color(0xFFA7F3D0);
+                              text = const Color(0xFF047857);
+                            }
+
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: bg,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: border, width: 1),
+                              ),
+                              child: Text(
+                                tag,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: text,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
+
+          // Action Chips: Watch Video & View Full Recipe
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      final videoUrl = dishItem.videoUrl ??
+                          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+                      DishVideoModal.show(context, videoUrl: videoUrl, title: dishItem.name);
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            'Watch Video',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DishDetailScreen(dish: dishItem.toDishModel()),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySubtle,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.restaurant_menu_rounded, color: AppColors.primaryDark, size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            'Full Recipe',
+                            style: TextStyle(
+                              color: AppColors.primaryDark,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Ingredients Breakdown Box
+          if (dishItem.ingredients.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.slate50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.slate200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Ingredients (${dishItem.ingredients.length})',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.slate700,
+                        ),
+                      ),
+                      Text(
+                        'Scaled for ${dishItem.servingQuantity} ${dishItem.servingUnit}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.slate500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: dishItem.ingredients.map((ing) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.slate200),
+                        ),
+                        child: Text(
+                          '${ing.name} • ${ing.quantity} ${ing.unit}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.slate800,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMacroCard(String label, String value, String unit, Color color, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.2)),
         ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+        child: Column(
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                color: color,
+              ),
+            ),
+            Text(
+              unit,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 9.5,
+                color: AppColors.slate600,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

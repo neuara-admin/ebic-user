@@ -123,6 +123,7 @@ class ApiEndpoints {
   static String dish(String id) => '/catalogue/dishes/$id';
   static const String categories = '/catalogue/categories';
   static const String catalogueCategories = '/catalogue/categories';
+  static const String catalogueFilters = '/catalogue/filters';
   static const String catalogueBookingValidate = '/catalogue/booking/validate';
   static const String catalogueBookingQuote = '/catalogue/booking/quote';
 
@@ -154,6 +155,7 @@ class ApiEndpoints {
 
   // Dedicated Chef Bookings aliases
   static const String chefBookings = '/chef-bookings';
+  static const String chefBookingsAvailableChefs = '/chef-bookings/available-chefs';
   static String chefBooking(String id) => '/chef-bookings/$id';
   static const String chefBookingsQuote = '/chef-bookings/quote';
   static const String chefBookingsServiceability =

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/api_endpoints.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/services/razorpay_service.dart';
@@ -51,7 +53,25 @@ class _HealthPassPaymentScreenState extends State<HealthPassPaymentScreen> {
     _members = (widget.arguments['members'] as List<dynamic>?)?.cast<HouseholdMemberModel>() ?? [];
 
     _idempotencyKey = 'pay_hp_${_healthPassId}_${DateTime.now().millisecondsSinceEpoch}';
+    if (_amount > 0) _loadWalletBalance();
   }
+
+  double? _walletBalance;
+
+  Future<void> _loadWalletBalance() async {
+    try {
+      final res = await ApiClient().get<Map<String, dynamic>>(
+        ApiEndpoints.walletBalance,
+      );
+      if (res.success && res.data != null && mounted) {
+        setState(
+          () => _walletBalance = (res.data!['balance'] as num?)?.toDouble() ?? 0,
+        );
+      }
+    } catch (_) {}
+  }
+
+  bool get _walletCovers => (_walletBalance ?? 0) >= _amount;
 
   Future<void> _processPayment() async {
     setState(() {
@@ -191,7 +211,31 @@ class _HealthPassPaymentScreenState extends State<HealthPassPaymentScreen> {
               ),
               const SizedBox(height: 12),
 
-              _buildPaymentOption('GATEWAY', 'UPI, Cards, Net Banking & Wallets', Icons.security_outlined, isDark),
+              if (_amount <= 0)
+                const Text(
+                  'Fully covered — no payment needed. Tap below to activate your plan.',
+                  style: TextStyle(fontSize: 13, color: AppColors.slate600),
+                )
+              else ...[
+                _buildPaymentOption('GATEWAY', 'UPI, Cards, Net Banking & Wallets', Icons.security_outlined, isDark),
+                const SizedBox(height: 10),
+                Opacity(
+                  opacity: _walletCovers ? 1 : 0.55,
+                  child: IgnorePointer(
+                    ignoring: !_walletCovers,
+                    child: _buildPaymentOption(
+                      'WALLET',
+                      _walletBalance == null
+                          ? 'Loading balance…'
+                          : _walletCovers
+                              ? 'Balance ₹${_walletBalance!.toStringAsFixed(0)}'
+                              : 'Insufficient balance (₹${_walletBalance!.toStringAsFixed(0)})',
+                      Icons.account_balance_wallet_outlined,
+                      isDark,
+                    ),
+                  ),
+                ),
+              ],
 
               const Spacer(),
 
@@ -229,7 +273,13 @@ class _HealthPassPaymentScreenState extends State<HealthPassPaymentScreen> {
                 )
               else
                 EbicButton(
-                label: _state == PaymentUiState.failed ? 'Retry Payment' : 'Pay ₹${_amount.toInt()}',
+                label: _state == PaymentUiState.failed
+                      ? 'Retry Payment'
+                      : _amount <= 0
+                          ? 'Activate Plan'
+                          : _selectedMethod == 'WALLET'
+                              ? 'Pay ₹${_amount.toInt()} from Wallet'
+                              : 'Pay ₹${_amount.toInt()}',
                   onPressed: _processPayment,
                 ),
             ],
@@ -266,7 +316,7 @@ class _HealthPassPaymentScreenState extends State<HealthPassPaymentScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    id == 'GATEWAY' ? 'Razorpay 1-Tap Checkout' : id == 'UPI' ? 'UPI Instant Transfer' : id == 'CARD' ? 'Credit & Debit Cards' : 'Net Banking',
+                    id == 'GATEWAY' ? 'Razorpay 1-Tap Checkout' : id == 'WALLET' ? 'EBIC Wallet' : id == 'UPI' ? 'UPI Instant Transfer' : id == 'CARD' ? 'Credit & Debit Cards' : 'Net Banking',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,

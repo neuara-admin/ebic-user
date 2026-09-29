@@ -1,3 +1,5 @@
+import '../../../shared/models/dish_model.dart';
+
 class NutritionModel {
   final num calories;
   final num proteinG;
@@ -146,18 +148,25 @@ class IngredientItemModel {
   final String name;
   final num quantity;
   final String unit;
+  final String? imageUrl;
+  final String? scalingType;
 
   IngredientItemModel({
     required this.name,
     required this.quantity,
     required this.unit,
+    this.imageUrl,
+    this.scalingType = 'LINEAR',
   });
 
   factory IngredientItemModel.fromJson(Map<String, dynamic> json) {
+    final ing = json['ingredient'] as Map<String, dynamic>?;
     return IngredientItemModel(
-      name: json['name'] ?? '',
-      quantity: json['quantity'] ?? 0,
-      unit: json['unit'] ?? '',
+      name: json['name'] ?? ing?['name'] ?? 'Ingredient',
+      quantity: json['quantity'] ?? json['quantityPerServing'] ?? 1,
+      unit: json['unit'] ?? ing?['unit'] ?? 'g',
+      imageUrl: json['imageUrl'] ?? ing?['imageUrl'],
+      scalingType: json['scalingType'] ?? 'LINEAR',
     );
   }
 }
@@ -168,6 +177,8 @@ class DietPlanDishItemModel {
   final String name;
   final String? description;
   final String? imageUrl;
+  final List<String> images;
+  final String? videoUrl;
   final num servings;
   final num servingQuantity;
   final String servingUnit;
@@ -178,6 +189,7 @@ class DietPlanDishItemModel {
   final List<String> allergens;
   final List<String> allergenConflicts;
   final List<IngredientItemModel> ingredients;
+  final List<String> preparationSteps;
   final NutritionModel? nutrition;
 
   DietPlanDishItemModel({
@@ -186,6 +198,8 @@ class DietPlanDishItemModel {
     required this.name,
     this.description,
     this.imageUrl,
+    this.images = const [],
+    this.videoUrl,
     this.servings = 1,
     this.servingQuantity = 1,
     this.servingUnit = 'serving',
@@ -196,22 +210,116 @@ class DietPlanDishItemModel {
     this.allergens = const [],
     this.allergenConflicts = const [],
     this.ingredients = const [],
+    this.preparationSteps = const [],
     this.nutrition,
   });
 
+  List<String> get allImages {
+    final list = <String>[];
+    for (final img in images) {
+      if (img.trim().isNotEmpty && !list.contains(img.trim())) {
+        list.add(img.trim());
+      }
+    }
+    if (imageUrl != null && imageUrl!.trim().isNotEmpty && !list.contains(imageUrl!.trim())) {
+      list.insert(0, imageUrl!.trim());
+    }
+    return list;
+  }
+
+  DishModel toDishModel() {
+    return DishModel(
+      id: dishId.isNotEmpty ? dishId : id,
+      name: name,
+      category: dietaryTags.any((t) => t.toUpperCase().contains('PROTEIN'))
+          ? 'HIGH_PROTEIN'
+          : 'BALANCED',
+      description: description,
+      imageUrl: imageUrl,
+      images: allImages,
+      videoUrl: videoUrl,
+      baseCookTimeMin: cookingTimeMin ?? preparationTimeMin ?? 25,
+      defaultServings: servingQuantity.toInt() > 0 ? servingQuantity.toInt() : 1,
+      preparationInstructions: preparationSteps.isNotEmpty ? preparationSteps.join('\n') : null,
+      preparationSteps: preparationSteps,
+      ingredients: ingredients
+          .map((i) => DishIngredientModel(
+                ingredientId: i.name.toLowerCase().replaceAll(' ', '_'),
+                name: i.name,
+                quantity: i.quantity.toDouble(),
+                unit: i.unit,
+                scalingType: i.scalingType ?? 'LINEAR',
+                imageUrl: i.imageUrl,
+              ))
+          .toList(),
+      dietaryTags: dietaryTags,
+      allergens: allergens,
+      nutrition: nutrition != null
+          ? DishNutritionModel(
+              calories: nutrition!.calories.toDouble(),
+              proteinG: nutrition!.proteinG.toDouble(),
+              carbsG: nutrition!.carbsG.toDouble(),
+              fatG: nutrition!.fatG.toDouble(),
+              fiberG: nutrition!.fibreG.toDouble(),
+              sodiumMg: 0.0,
+            )
+          : null,
+    );
+  }
+
   factory DietPlanDishItemModel.fromJson(Map<String, dynamic> json) {
+    // Parse gallery images
+    final rawImages = json['images'] as List<dynamic>? ?? [];
+    final parsedImages = rawImages.map((img) {
+      if (img is Map<String, dynamic>) {
+        return (img['url'] ?? img['imageUrl'] ?? '').toString();
+      }
+      return img.toString();
+    }).where((url) => url.isNotEmpty).toList();
+
+    // Parse video URL
+    final dynamic videoObj = json['video'];
+    String? parsedVideoUrl;
+    if (videoObj is Map<String, dynamic>) {
+      parsedVideoUrl = videoObj['url']?.toString();
+    } else if (videoObj is String && videoObj.isNotEmpty) {
+      parsedVideoUrl = videoObj;
+    }
+    parsedVideoUrl ??= json['videoUrl']?.toString() ?? json['preparationVideoUrl']?.toString();
+
+    // Parse preparation steps
+    final List<String> parsedSteps = [];
+    if (json['preparationSteps'] is List) {
+      for (final step in (json['preparationSteps'] as List<dynamic>)) {
+        final s = step.toString().trim();
+        if (s.isNotEmpty) parsedSteps.add(s);
+      }
+    } else if (json['preparationInstructions'] != null) {
+      final rawInstructions = json['preparationInstructions'].toString();
+      final lines = rawInstructions.split(RegExp(r'\r?\n+'));
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isNotEmpty) {
+          final cleaned = trimmed.replaceFirst(RegExp(r'^(Step\s*\d+[:.]*|\d+[\.\)\-:])\s*'), '').trim();
+          if (cleaned.isNotEmpty) parsedSteps.add(cleaned);
+        }
+      }
+    }
+
     return DietPlanDishItemModel(
       id: json['id'] ?? '',
-      dishId: json['dishId'] ?? '',
+      dishId: json['dishId'] ?? json['recipeId'] ?? '',
       name: json['name'] ?? '',
       description: json['description'],
-      imageUrl: json['imageUrl'],
+      imageUrl: json['imageUrl'] ?? json['photoUrl'] ?? json['image'],
+      images: parsedImages,
+      videoUrl: parsedVideoUrl,
       servings: json['servings'] ?? 1,
       servingQuantity: json['servingQuantity'] ?? json['servings'] ?? 1,
-      servingUnit: json['servingUnit'] ?? 'serving',
+      servingUnit: json['servingUnit'] ?? 'portion',
       isActive: json['isActive'] ?? true,
       preparationTimeMin: json['preparationTimeMin'],
-      cookingTimeMin: json['cookingTimeMin'],
+      cookingTimeMin: json['cookingTimeMin'] ?? json['baseCookTimeMin'],
       dietaryTags: (json['dietaryTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
       allergens: (json['allergens'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
       allergenConflicts: (json['allergenConflicts'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
@@ -219,6 +327,7 @@ class DietPlanDishItemModel {
               ?.map((e) => IngredientItemModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      preparationSteps: parsedSteps,
       nutrition: json['nutrition'] != null ? NutritionModel.fromJson(json['nutrition']) : null,
     );
   }
@@ -309,6 +418,9 @@ class DietPlanDetailModel {
   final List<DietPlanGoalModel> goals;
   final List<DietPlanNutritionTargetModel> nutritionTargets;
   final NutritionModel? dailyPlannedNutrition;
+  final int subscriptionDurationMonths;
+  final DateTime? subscriptionStartDate;
+  final DateTime? subscriptionEndDate;
 
   DietPlanDetailModel({
     required this.hasActivePlan,
@@ -329,10 +441,32 @@ class DietPlanDetailModel {
     this.goals = const [],
     this.nutritionTargets = const [],
     this.dailyPlannedNutrition,
+    this.subscriptionDurationMonths = 1,
+    this.subscriptionStartDate,
+    this.subscriptionEndDate,
   });
 
   factory DietPlanDetailModel.fromJson(Map<String, dynamic> json) {
     final hasActive = json['hasActivePlan'] ?? (json['id'] != null);
+    final rawDuration = json['subscriptionDurationMonths'] ?? json['durationMonths'];
+    final parsedDuration = int.tryParse(rawDuration?.toString() ?? '1') ?? 1;
+
+    final start = json['subscriptionStartDate'] != null
+        ? DateTime.tryParse(json['subscriptionStartDate'].toString())
+        : (json['startDate'] != null ? DateTime.tryParse(json['startDate'].toString()) : null);
+    final end = json['subscriptionEndDate'] != null
+        ? DateTime.tryParse(json['subscriptionEndDate'].toString())
+        : (json['reviewDate'] != null ? DateTime.tryParse(json['reviewDate'].toString()) : null);
+
+    // If duration not explicitly passed, deduce from start/end if available
+    int durationMonths = parsedDuration;
+    if (durationMonths <= 1 && start != null && end != null) {
+      final days = end.difference(start).inDays;
+      if (days > 35) {
+        durationMonths = (days / 30).round().clamp(1, 12);
+      }
+    }
+
     return DietPlanDetailModel(
       hasActivePlan: hasActive,
       id: json['id'],
@@ -363,6 +497,9 @@ class DietPlanDetailModel {
       dailyPlannedNutrition: json['dailyPlannedNutrition'] != null
           ? NutritionModel.fromJson(json['dailyPlannedNutrition'])
           : null,
+      subscriptionDurationMonths: durationMonths,
+      subscriptionStartDate: start,
+      subscriptionEndDate: end,
     );
   }
 }

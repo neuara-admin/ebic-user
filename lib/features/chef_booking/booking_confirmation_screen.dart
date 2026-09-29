@@ -98,14 +98,18 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
         (orderId.length > 8 ? 'CB-${orderId.substring(0, 6).toUpperCase()}' : orderId);
     // Real code from the backend only — never a placeholder the chef could be told
     final startOtp = _liveOrder?['startOtp']?.toString();
+    // Only the backend's assignment names the chef; a chef picked at checkout
+    // is a preference until dispatch actually locks them.
     final chefName = _liveOrder?['assignedChef']?['name']?.toString() ??
-        widget.confirmationData['chefName']?.toString() ??
+        (_liveOrder != null ? null : widget.confirmationData['chefName']?.toString()) ??
         'Assigning your chef…';
+    final preferredChefName = _liveOrder?['preferredChef']?['name']?.toString();
+    final preferredChefMissed =
+        _liveOrder?['preferredChefStatus']?.toString() == 'UNAVAILABLE' && preferredChefName != null;
     // Minutes until the ETA the backend promised; null until a chef is assigned.
     final promisedEta = DateTime.tryParse(_liveOrder?['promisedEtaAt']?.toString() ?? '');
-    final arrivalMinutes = promisedEta == null
-        ? null
-        : promisedEta.difference(DateTime.now()).inMinutes.clamp(0, 999).toString();
+    final arrivalMinutes =
+        promisedEta?.difference(DateTime.now()).inMinutes.clamp(0, 999).toString();
 
     final dishes = (widget.confirmationData['dishes'] as List<dynamic>?) ?? [];
     final quote = widget.confirmationData['quote'] as QuoteModel?;
@@ -155,6 +159,32 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                 // 1. Success & OTP Celebration Banner
                 _buildCelebrationHeader(bookingNumber, startOtp),
                 const SizedBox(height: 16),
+
+                if (preferredChefMissed) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.amber50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.amber200),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.swap_horiz_rounded, color: AppColors.amber700, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '$preferredChefName was booked by the time your payment went through, '
+                            'so we assigned the best available chef instead.',
+                            style: const TextStyle(fontSize: 12.5, color: AppColors.amber800, height: 1.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
                 // 2. Live GPS Tracking & Chef Dispatch Card
                 _buildLiveGpsCard(chefName, arrivalMinutes, orderId, isCancelled),

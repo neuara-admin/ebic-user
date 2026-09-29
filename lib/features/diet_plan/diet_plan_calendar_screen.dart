@@ -24,6 +24,7 @@ class _DietPlanCalendarScreenState extends State<DietPlanCalendarScreen> {
   bool _isLoading = true;
   Map<String, dynamic>? _calendarData;
   int _selectedDayIndex = 0;
+  int _selectedMonthIndex = 0;
 
   final List<String> _days = [
     'MONDAY',
@@ -74,10 +75,57 @@ class _DietPlanCalendarScreenState extends State<DietPlanCalendarScreen> {
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : Column(
               children: [
+                _buildMonthSelector(),
                 _buildDaySelector(),
                 Expanded(child: _buildDayMealList()),
               ],
             ),
+    );
+  }
+
+  Widget _buildMonthSelector() {
+    final durationMonths = int.tryParse(_calendarData?['durationMonths']?.toString() ?? '1') ?? 1;
+    if (durationMonths <= 1) return const SizedBox.shrink();
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(durationMonths, (idx) {
+            final isSelected = idx == _selectedMonthIndex;
+            final startDay = idx * 30 + 1;
+            final endDay = (idx + 1) * 30;
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                onTap: () => setState(() => _selectedMonthIndex = idx),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppColors.primary : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Text(
+                    'Month ${idx + 1} (Days $startDay–$endDay)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected ? Colors.white : AppColors.slate700,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
     );
   }
 
@@ -297,12 +345,12 @@ class _DietPlanCalendarScreenState extends State<DietPlanCalendarScreen> {
             ],
             const SizedBox(height: 12),
             if (meal.plannedNutrition != null)
-              Row(
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
                 children: [
                   _buildNutritionChip('${meal.plannedNutrition!.calories} kcal'),
-                  const SizedBox(width: 8),
                   _buildNutritionChip('${meal.plannedNutrition!.proteinG}g Protein'),
-                  const SizedBox(width: 8),
                   _buildNutritionChip('${meal.plannedNutrition!.carbsG}g Carbs'),
                 ],
               ),

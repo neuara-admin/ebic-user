@@ -5,8 +5,11 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/household_member_model.dart';
 import '../../shared/models/address_model.dart';
+import '../../shared/models/dish_model.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../shared/widgets/ebic_dish_image.dart';
 import '../../shared/widgets/loading_view.dart';
+import '../catalogue/dish_detail_screen.dart';
 
 class AssignedMealScreen extends StatefulWidget {
   const AssignedMealScreen({super.key});
@@ -90,10 +93,42 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
     },
   ];
 
+  // Set when opened from a specific diet-plan meal ("Book Chef for this
+  // Meal"): only that meal's dishes start selected.
+  String? _focusMealId;
+  bool _didReadArgs = false;
+
   @override
-  void initState() {
-    super.initState();
-    _loadInitialData();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didReadArgs) return;
+    _didReadArgs = true;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      _focusMealId = args['dietPlanMealId']?.toString();
+      final occasion = _bookingOccasionFor(args['occasion']?.toString());
+      if (occasion != null) _selectedOccasion = occasion;
+    }
+    // Deferred: _loadInitialData calls setState, which isn't allowed mid-build.
+    Future.microtask(_loadInitialData);
+  }
+
+  /// Diet-plan occasions (incl. snacks) → the chef visit slot that cooks them.
+  static String? _bookingOccasionFor(String? planOccasion) {
+    switch (planOccasion?.toUpperCase()) {
+      case 'BREAKFAST':
+      case 'MID_MORNING':
+        return 'BREAKFAST';
+      case 'LUNCH':
+        return 'LUNCH';
+      case 'EVENING_SNACK':
+      case 'DINNER':
+      case 'BEDTIME':
+        return 'DINNER';
+      default:
+        return null;
+    }
   }
 
   Future<void> _loadInitialData() async {
@@ -196,12 +231,14 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
     for (final meal in todayMeals) {
       final occasion = meal['occasion']?.toString().toUpperCase() ?? '';
       if (_isMealMatchingOccasion(occasion)) {
+        final isFocused =
+            _focusMealId == null || meal['id']?.toString() == _focusMealId;
         final dishes = (meal['dishes'] as List<dynamic>?) ?? [];
         for (final d in dishes) {
           final dishId = d['dishId'] ?? d['id']?.toString() ?? '';
           final key = '${memberId}_$dishId';
           if (!_selectedDishes.containsKey(key)) {
-            _selectedDishes[key] = true;
+            _selectedDishes[key] = isFocused;
             _dishServings[key] = (d['servings'] as num?)?.toInt() ?? 1;
           }
         }
@@ -553,12 +590,30 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
               final key = '${memberId}_$dishId';
               final isChecked = _selectedDishes[key] ?? true;
               if (isChecked) {
+                final memberObj = _members.where((m) => m.id == memberId).firstOrNull;
+                final rawImg = d['imageUrl']?.toString() ??
+                    d['dish']?['imageUrl']?.toString() ??
+                    d['image']?.toString();
+                final tags = (d['dietaryTags'] as List<dynamic>?)
+                        ?.map((t) => t.toString())
+                        .toList() ??
+                    [];
+                final isVeg = tags.any((t) =>
+                        t.toLowerCase() == 'vegetarian' ||
+                        t.toLowerCase() == 'vegan') ||
+                    (d['isVegetarian'] == true);
+
                 result.add({
                   'dishId': dishId,
                   'name': d['name'] ?? 'Dietitian Assigned Dish',
                   'servings': _dishServings[key] ?? 1,
                   'baseCookTimeMin': 20,
                   'memberId': memberId,
+                  'memberName': memberObj?.name ?? 'Family Member',
+                  'imageUrl': rawImg,
+                  'isVegetarian': isVeg,
+                  'dietaryTags': tags,
+                  'description': d['description']?.toString(),
                 });
               }
             }
@@ -808,9 +863,36 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
       );
     }
 
+    final maxFamilyMembers = _hpEligibility?['max_covered_members'] ?? 4;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: AppColors.primarySubtle.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.family_restroom_rounded, size: 16, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Health Pass Family Allowance: Up to $maxFamilyMembers family members can be added for free chef booking (${_members.length} added).',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.primaryDark,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -827,8 +909,9 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                 setState(() {
                   if (_selectedMemberIds.length == _members.length) {
                     _selectedMemberIds.clear();
-                    if (_members.isNotEmpty)
+                    if (_members.isNotEmpty) {
                       _selectedMemberIds.add(_members.first.id);
+                    }
                   } else {
                     _selectedMemberIds.addAll(_members.map((m) => m.id));
                   }
@@ -987,129 +1070,245 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
   }
 
   Widget _buildOccasionSelector() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: _occasionOptions.map((occ) {
-            final isSelected = _selectedOccasion == occ['id'];
-            final color = occ['color'] as Color;
-            final isCombo = occ['isCombo'] == true;
+    final selectedOcc = _occasionOptions.firstWhere(
+      (o) => o['id'] == _selectedOccasion,
+      orElse: () => _occasionOptions[1],
+    );
+    final isSelectedCombo = selectedOcc['isCombo'] == true;
 
-            return InkWell(
-              onTap: () {
-                setState(() => _selectedOccasion = occ['id']);
-                _refreshPlansForSelectedMembers();
-                if (_selectedMemberIds.isNotEmpty) {
-                  _checkHealthPassEligibility(_selectedMemberIds.first);
-                }
-              },
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                width: (constraints.maxWidth - 10) / 2,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isSelected ? color.withOpacity(0.08) : Colors.white,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _occasionOptions.map((occ) {
+                final isSelected = _selectedOccasion == occ['id'];
+                final color = occ['color'] as Color;
+                final isCombo = occ['isCombo'] == true;
+
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      _selectedOccasion = occ['id'];
+                      // A new slot means the whole plan for it, not one meal.
+                      if (_focusMealId != null) {
+                        _focusMealId = null;
+                        _selectedDishes.removeWhere((_, selected) => !selected);
+                      }
+                    });
+                    _refreshPlansForSelectedMembers();
+                    if (_selectedMemberIds.isNotEmpty) {
+                      _checkHealthPassEligibility(_selectedMemberIds.first);
+                    }
+                  },
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isSelected ? color : AppColors.slate200,
-                    width: isSelected ? 2 : 1,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Container(
+                    width: (constraints.maxWidth - 10) / 2,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isSelected ? color.withOpacity(0.08) : Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected ? color : AppColors.slate200,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: color.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            occ['icon'] as IconData,
-                            size: 18,
-                            color: color,
-                          ),
-                        ),
-                        if (isCombo)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: color,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              '2 MEALS',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                occ['icon'] as IconData,
+                                size: 18,
+                                color: color,
                               ),
                             ),
-                          )
-                        else
-                          Text(
-                            occ['code'] as String,
+                            if (isCombo)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.slate700,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'STANDARD FEE',
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.successLight,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: AppColors.success.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.verified_rounded,
+                                      size: 10,
+                                      color: AppColors.successDark,
+                                    ),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'FREE WITH PASS',
+                                      style: TextStyle(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.successDark,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          occ['label'] as String,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? color : AppColors.slate900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          occ['time'] as String,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.slate500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (isCombo) ...[
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Extended prep duration',
                             style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: color,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.slate600,
                             ),
                           ),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      occ['label'] as String,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: isSelected ? color : AppColors.slate900,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      occ['time'] as String,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.slate500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSelectedCombo
+                ? const Color(0xFFFFFBEB)
+                : const Color(0xFFF0FDF4),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelectedCombo
+                  ? const Color(0xFFFDE68A)
+                  : const Color(0xFFBBF7D0),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                isSelectedCombo
+                    ? Icons.schedule_rounded
+                    : Icons.verified_rounded,
+                size: 18,
+                color: isSelectedCombo
+                    ? const Color(0xFFD97706)
+                    : const Color(0xFF16A34A),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isSelectedCombo
+                      ? 'Combo preps (Breakfast & Lunch / Lunch & Dinner) require longer cooking duration and are charged standard chef fees. Free Health Pass visits cover single meal sessions (B, L, D).'
+                      : 'Eligible for 100% Free Health Pass Chef Booking! Single meal sessions (Breakfast, Lunch, Dinner) use 1 free visit from your monthly pass quota.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: isSelectedCombo
+                        ? const Color(0xFF92400E)
+                        : const Color(0xFF166534),
+                    height: 1.35,
+                  ),
                 ),
               ),
-            );
-          }).toList(),
-        );
-      },
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildAssignedDishesList() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (_isLoadingPlans) {
       return Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? AppColors.slate900 : Colors.white,
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? AppColors.slate800 : AppColors.slate200,
+          ),
         ),
-        child: const Center(
+        child: Center(
           child: Column(
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 10),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              ),
+              const SizedBox(height: 12),
               Text(
-                'Fetching clinical diet meals...',
-                style: TextStyle(fontSize: 12, color: AppColors.slate500),
+                'Fetching clinical diet meals & macro targets...',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.slate400 : AppColors.slate600,
+                ),
               ),
             ],
           ),
@@ -1121,265 +1320,513 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
         .where((m) => _selectedMemberIds.contains(m.id))
         .toList();
 
-    return Column(
-      children: selectedMembers.map((member) {
-        final plan = _memberDietPlans[member.id];
-        final todayMeals = (plan?['todayMeals'] as List<dynamic>?) ?? [];
-        final matchingMeals = todayMeals.where((m) {
-          final occ = m['occasion']?.toString().toUpperCase() ?? '';
-          return _isMealMatchingOccasion(occ);
-        }).toList();
+    // Calculate selection statistics across all active members in this occasion
+    int totalAvailableDishes = 0;
+    int totalSelectedDishes = 0;
+    for (final member in selectedMembers) {
+      final plan = _memberDietPlans[member.id];
+      final todayMeals = (plan?['todayMeals'] as List<dynamic>?) ?? [];
+      for (final meal in todayMeals) {
+        final occ = meal['occasion']?.toString().toUpperCase() ?? '';
+        if (_isMealMatchingOccasion(occ)) {
+          final dishes = (meal['dishes'] as List<dynamic>?) ?? [];
+          for (final d in dishes) {
+            totalAvailableDishes++;
+            final dishId = d['dishId'] ?? d['id']?.toString() ?? '';
+            final key = '${member.id}_$dishId';
+            if (_selectedDishes[key] == true) {
+              totalSelectedDishes++;
+            }
+          }
+        }
+      }
+    }
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.slate200),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Member header badge
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundColor: AppColors.primarySubtle,
-                        child: Text(
-                          member.name[0],
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Quick Action & Status Bar
+        if (totalAvailableDishes > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF06281E) : const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF047857).withOpacity(0.4) : const Color(0xFFBBF7D0),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 14),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            '$totalSelectedDishes of $totalAvailableDishes dishes selected',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF166534),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        member.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: AppColors.slate900,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: plan != null
-                          ? AppColors.emerald50
-                          : AppColors.slate100,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      _isHpChecking
-                          ? 'CHECKING...'
-                          : (plan != null
-                                ? 'DIETITIAN APPROVED'
-                                : 'RECOMMENDED DISHES'),
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: plan != null
-                            ? AppColors.emerald700
-                            : AppColors.slate600,
-                      ),
+                      ],
                     ),
                   ),
-                ],
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: () {
+                    final selectAll = totalSelectedDishes < totalAvailableDishes;
+                    setState(() {
+                      for (final member in selectedMembers) {
+                        final plan = _memberDietPlans[member.id];
+                        final todayMeals = (plan?['todayMeals'] as List<dynamic>?) ?? [];
+                        for (final meal in todayMeals) {
+                          final occ = meal['occasion']?.toString().toUpperCase() ?? '';
+                          if (_isMealMatchingOccasion(occ)) {
+                            final dishes = (meal['dishes'] as List<dynamic>?) ?? [];
+                            for (final d in dishes) {
+                              final dishId = d['dishId'] ?? d['id']?.toString() ?? '';
+                              final key = '${member.id}_$dishId';
+                              _selectedDishes[key] = selectAll;
+                            }
+                          }
+                        }
+                      }
+                    });
+                  },
+                  child: Text(
+                    totalSelectedDishes < totalAvailableDishes ? 'Select All' : 'Clear All',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        ...selectedMembers.map((member) {
+          final plan = _memberDietPlans[member.id];
+          final todayMeals = (plan?['todayMeals'] as List<dynamic>?) ?? [];
+          final matchingMeals = todayMeals.where((m) {
+            final occ = m['occasion']?.toString().toUpperCase() ?? '';
+            return _isMealMatchingOccasion(occ);
+          }).toList();
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.slate900 : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? AppColors.slate800 : AppColors.slate200,
               ),
-              const Divider(height: 20),
-
-              if (matchingMeals.isNotEmpty) ...[
-                ...matchingMeals.map((meal) {
-                  final mealTitle =
-                      meal['title']?.toString() ?? 'Assigned Meal';
-                  final calories =
-                      meal['plannedNutrition']?['calories']?.toString() ??
-                      '450';
-                  final protein =
-                      meal['plannedNutrition']?['proteinG']?.toString() ?? '28';
-                  final carbs =
-                      meal['plannedNutrition']?['carbsG']?.toString() ?? '45';
-                  final dishes = (meal['dishes'] as List<dynamic>?) ?? [];
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              mealTitle,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                                color: AppColors.slate800,
-                              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Member Header Bar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: AppColors.primary.withOpacity(0.15),
+                          child: Text(
+                            member.name.isNotEmpty ? member.name[0].toUpperCase() : 'M',
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ),
+                        const SizedBox(width: 9),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              member.name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14.5,
+                                color: isDark ? Colors.white : AppColors.slate900,
+                              ),
+                            ),
+                            Text(
+                              member.isSelf ? 'Primary Member' : member.relationship.toLowerCase(),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: isDark ? AppColors.slate400 : AppColors.slate500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: plan != null
+                            ? (isDark ? const Color(0xFF064E3B) : const Color(0xFFDCFCE7))
+                            : (isDark ? AppColors.slate800 : AppColors.slate100),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            plan != null ? Icons.verified_rounded : Icons.pending_outlined,
+                            size: 11,
+                            color: plan != null
+                                ? (isDark ? const Color(0xFF34D399) : const Color(0xFF15803D))
+                                : AppColors.slate500,
+                          ),
+                          const SizedBox(width: 4),
                           Text(
-                            '$calories kcal • ${protein}g P • ${carbs}g C',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
+                            _isHpChecking
+                                ? 'CHECKING...'
+                                : (plan != null ? 'DIETITIAN APPROVED' : 'RECOMMENDED'),
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                              color: plan != null
+                                  ? (isDark ? const Color(0xFF34D399) : const Color(0xFF15803D))
+                                  : AppColors.slate600,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      ...dishes.map((d) {
-                        final dishId = d['dishId'] ?? d['id']?.toString() ?? '';
-                        final key = '${member.id}_$dishId';
-                        final isChecked = _selectedDishes[key] ?? true;
-                        final servings = _dishServings[key] ?? 1;
+                    ),
+                  ],
+                ),
+                const Divider(height: 22),
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(10),
+                if (matchingMeals.isNotEmpty) ...[
+                  ...matchingMeals.map((meal) {
+                    final mealTitle = meal['title']?.toString() ?? 'Assigned Meal';
+                    final calories =
+                        meal['plannedNutrition']?['calories']?.toString() ?? '450';
+                    final protein =
+                        meal['plannedNutrition']?['proteinG']?.toString() ?? '28';
+                    final carbs =
+                        meal['plannedNutrition']?['carbsG']?.toString() ?? '45';
+                    final dishes = (meal['dishes'] as List<dynamic>?) ?? [];
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Meal Occasion Banner & Target Macros
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                           decoration: BoxDecoration(
-                            color: isChecked ? AppColors.slate50 : Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: isChecked
-                                  ? AppColors.primary.withOpacity(0.3)
-                                  : AppColors.slate200,
-                            ),
+                            color: isDark ? AppColors.slate800 : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             children: [
-                              Checkbox(
-                                value: isChecked,
-                                activeColor: AppColors.primary,
-                                onChanged: (val) {
-                                  setState(
-                                    () => _selectedDishes[key] = val ?? false,
-                                  );
-                                },
-                              ),
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      d['name']?.toString() ?? 'Assigned Dish',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: isChecked
-                                            ? AppColors.slate900
-                                            : AppColors.slate400,
-                                        decoration: isChecked
-                                            ? null
-                                            : TextDecoration.lineThrough,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${d['servingQuantity'] ?? 1} ${d['servingUnit'] ?? "serving"} • 20 mins',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.slate500,
-                                      ),
-                                    ),
-                                  ],
+                                child: Text(
+                                  mealTitle,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                    color: isDark ? Colors.white : AppColors.slate800,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (isChecked) ...[
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.remove_circle_outline,
-                                        size: 18,
-                                        color: AppColors.slate600,
-                                      ),
-                                      onPressed: () {
-                                        if (servings > 1) {
-                                          setState(
-                                            () => _dishServings[key] =
-                                                servings - 1,
-                                          );
-                                        }
-                                      },
-                                    ),
-                                    Text(
-                                      '$servings',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.add_circle_outline,
-                                        size: 18,
-                                        color: AppColors.primary,
-                                      ),
-                                      onPressed: () {
-                                        setState(
-                                          () =>
-                                              _dishServings[key] = servings + 1,
-                                        );
-                                      },
-                                    ),
-                                  ],
+                              const SizedBox(width: 8),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '$calories kcal • ${protein}g P • ${carbs}g C',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
-                              ],
+                              ),
                             ],
                           ),
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                    ],
-                  );
-                }),
-              ] else ...[
-                // Member has no active diet plan for this occasion
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.slate50,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'No specific plan scheduled for ${member.name} for $_selectedOccasion.',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.slate800,
                         ),
+                        const SizedBox(height: 10),
+
+                        // Dishes in Meal
+                        ...dishes.map((d) {
+                          final dishId = d['dishId'] ?? d['id']?.toString() ?? '';
+                          final key = '${member.id}_$dishId';
+                          final isChecked = _selectedDishes[key] ?? true;
+                          final servings = _dishServings[key] ?? 1;
+                          final dishName = d['name']?.toString() ?? 'Assigned Dish';
+                          final rawImg = d['imageUrl']?.toString() ?? d['dish']?['imageUrl']?.toString();
+                          final dietaryTags = (d['dietaryTags'] as List<dynamic>?)
+                                  ?.map((t) => t.toString())
+                                  .toList() ??
+                              [];
+                          final isVeg = dietaryTags.any((t) =>
+                                  t.toLowerCase() == 'vegetarian' ||
+                                  t.toLowerCase() == 'vegan') ||
+                              (d['isVegetarian'] == true);
+
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            decoration: BoxDecoration(
+                              color: isChecked
+                                  ? (isDark ? const Color(0xFF06281E).withOpacity(0.6) : const Color(0xFFF0FDF4))
+                                  : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: isChecked
+                                    ? AppColors.primary.withOpacity(0.5)
+                                    : (isDark ? AppColors.slate800 : AppColors.slate200),
+                                width: isChecked ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              borderRadius: BorderRadius.circular(14),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () {
+                                  setState(() {
+                                    _selectedDishes[key] = !isChecked;
+                                  });
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      // Checkbox
+                                      SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: Checkbox(
+                                          value: isChecked,
+                                          activeColor: AppColors.primary,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          onChanged: (val) {
+                                            setState(() {
+                                              _selectedDishes[key] = val ?? false;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+
+                                      // Dish Thumbnail Image
+                                      GestureDetector(
+                                        onTap: () {
+                                          final dishModel = DishModel(
+                                            id: dishId,
+                                            name: dishName,
+                                            category: 'BALANCED',
+                                            imageUrl: rawImg,
+                                            baseCookTimeMin: 20,
+                                            description: d['description']?.toString(),
+                                            dietaryTags: dietaryTags,
+                                          );
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => DishDetailScreen(dish: dishModel),
+                                            ),
+                                          );
+                                        },
+                                        child: EBICDishImage(
+                                          imageUrl: rawImg,
+                                          width: 58,
+                                          height: 58,
+                                          borderRadius: 12,
+                                          isVegetarian: isVeg,
+                                          showVegIndicator: true,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+
+                                      // Dish Information
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              dishName,
+                                              style: TextStyle(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: isChecked
+                                                    ? (isDark ? Colors.white : AppColors.slate900)
+                                                    : (isDark ? AppColors.slate500 : AppColors.slate400),
+                                                decoration: isChecked ? null : TextDecoration.lineThrough,
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              '${d['servingQuantity'] ?? 1} ${d['servingUnit'] ?? "serving"} • ⏱️ 20 mins',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark ? AppColors.slate400 : AppColors.slate500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            GestureDetector(
+                                              onTap: () {
+                                                final dishModel = DishModel(
+                                                  id: dishId,
+                                                  name: dishName,
+                                                  category: 'BALANCED',
+                                                  imageUrl: rawImg,
+                                                  baseCookTimeMin: 20,
+                                                  description: d['description']?.toString(),
+                                                  dietaryTags: dietaryTags,
+                                                );
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => DishDetailScreen(dish: dishModel),
+                                                  ),
+                                                );
+                                              },
+                                              child: const Text(
+                                                'View Details →',
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.primary,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      // Prescribed portions — fixed by the dietitian's plan.
+                                      if (isChecked)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: isDark ? AppColors.slate800 : AppColors.slate100,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(
+                                              color: isDark ? AppColors.slate700 : AppColors.slate200,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '$servings ${servings == 1 ? 'portion' : 'portions'}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11.5,
+                                              color: isDark ? Colors.white : AppColors.slate700,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 6),
+                      ],
+                    );
+                  }),
+                ] else ...[
+                  // Member has no active diet plan for this occasion
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.slate800 : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? AppColors.slate700 : AppColors.slate200,
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Ask your dietitian to assign a plan, or pick dishes from the catalogue instead.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.slate500,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.event_note_rounded, color: AppColors.primary, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'No diet meal scheduled for ${member.name} for $_selectedOccasion',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : AppColors.slate800,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 6),
+                        Text(
+                          'Your clinical dietitian has not published a meal plan for this slot yet. You can pick dishes from the Chef\'s Menu catalogue instead.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: isDark ? AppColors.slate400 : AppColors.slate600,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
+                          },
+                          icon: const Icon(Icons.menu_book_rounded, size: 14),
+                          label: const Text("Browse Chef's Menu", style: TextStyle(fontSize: 11.5)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.primary),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: Size.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
-        );
-      }).toList(),
+            ),
+          );
+        }),
+      ],
     );
   }
 

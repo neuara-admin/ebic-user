@@ -599,15 +599,41 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Flexible(child: const Text(
-                      'COVERED HOUSEHOLD MEMBERS',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.5),
-                    )),
-                    Flexible(child: Text(
-                      '${pass.coveredMembers.length} Members',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
-                    )),
+                    const Expanded(
+                      child: Text(
+                        'COVERED HOUSEHOLD MEMBERS',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.slate500,
+                          letterSpacing: 0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySubtle,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${pass.coveredMembers.length}/${pass.maxCoveredMembers} Added',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
+                    ),
                   ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Up to ${pass.maxCoveredMembers} family members can be covered under your Health Pass to get 100% free chef booking visits.',
+                  style: TextStyle(fontSize: 11, color: isDark ? AppColors.slate400 : AppColors.slate600),
                 ),
                 const SizedBox(height: 10),
                 Wrap(
@@ -640,6 +666,89 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
           const SizedBox(height: 14),
         ],
 
+        // Health Pass Settings & Policy Card (Free visits B, L, D & Family Allowance)
+        EbicCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySubtle,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.settings_suggest_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'HEALTH PASS SETTINGS & POLICIES',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.slate500,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          'Free Chef Booking & Family Coverage Rules',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.slate900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: AppColors.slate200),
+              const SizedBox(height: 12),
+
+              _buildPolicySettingRow(
+                icon: Icons.check_circle_outline_rounded,
+                iconColor: AppColors.success,
+                title: 'Free Chef Visits: Single Meals Only (B, L, D)',
+                description:
+                    'Your Health Pass free visit quota applies strictly to single meal cooking (Breakfast, Lunch, Dinner). 100% chef service fee is waived.',
+                isDark: isDark,
+              ),
+              const SizedBox(height: 10),
+
+              _buildPolicySettingRow(
+                icon: Icons.schedule_rounded,
+                iconColor: AppColors.warning,
+                title: 'Combo Meals (BL, LD): Standard Chef Service Fee',
+                description:
+                    'Breakfast + Lunch (BL) and Lunch + Dinner (LD) take longer kitchen cooking duration and are charged standard chef service fees.',
+                isDark: isDark,
+              ),
+              const SizedBox(height: 10),
+
+              _buildPolicySettingRow(
+                icon: Icons.family_restroom_rounded,
+                iconColor: AppColors.primary,
+                title: 'Family Members Allowance: Up to ${pass.maxCoveredMembers} Members',
+                description:
+                    'You can add up to ${pass.maxCoveredMembers} family members to your pass to share free chef bookings (${pass.coveredMembers.length} currently enrolled).',
+                isDark: isDark,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
         // 6. Quick Action Grid
         Row(
           children: [
@@ -662,6 +771,54 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
           ],
         ),
         const SizedBox(height: 14),
+      ],
+    );
+  }
+
+  Widget _buildPolicySettingRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String description,
+    required bool isDark,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 2),
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, size: 14, color: iconColor),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : AppColors.slate900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.35,
+                  color: isDark ? AppColors.slate400 : AppColors.slate600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
