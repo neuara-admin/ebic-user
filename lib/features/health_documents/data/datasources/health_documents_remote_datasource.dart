@@ -6,6 +6,44 @@ import '../../domain/entities/health_document_entity.dart';
 class HealthDocumentsRemoteDataSource {
   final ApiClient _api = ApiClient();
 
+  static const List<DocumentCategoryItem> defaultCategories = [
+    DocumentCategoryItem(
+      key: 'LAB_REPORT',
+      name: 'Lab Report',
+      description: 'Blood work, urinalysis, pathology panels, and lipid profiles',
+    ),
+    DocumentCategoryItem(
+      key: 'DIAGNOSTIC_REPORT',
+      name: 'Diagnostic Report',
+      description: 'Radiology, scans, ultrasounds, ECG, and diagnostic testing',
+    ),
+    DocumentCategoryItem(
+      key: 'DOCTOR_REPORT',
+      name: 'Doctor Report',
+      description: 'Physician notes, clinical summaries, and hospital discharge papers',
+    ),
+    DocumentCategoryItem(
+      key: 'PRESCRIPTION',
+      name: 'Prescription',
+      description: 'Medical prescriptions, pharmaceutical regimens, and supplements',
+    ),
+    DocumentCategoryItem(
+      key: 'DIETITIAN_REPORT',
+      name: 'Dietitian Report',
+      description: 'Nutrition assessments, clinical goals, and consultation notes',
+    ),
+    DocumentCategoryItem(
+      key: 'MEDICAL_DOCUMENT',
+      name: 'Medical Document',
+      description: 'Health history summaries, insurance records, and vaccination certificates',
+    ),
+    DocumentCategoryItem(
+      key: 'OTHER',
+      name: 'Other Health Document',
+      description: 'Miscellaneous health, recovery, or fitness reports',
+    ),
+  ];
+
   Future<List<DocumentCategoryItem>> fetchCategories() async {
     try {
       final res = await _api.get(ApiEndpoints.healthDocumentCategories);
@@ -18,7 +56,7 @@ class HealthDocumentsRemoteDataSource {
           rawList = data;
         }
 
-        if (rawList != null) {
+        if (rawList != null && rawList.isNotEmpty) {
           return rawList
               .whereType<Map<String, dynamic>>()
               .map((item) => DocumentCategoryItem.fromJson(item))
@@ -27,8 +65,8 @@ class HealthDocumentsRemoteDataSource {
       }
     } catch (_) {}
 
-    // Categories are served by the backend only.
-    return const [];
+    // Fallback to standard categories if backend is unreachable or returns empty
+    return defaultCategories;
   }
 
   Future<List<HealthDocumentModel>> fetchMemberDocuments(
@@ -114,11 +152,15 @@ class HealthDocumentsRemoteDataSource {
     );
 
     if (res.success && res.data != null) {
-      final map = res.data is Map<String, dynamic>
-          ? res.data as Map<String, dynamic>
-          : (res.data is Map && (res.data as Map)['data'] is Map
-              ? (res.data as Map)['data'] as Map<String, dynamic>
-              : <String, dynamic>{});
+      Map<String, dynamic> map = {};
+      if (res.data is Map) {
+        final rawMap = res.data as Map;
+        if (rawMap['data'] is Map) {
+          map = Map<String, dynamic>.from(rawMap['data'] as Map);
+        } else {
+          map = Map<String, dynamic>.from(rawMap);
+        }
+      }
       return HealthDocumentModel.fromJson(map);
     }
 
@@ -126,11 +168,13 @@ class HealthDocumentsRemoteDataSource {
   }
 
   Future<bool> deleteDocument(String documentId) async {
+    if (documentId.trim().isEmpty) return false;
     final res = await _api.delete(ApiEndpoints.healthDocumentDetail(documentId));
     return res.success;
   }
 
   Future<bool> setDietitianAccess(String documentId, String memberId, bool allowAccess) async {
+    if (documentId.trim().isEmpty) return false;
     if (allowAccess) {
       final res = await _api.post(
         ApiEndpoints.healthDocumentPermissions(documentId),

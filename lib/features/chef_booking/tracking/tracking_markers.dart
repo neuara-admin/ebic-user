@@ -38,6 +38,25 @@ class TrackingMarkers {
     return _encode(recorder, dpr, size, size);
   }
 
+  /// Small ringed dot marking where the journey visibly starts.
+  static Future<BitmapDescriptor> origin(double dpr) async {
+    const size = 26.0;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)..scale(dpr);
+    const c = Offset(size / 2, size / 2);
+    canvas.drawCircle(
+      c.translate(0, 1),
+      10,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.22)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
+    );
+    canvas.drawCircle(c, 10, Paint()..color = Colors.white);
+    canvas.drawCircle(c, 6.5, Paint()..color = AppColors.slate700);
+    canvas.drawCircle(c, 2.5, Paint()..color = Colors.white);
+    return _encode(recorder, dpr, size, size);
+  }
+
   /// Destination pin with an optional callout bubble above it (e.g. "12 min").
   /// Anchor at (0.5, 1.0) so the pin tip sits on the address.
   static Future<BitmapDescriptor> home(double dpr, {String? label}) async {

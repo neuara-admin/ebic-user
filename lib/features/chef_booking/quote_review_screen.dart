@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
@@ -4451,34 +4452,42 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 2,
                   children: [
                     Text(
-                      '₹${q.total.toStringAsFixed(0)}',
+                      q.total <= 0 ? '₹0' : '₹${q.total.toStringAsFixed(0)}',
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20,
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 6,
-                        vertical: 2,
+                        vertical: 2.5,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryLight.withOpacity(0.25),
-                        borderRadius: BorderRadius.circular(4),
+                        color: (q.total <= 0 || _isFreeChefBooking)
+                            ? Colors.green.shade600
+                            : AppColors.primaryLight.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text(
-                        'TOTAL',
-                        style: TextStyle(
+                      child: Text(
+                        (q.total <= 0 || _isFreeChefBooking)
+                            ? 'FREE PASS'
+                            : 'TOTAL',
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 9.5,
-                          color: AppColors.primaryLight,
+                          fontSize: 9,
+                          letterSpacing: 0.5,
+                          color: Colors.white,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -4497,14 +4506,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           SizedBox(
             height: 44,
             child: ElevatedButton.icon(
-              onPressed: _isConfirming ? null : _proceedToPayment,
+              onPressed: _isConfirming
+                  ? null
+                  : () {
+                      HapticFeedback.mediumImpact();
+                      _proceedToPayment();
+                    },
               icon: _isConfirming
                   ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : Icon(q.total <= 0 ? Icons.check_rounded : Icons.arrow_forward_rounded, size: 18),
+                  : Icon(q.total <= 0 ? Icons.check_circle_rounded : Icons.arrow_forward_rounded, size: 18),
               label: Text(
                 _isConfirming
                     ? 'Confirming…'
@@ -4517,7 +4531,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: (q.total <= 0 || _isFreeChefBooking)
+                    ? Colors.teal.shade700
+                    : AppColors.primary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

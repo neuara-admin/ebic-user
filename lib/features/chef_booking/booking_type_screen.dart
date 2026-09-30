@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/config/remote_config_service.dart';
 import '../../core/routing/app_routes.dart';
@@ -451,32 +452,43 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
         const SizedBox(height: 10),
         // Wrap so the badges flow onto a second line on narrow phones
         Wrap(
-          spacing: 6,
+          spacing: 8,
           runSpacing: 6,
           children: [
-            _buildTrustBadge('⭐ 4.9 Rated', isDark),
-            _buildTrustBadge('🛡️ Verified Chefs', isDark),
-            _buildTrustBadge('✨ Clean-Up Done', isDark),
+            _buildTrustBadge(Icons.star_rounded, const Color(0xFFF59E0B), '4.9 Rated', isDark),
+            _buildTrustBadge(Icons.verified_user_rounded, AppColors.primary, 'Verified Chefs', isDark),
+            _buildTrustBadge(Icons.cleaning_services_rounded, const Color(0xFF0D9488), 'Clean-Up Done', isDark),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildTrustBadge(String label, bool isDark) {
+  Widget _buildTrustBadge(IconData icon, Color iconColor, String label, bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w600,
-          color: isDark ? AppColors.slate300 : AppColors.slate700,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0),
+          width: 0.8,
         ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: iconColor),
+          const SizedBox(width: 4.5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.slate300 : AppColors.slate700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -498,7 +510,10 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
     required VoidCallback onTap,
   }) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),

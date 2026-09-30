@@ -205,6 +205,7 @@ class ApiEndpoints {
       '/health-pass/plans/comparison';
   static String healthPassPlanDetail(String id) => '/health-pass/plans/$id';
   static const String myHealthPass = '/health-pass/my';
+  static const String healthPassMy = '/health-pass/my';
   static const String healthPassCurrent = '/health-pass/current';
   static const String healthPassHistory = '/health-pass/history';
   static const String healthPassQuote = '/health-pass/quote';
@@ -229,6 +230,7 @@ class ApiEndpoints {
 
   // Dietitian & Consultations
   static const String dietitians = '/dietitians';
+  static const String assignedDietitian = '/dietitians/assigned';
   static String dietitian(String id) => '/dietitians/$id';
   static String dietitianAvailability(String id) =>
       '/dietitians/$id/availability';

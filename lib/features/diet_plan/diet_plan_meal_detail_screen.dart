@@ -738,22 +738,24 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Row: Image, Name, Servings, Video Button
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => DishDetailScreen(dish: dishItem.toDishModel()),
-                      ),
-                    );
-                  },
-                  child: EBICDishImage(
+          // Header Row: Image, Name, Servings, Video Button (Clicking anywhere navigates to dish details)
+          InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      DishDetailScreen(dish: dishItem.toDishModel()),
+                ),
+              );
+            },
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  EBICDishImage(
                     imageUrl: dishItem.imageUrl,
                     width: 64,
                     height: 64,
@@ -762,100 +764,109 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                     showVegIndicator: true,
                     fit: BoxFit.cover,
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        dishItem.name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.slate900,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.primarySubtle,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '${dishItem.servingQuantity} ${dishItem.servingUnit}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryDark,
-                              ),
-                            ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          dishItem.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.slate900,
                           ),
-                          if (dishItem.cookingTimeMin != null) ...[
-                            const SizedBox(width: 6),
-                            Text(
-                              '• ~${dishItem.cookingTimeMin} mins',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.slate500,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (dishItem.dietaryTags.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 5,
-                          runSpacing: 4,
-                          children: dishItem.dietaryTags.take(4).map((tag) {
-                            final t = tag.toUpperCase();
-                            Color bg = const Color(0xFFF8FAFC);
-                            Color border = const Color(0xFFE2E8F0);
-                            Color text = const Color(0xFF475569);
-
-                            if (t.contains('PROTEIN')) {
-                              bg = const Color(0xFFEFF6FF);
-                              border = const Color(0xFFBFDBFE);
-                              text = const Color(0xFF1D4ED8);
-                            } else if (t.contains('CARB') || t.contains('KETO')) {
-                              bg = const Color(0xFFF5F3FF);
-                              border = const Color(0xFFDDD6FE);
-                              text = const Color(0xFF6D28D9);
-                            } else if (t.contains('VEG')) {
-                              bg = const Color(0xFFECFDF5);
-                              border = const Color(0xFFA7F3D0);
-                              text = const Color(0xFF047857);
-                            }
-
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: bg,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: border, width: 1),
+                                color: AppColors.primarySubtle,
+                                borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                tag,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: text,
-                                  fontWeight: FontWeight.w700,
+                                '${dishItem.servingQuantity} ${dishItem.servingUnit}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryDark,
                                 ),
                               ),
-                            );
-                          }).toList(),
+                            ),
+                            if (dishItem.cookingTimeMin != null) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '• ~${dishItem.cookingTimeMin} mins',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.slate500,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
+                        if (dishItem.dietaryTags.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 5,
+                            runSpacing: 4,
+                            children: dishItem.dietaryTags.take(4).map((tag) {
+                              final t = tag.toUpperCase();
+                              Color bg = const Color(0xFFF8FAFC);
+                              Color border = const Color(0xFFE2E8F0);
+                              Color text = const Color(0xFF475569);
+
+                              if (t.contains('PROTEIN')) {
+                                bg = const Color(0xFFEFF6FF);
+                                border = const Color(0xFFBFDBFE);
+                                text = const Color(0xFF1D4ED8);
+                              } else if (t.contains('CARB') ||
+                                  t.contains('KETO')) {
+                                bg = const Color(0xFFF5F3FF);
+                                border = const Color(0xFFDDD6FE);
+                                text = const Color(0xFF6D28D9);
+                              } else if (t.contains('VEG')) {
+                                bg = const Color(0xFFECFDF5);
+                                border = const Color(0xFFA7F3D0);
+                                text = const Color(0xFF047857);
+                              }
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: bg,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: border, width: 1),
+                                ),
+                                child: Text(
+                                  tag,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: text,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: AppColors.slate400,
+                  ),
+                ],
+              ),
             ),
           ),
 

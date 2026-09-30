@@ -32,6 +32,12 @@ class StatusBadge extends StatelessWidget {
       case 'FAILED_NO_SUPPLY':
       case 'NO_SUPPLY':
         return 'NO CHEF AVAILABLE';
+      case 'CHEF_CANCELLED':
+        return 'CANCELLED BY CHEF';
+      case 'CANCELLED_CUSTOMER':
+        return 'CANCELLED BY YOU';
+      case 'CANCELLED_NOSHOW':
+        return 'CANCELLED (NO SHOW)';
       case 'CHEF_EN_ROUTE':
       case 'EN_ROUTE':
         return 'EN ROUTE';

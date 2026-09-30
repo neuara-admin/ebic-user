@@ -55,8 +55,12 @@ class HealthDocumentsRepositoryImpl implements HealthDocumentsRepository {
       notes: notes,
     );
 
-    if (shareWithDietitian) {
-      await _dataSource.setDietitianAccess(doc.id, memberId, true);
+    // Backend directUploadDocument automatically grants consultation access on upload.
+    // If the user explicitly disabled sharing, revoke access.
+    if (doc.id.isNotEmpty && !shareWithDietitian) {
+      try {
+        await _dataSource.setDietitianAccess(doc.id, memberId, false);
+      } catch (_) {}
     }
 
     return doc;

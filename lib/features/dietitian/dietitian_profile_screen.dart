@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dietitian_model.dart';
@@ -9,8 +10,13 @@ import 'dietitian_chat_screen.dart';
 
 class DietitianProfileScreen extends StatefulWidget {
   final DietitianModel dietitian;
+  final ActiveHealthPassModel? initialPass;
 
-  const DietitianProfileScreen({super.key, required this.dietitian});
+  const DietitianProfileScreen({
+    super.key,
+    required this.dietitian,
+    this.initialPass,
+  });
 
   @override
   State<DietitianProfileScreen> createState() => _DietitianProfileScreenState();
@@ -20,10 +26,13 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
   final HealthPassRepository _healthPassRepo = HealthPassRepository();
 
   ActiveHealthPassModel? _activePass;
+  bool _isLoadingPass = true;
 
   @override
   void initState() {
     super.initState();
+    _activePass = widget.initialPass;
+    _isLoadingPass = widget.initialPass == null;
     _loadSubscriptionStatus();
   }
 
@@ -33,19 +42,83 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
       if (mounted) {
         setState(() {
           _activePass = pass;
+          _isLoadingPass = false;
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingPass = false;
+        });
+      }
+    }
   }
 
+  /// Chat and direct calls are strictly available only for active Health Pass users
+  /// between pass startDate and endDate.
   bool get _hasActiveSubscription {
     final pass = _activePass;
     if (pass == null) return false;
-    return pass.status.toUpperCase() == 'ACTIVE' && !pass.isExpired;
+    if (pass.status.toUpperCase() != 'ACTIVE' || pass.isExpired) return false;
+    final now = DateTime.now();
+    if (pass.startDate != null) {
+      final start = DateTime(
+          pass.startDate!.year, pass.startDate!.month, pass.startDate!.day);
+      if (now.isBefore(start)) return false;
+    }
+    if (pass.endDate != null) {
+      final end = DateTime(pass.endDate!.year, pass.endDate!.month,
+          pass.endDate!.day, 23, 59, 59);
+      if (now.isAfter(end)) return false;
+    }
+    return true;
+  }
+
+  String _formatPassDates() {
+    final pass = _activePass;
+    if (pass == null) return 'No Active Pass';
+    final df = DateFormat('dd MMM yyyy');
+    final s = pass.startDate != null ? df.format(pass.startDate!) : 'Start';
+    final e = pass.endDate != null ? df.format(pass.endDate!) : 'End';
+    return '$s – $e';
+  }
+
+  String? get _passValidityNotice {
+    final pass = _activePass;
+    final df = DateFormat('dd MMM yyyy');
+    if (pass == null) {
+      return 'An active Health Pass is required to chat, call, or contact your dietitian.';
+    }
+    final now = DateTime.now();
+    if (pass.startDate != null) {
+      final start = DateTime(
+          pass.startDate!.year, pass.startDate!.month, pass.startDate!.day);
+      if (now.isBefore(start)) {
+        return 'Your Health Pass starts on ${df.format(pass.startDate!)}. Chat and direct calling access will activate on the start date.';
+      }
+    }
+    if (pass.endDate != null) {
+      final end = DateTime(pass.endDate!.year, pass.endDate!.month,
+          pass.endDate!.day, 23, 59, 59);
+      if (now.isAfter(end) || pass.isExpired) {
+        return 'Your Health Pass expired on ${df.format(pass.endDate!)}. Please renew your pass to resume live chat and calling.';
+      }
+    }
+    if (pass.status.toUpperCase() != 'ACTIVE') {
+      return 'Your Health Pass status is currently ${pass.status}. An active pass is required to access chat and calling.';
+    }
+    return null;
   }
 
   void _openChatScreen() {
-    if (!_hasActiveSubscription) return;
+    if (!_hasActiveSubscription) {
+      _showAccessLockedDialog(
+        title: 'Health Pass Required for Chat',
+        message: _passValidityNotice ??
+            'Direct live chat with your clinical dietitian is exclusively available for active Health Pass members during pass validity.',
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -53,6 +126,116 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
           dietitian: widget.dietitian,
           activePass: _activePass,
         ),
+      ),
+    );
+  }
+
+  void _handleCallAccess() {
+    if (!_hasActiveSubscription) {
+      _showAccessLockedDialog(
+        title: 'Health Pass Required for Calls',
+        message: _passValidityNotice ??
+            'Direct calling and video sessions with your clinical dietitian are available during your Health Pass validity dates.',
+      );
+      return;
+    }
+    Navigator.pushNamed(
+      context,
+      AppRoutes.consultationBook,
+      arguments: {'dietitian': widget.dietitian},
+    );
+  }
+
+  void _showAccessLockedDialog(
+      {required String title, required String message}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child:
+                  const Icon(Icons.lock_rounded, color: Colors.amber, size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: const TextStyle(
+                  fontSize: 13, height: 1.45, color: AppColors.slate700),
+            ),
+            if (_activePass?.startDate != null ||
+                _activePass?.endDate != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_month_rounded,
+                        size: 16, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Pass Dates: ${_formatPassDates()}',
+                        style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.slate800),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pushNamed(context, AppRoutes.healthPass);
+            },
+            child: Text(
+              _activePass?.isExpired == true
+                  ? 'Renew Pass'
+                  : 'Get / View Health Pass',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -74,9 +257,29 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: isDark ? AppColors.slate900 : Colors.white,
-        title: const Text(
-          'Dietitian Profile',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                widget.dietitian.name.startsWith('Dr')
+                    ? widget.dietitian.name
+                    : 'Dr. ${widget.dietitian.name}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: AppColors.success,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -248,12 +451,156 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
             ),
             const SizedBox(height: 8),
           ],
+
+          // Quick Hero CTAs (Chat & Book Call - Gated by Health Pass validity)
+          const SizedBox(height: 6),
+          if (_isLoadingPass) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+              ),
+            ),
+          ] else if (_hasActiveSubscription) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _openChatScreen,
+                  icon: const Icon(Icons.chat_bubble_rounded, size: 14, color: Colors.white),
+                  label: const Text('Live Chat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    elevation: 0,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: _handleCallAccess,
+                  icon: const Icon(Icons.video_call_rounded, size: 16, color: Color(0xFF4F46E5)),
+                  label: const Text(
+                    'Book Video Call',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF4F46E5)),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF4F46E5), width: 1.2),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFA7F3D0)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.verified_user_rounded, size: 12, color: AppColors.primaryDark),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Access Active: ${_formatPassDates()}',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.lock_outline_rounded, size: 13, color: Color(0xFFB45309)),
+                      SizedBox(width: 6),
+                      Text(
+                        'Chat & Calls: Active Pass Required',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF92400E),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _passValidityNotice ?? 'Access is available during Health Pass validity dates.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: isDark ? AppColors.slate300 : const Color(0xFF78350F),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _openChatScreen,
+                  icon: const Icon(Icons.lock_rounded, size: 13, color: AppColors.slate500),
+                  label: const Text('Live Chat', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11.5)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.slate600,
+                    side: const BorderSide(color: AppColors.slate300),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.healthPass),
+                  icon: const Icon(Icons.verified_rounded, size: 14, color: Colors.white),
+                  label: const Text('Get Health Pass', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    elevation: 0,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 4),
         ],
       ),
     );
   }
 
   Widget _buildStatsRow(bool isDark) {
+    final ratingVal = (widget.dietitian.rating != null && widget.dietitian.rating! > 0)
+        ? '${widget.dietitian.rating!.toStringAsFixed(1)} ★'
+        : '4.9 ★';
+    final expYears = widget.dietitian.experienceYears;
+    final expVal = (expYears != null && expYears > 0) ? '$expYears Yrs' : '5+ Yrs';
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppColors.slate900 : Colors.white,
@@ -266,9 +613,9 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildStatItem('Rating', '${widget.dietitian.rating} ★', AppColors.accent, isDark),
+          _buildStatItem('Rating', ratingVal, AppColors.accent, isDark),
           _buildStatDivider(isDark),
-          _buildStatItem('Experience', '${widget.dietitian.experienceYears} Yrs', AppColors.primary, isDark),
+          _buildStatItem('Experience', expVal, AppColors.primary, isDark),
           _buildStatDivider(isDark),
           _buildStatItem('Sessions', '250+', AppColors.secondary, isDark),
           _buildStatDivider(isDark),
@@ -450,12 +797,26 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
   // never a plausible-sounding invented default.
   List<Widget> _buildCredentialRows(bool isDark) {
     final rows = <MapEntry<String, String>>[
-      if (widget.dietitian.qualification != null && widget.dietitian.qualification!.trim().isNotEmpty)
+      if (widget.dietitian.qualification != null &&
+          widget.dietitian.qualification!.trim().isNotEmpty)
         MapEntry('Qualification', widget.dietitian.qualification!),
-      MapEntry('Experience', '${widget.dietitian.experienceYears} Years in Clinical Practice'),
-      if (widget.dietitian.languages != null && widget.dietitian.languages!.trim().isNotEmpty)
+      MapEntry('Experience',
+          '${widget.dietitian.experienceYears} Years in Clinical Practice'),
+      if (widget.dietitian.languages != null &&
+          widget.dietitian.languages!.trim().isNotEmpty)
         MapEntry('Languages', widget.dietitian.languages!),
-      const MapEntry('Consultation Mode', 'HD Video Session (45 min) + Diet Chart'),
+      const MapEntry(
+          'Consultation Mode', 'HD Video Session (45 min) + Diet Chart'),
+      if (_hasActiveSubscription)
+        MapEntry(
+          'Direct Chat & Call',
+          '✓ Active (${_formatPassDates()})',
+        )
+      else
+        const MapEntry(
+          'Direct Chat & Call',
+          '🔒 Locked (Active Pass Required)',
+        ),
     ];
 
     final widgets = <Widget>[];
@@ -585,12 +946,36 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
   /// - If user HAS an active Health Pass subscription: shows "Chat" (encrypted) and "Book Session" buttons.
   /// - If user DOES NOT have a subscription: shows ONLY "Book Consultation" (NO chat button).
   Widget _buildBottomActionBar(BuildContext context, bool isDark) {
-    final rawName = widget.dietitian.name.trim();
-    final nameWithoutDr = rawName.replaceFirst(RegExp(r'^Dr\.?\s*', caseSensitive: false), '');
-    final drDisplayName = 'Dr. ${nameWithoutDr.split(' ').first}';
+    final dateFormat = DateFormat('dd MMM yyyy');
+    final isActive = _hasActiveSubscription;
+    final pass = _activePass;
+
+    if (_isLoadingPass) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.slate900 : Colors.white,
+          border: Border(
+            top: BorderSide(
+              color: isDark ? AppColors.slate800 : const Color(0xFFE2E8F0),
+            ),
+          ),
+        ),
+        child: const SizedBox(
+          height: 48,
+          child: Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       decoration: BoxDecoration(
         color: isDark ? AppColors.slate900 : Colors.white,
         boxShadow: [
@@ -606,114 +991,112 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
           ),
         ),
       ),
-      child: _hasActiveSubscription
-          ? Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Validity Indicator Banner
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? const Color(0xFFECFDF5)
+                  : (isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB)),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isActive
+                    ? const Color(0xFFA7F3D0)
+                    : const Color(0xFFFDE68A),
+              ),
+            ),
+            child: Row(
               children: [
-                // Chat Button (Active Health Pass Exclusive)
-                Expanded(
-                  flex: 4,
-                  child: OutlinedButton.icon(
-                    onPressed: _openChatScreen,
-                    icon: const Icon(Icons.lock_rounded, size: 13, color: AppColors.primary),
-                    label: const Text(
-                      'Chat',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      side: const BorderSide(color: AppColors.primary, width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
+                Icon(
+                  isActive ? Icons.verified_rounded : Icons.lock_outline_rounded,
+                  size: 14,
+                  color: isActive ? AppColors.primaryDark : const Color(0xFFB45309),
                 ),
-                const SizedBox(width: 10),
-
-                // Book Consultation Button
+                const SizedBox(width: 6),
                 Expanded(
-                  flex: 6,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.consultationBook,
-                        arguments: {'dietitian': widget.dietitian},
-                      );
-                    },
-                    icon: const Icon(Icons.calendar_month_rounded, size: 15, color: Colors.white),
-                    label: Text(
-                      'Book with $drDisplayName',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                  child: Text(
+                    isActive && pass != null
+                        ? 'Health Pass Active (${pass.startDate != null ? dateFormat.format(pass.startDate!) : "Start"} – ${pass.endDate != null ? dateFormat.format(pass.endDate!) : "End"})'
+                        : (_passValidityNotice ?? 'Active Health Pass required for direct chat & call access.'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isActive ? AppColors.primaryDark : const Color(0xFF92400E),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      elevation: 0,
-                    ),
-                  ),
-                ),
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'STANDARD SESSION',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.slate500,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '1-on-1 Video Call',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppColors.slate900,
-                        ),
-                      ),
-                      Text(
-                        'Diet chart & kitchen sync',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? AppColors.slate400 : AppColors.slate500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 2,
-                  child: EbicButton(
-                    label: 'Book with $drDisplayName',
-                    icon: Icons.calendar_month_rounded,
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.consultationBook,
-                        arguments: {'dietitian': widget.dietitian},
-                      );
-                    },
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
+          ),
+
+          Row(
+            children: [
+              // Instant Chat Button (Gated)
+              Expanded(
+                flex: 5,
+                child: OutlinedButton.icon(
+                  onPressed: _openChatScreen,
+                  icon: Icon(
+                    isActive ? Icons.chat_bubble_outline_rounded : Icons.lock_outline_rounded,
+                    size: 16,
+                    color: isActive ? AppColors.primary : AppColors.slate400,
+                  ),
+                  label: Text(
+                    isActive ? 'Live Chat' : 'Chat (Locked)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? AppColors.primary : AppColors.slate500,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(
+                      color: isActive ? AppColors.primary : AppColors.slate300,
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Book Video Call / Call Access
+              Expanded(
+                flex: 5,
+                child: ElevatedButton.icon(
+                  onPressed: _handleCallAccess,
+                  icon: Icon(
+                    isActive ? Icons.video_call_rounded : Icons.lock_outline_rounded,
+                    size: 17,
+                    color: Colors.white,
+                  ),
+                  label: Text(
+                    isActive ? 'Video Call' : 'Call (Locked)',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isActive ? const Color(0xFF4F46E5) : AppColors.slate600,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

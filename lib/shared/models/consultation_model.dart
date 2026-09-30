@@ -76,6 +76,10 @@ class ConsultationModel {
   bool get isVideoCompleted => status == 'VIDEO_COMPLETED';
   bool get isCompleted => status == 'COMPLETED';
   bool get isCancelled => status == 'CANCELLED';
+  bool get isRescheduled =>
+      status == 'RESCHEDULED' ||
+      (reason?.toLowerCase().contains('rescheduled') ?? false) ||
+      (additionalNotes?.toLowerCase().contains('rescheduled') ?? false);
   bool get isNoShow => status == 'NO_SHOW';
   bool get isInitial => kind == 'INITIAL';
   /// The call happened (the service was delivered), whether or not notes are saved.

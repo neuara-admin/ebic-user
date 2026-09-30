@@ -48,6 +48,7 @@ import '../../features/health_pass/purchase_pass_screen.dart';
 // Dietitian & Consultations
 import '../../shared/models/dietitian_model.dart';
 import '../../features/dietitian/dietitian_list_screen.dart';
+import '../../features/dietitian/dietitian_profile_screen.dart';
 import '../../features/dietitian/dietitian_chat_screen.dart';
 import '../../features/consultation/book_consultation_screen.dart';
 import '../../features/consultation/consultation_review_screen.dart';
@@ -204,17 +205,13 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => const MainNavShell(initialTab: 0),
         );
-      case AppRoutes.meals:
+      case AppRoutes.health:
         return MaterialPageRoute(
           builder: (_) => const MainNavShell(initialTab: 1),
         );
-      case AppRoutes.health:
-        return MaterialPageRoute(
-          builder: (_) => const MainNavShell(initialTab: 2),
-        );
       case AppRoutes.orders:
         return MaterialPageRoute(
-          builder: (_) => const MainNavShell(initialTab: 3),
+          builder: (_) => const MainNavShell(initialTab: 2),
         );
       case AppRoutes.profile:
         return MaterialPageRoute(
@@ -352,6 +349,23 @@ class AppRouter {
 
       // Dietitian & Consultations
       case AppRoutes.dietitian:
+        if (args is Map && args['dietitian'] is DietitianModel) {
+          final pass = args['pass'] is ActiveHealthPassModel
+              ? args['pass'] as ActiveHealthPassModel
+              : (args['initialPass'] is ActiveHealthPassModel
+                  ? args['initialPass'] as ActiveHealthPassModel
+                  : null);
+          return MaterialPageRoute(
+            builder: (_) => DietitianProfileScreen(
+              dietitian: args['dietitian'] as DietitianModel,
+              initialPass: pass,
+            ),
+          );
+        } else if (args is DietitianModel) {
+          return MaterialPageRoute(
+            builder: (_) => DietitianProfileScreen(dietitian: args),
+          );
+        }
         return MaterialPageRoute(builder: (_) => const DietitianListScreen());
       case AppRoutes.dietitianChat:
         final data = (args is Map<String, dynamic>)

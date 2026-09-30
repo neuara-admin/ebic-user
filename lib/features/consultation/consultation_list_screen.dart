@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/consultation_model.dart';
 import '../../shared/models/dietitian_model.dart';
+import '../../shared/models/health_pass_model.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../dietitian/dietitian_profile_screen.dart';
+import '../health_pass/data/health_pass_repository.dart';
 
 class ConsultationListScreen extends StatefulWidget {
   const ConsultationListScreen({super.key});
@@ -22,13 +26,27 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
   late TabController _tabController;
 
   List<ConsultationModel> _consultations = [];
+  ActiveHealthPassModel? _activePass;
+  DietitianModel? _assignedDietitian;
   bool _isLoading = true;
   StreamSubscription<StandardSocketEnvelope>? _realtimeSub;
+  String _selectedStatusFilter = 'ALL';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && mounted) {
+        final isUpcoming = _tabController.index == 0;
+        if (isUpcoming && (_selectedStatusFilter == 'COMPLETED' || _selectedStatusFilter == 'CANCELLED')) {
+          _selectedStatusFilter = 'ALL';
+        } else if (!isUpcoming && _selectedStatusFilter == 'SCHEDULED') {
+          _selectedStatusFilter = 'ALL';
+        }
+        setState(() {});
+      }
+    });
     _fetchConsultations();
     _realtimeSub = RealtimeService().consultationUpdates.listen((_) => _fetchConsultations(silent: true));
   }
@@ -42,29 +60,195 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
 
   Future<void> _fetchConsultations({bool silent = false}) async {
     if (!mounted) return;
-    if (!silent) setState(() => _isLoading = true);
+    if (!silent && _consultations.isEmpty) setState(() => _isLoading = true);
 
     try {
-      final res = await _api.get<List<dynamic>>(ApiEndpoints.consultations);
-      if (res.success && res.data != null && mounted) {
-        setState(() {
-          _consultations = res.data!
+      final consultRes = await _api.get<List<dynamic>>(ApiEndpoints.consultations);
+      ActiveHealthPassModel? pass;
+      try {
+        pass = await HealthPassRepository().fetchCurrentPass();
+      } catch (_) {}
+
+      if (mounted) {
+        List<ConsultationModel> parsedConsultations = [];
+        if (consultRes.success && consultRes.data != null) {
+          parsedConsultations = consultRes.data!
               .map((json) => ConsultationModel.fromJson(json as Map<String, dynamic>))
               .toList();
           // Sort newest first
-          _consultations.sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
+          parsedConsultations.sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
+        }
+
+        // Synchronously pre-resolve assigned dietitian to avoid UI layout shift / flicker
+        DietitianModel? preResolvedDietitian = _assignedDietitian;
+        if (pass?.assignedDietitian != null) {
+          final d = pass!.assignedDietitian!;
+          preResolvedDietitian = DietitianModel(
+            id: d.id,
+            name: d.name.startsWith('Dr') ? d.name : 'Dr. ${d.name}',
+            qualification: d.qualification ?? 'Clinical Nutritionist (RD)',
+            specialization: d.specializations.isNotEmpty ? d.specializations.join(', ') : null,
+            photoUrl: d.photoUrl,
+            experienceYears: (d.experienceYears != null && d.experienceYears! > 0) ? d.experienceYears : 5,
+            rating: (d.rating != null && d.rating! > 0) ? d.rating : 4.9,
+            bio: d.bio,
+            languages: d.languages,
+          );
+        } else if (parsedConsultations.isNotEmpty) {
+          final firstWithDietitian = parsedConsultations.firstWhere(
+            (c) => c.dietitianName.isNotEmpty,
+            orElse: () => parsedConsultations.first,
+          );
+          if (firstWithDietitian.dietitianId.isNotEmpty) {
+            final dName = firstWithDietitian.dietitianName;
+            preResolvedDietitian = DietitianModel(
+              id: firstWithDietitian.dietitianId,
+              name: dName.startsWith('Dr') ? dName : 'Dr. $dName',
+              qualification: firstWithDietitian.dietitianQualification ?? 'Clinical Nutritionist (RD)',
+              specialization: firstWithDietitian.dietitianSpecialization,
+              photoUrl: firstWithDietitian.dietitianPhotoUrl,
+              experienceYears: 5,
+              rating: 4.9,
+            );
+          }
+        }
+
+        setState(() {
+          _activePass = pass;
+          _consultations = parsedConsultations;
+          if (preResolvedDietitian != null) {
+            _assignedDietitian = preResolvedDietitian;
+          }
           _isLoading = false;
         });
-      } else {
-        if (mounted) {
-          setState(() {
-            _consultations = [];
-            _isLoading = false;
-          });
-        }
+
+        _resolveAssignedDietitian(pass, parsedConsultations);
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _resolveAssignedDietitian(ActiveHealthPassModel? pass, List<ConsultationModel> consultations) async {
+    try {
+      final assignedRes = await _api.get<dynamic>(
+        ApiEndpoints.assignedDietitian,
+        requiresAuth: true,
+      );
+      if (assignedRes.success && assignedRes.data != null && mounted) {
+        final data = assignedRes.data is Map<String, dynamic>
+            ? assignedRes.data as Map<String, dynamic>
+            : (assignedRes.data is Map ? Map<String, dynamic>.from(assignedRes.data as Map) : null);
+        if (data != null && data['id'] != null) {
+          final d = DietitianModel.fromJson(data);
+          setState(() {
+            _assignedDietitian = DietitianModel(
+              id: d.id,
+              name: d.name.startsWith('Dr') ? d.name : 'Dr. ${d.name}',
+              qualification: d.qualification,
+              specialization: d.specialization,
+              photoUrl: d.photoUrl,
+              experienceYears: (d.experienceYears != null && d.experienceYears! > 0) ? d.experienceYears : 5,
+              rating: (d.rating != null && d.rating! > 0) ? d.rating : 4.9,
+              bio: d.bio,
+              languages: d.languages,
+            );
+          });
+          return;
+        }
+      }
+    } catch (_) {}
+
+    if (pass?.assignedDietitian != null) {
+      final d = pass!.assignedDietitian!;
+      try {
+        final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.dietitian(d.id));
+        if (res.success && res.data != null && mounted) {
+          final serverD = DietitianModel.fromJson(res.data!);
+          setState(() {
+            _assignedDietitian = DietitianModel(
+              id: serverD.id,
+              name: serverD.name.startsWith('Dr') ? serverD.name : 'Dr. ${serverD.name}',
+              qualification: serverD.qualification ?? d.qualification ?? 'Clinical Nutritionist (RD)',
+              specialization: serverD.specialization ?? (d.specializations.isNotEmpty ? d.specializations.join(', ') : null),
+              photoUrl: serverD.photoUrl ?? d.photoUrl,
+              experienceYears: (serverD.experienceYears != null && serverD.experienceYears! > 0)
+                  ? serverD.experienceYears
+                  : (d.experienceYears ?? 5),
+              rating: (serverD.rating != null && serverD.rating! > 0) ? serverD.rating : 4.9,
+              bio: serverD.bio ?? d.bio,
+              languages: (serverD.languages != null && serverD.languages!.isNotEmpty) ? serverD.languages : d.languages,
+            );
+          });
+          return;
+        }
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _assignedDietitian = DietitianModel(
+            id: d.id,
+            name: d.name.startsWith('Dr') ? d.name : 'Dr. ${d.name}',
+            qualification: d.qualification ?? 'Clinical Nutritionist (RD)',
+            specialization: d.specializations.isNotEmpty ? d.specializations.join(', ') : null,
+            photoUrl: d.photoUrl,
+            experienceYears: (d.experienceYears != null && d.experienceYears! > 0) ? d.experienceYears : 5,
+            rating: (d.rating != null && d.rating! > 0) ? d.rating : 4.9,
+            bio: d.bio,
+            languages: d.languages,
+          );
+        });
+        return;
+      }
+    }
+
+    if (consultations.isNotEmpty) {
+      final firstWithDietitian = consultations.firstWhere(
+        (c) => c.dietitianName.isNotEmpty,
+        orElse: () => consultations.first,
+      );
+      if (firstWithDietitian.dietitianId.isNotEmpty) {
+        try {
+          final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.dietitian(firstWithDietitian.dietitianId));
+          if (res.success && res.data != null && mounted) {
+            final serverD = DietitianModel.fromJson(res.data!);
+            setState(() {
+              _assignedDietitian = DietitianModel(
+                id: serverD.id,
+                name: serverD.name.startsWith('Dr') ? serverD.name : 'Dr. ${serverD.name}',
+                qualification: serverD.qualification ?? firstWithDietitian.dietitianQualification ?? 'Clinical Nutritionist (RD)',
+                specialization: serverD.specialization ?? firstWithDietitian.dietitianSpecialization,
+                photoUrl: serverD.photoUrl ?? firstWithDietitian.dietitianPhotoUrl,
+                experienceYears: (serverD.experienceYears != null && serverD.experienceYears! > 0) ? serverD.experienceYears : 5,
+                rating: (serverD.rating != null && serverD.rating! > 0) ? serverD.rating : 4.9,
+                bio: serverD.bio,
+                languages: serverD.languages,
+              );
+            });
+            return;
+          }
+        } catch (_) {}
+        if (mounted) {
+          final dName = firstWithDietitian.dietitianName;
+          setState(() {
+            _assignedDietitian = DietitianModel(
+              id: firstWithDietitian.dietitianId,
+              name: dName.startsWith('Dr') ? dName : 'Dr. $dName',
+              qualification: firstWithDietitian.dietitianQualification ?? 'Clinical Nutritionist (RD)',
+              specialization: firstWithDietitian.dietitianSpecialization,
+              photoUrl: firstWithDietitian.dietitianPhotoUrl,
+              experienceYears: 5,
+              rating: 4.9,
+            );
+          });
+          return;
+        }
+      }
+    }
+
+    if (mounted && _assignedDietitian == null) {
+      setState(() {
+        _assignedDietitian = null;
+      });
     }
   }
 
@@ -231,93 +415,808 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Dietitian Consultations'),
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: isDark ? AppColors.slate400 : AppColors.slate500,
-          indicatorColor: AppColors.primary,
-          indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-          tabs: [
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Upcoming'),
-                  if (upcoming.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${upcoming.length}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
-                      ),
-                    ),
-                  ],
-                ],
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Consultations',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                letterSpacing: -0.2,
               ),
             ),
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Flexible(child: Text('Past Consultations', overflow: TextOverflow.ellipsis)),
-                  if (past.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.slate800 : AppColors.slate200,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${past.length}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? AppColors.slate300 : AppColors.slate700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+            Text(
+              'Clinical Nutrition & Care',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.normal,
+                color: isDark ? AppColors.slate400 : AppColors.slate500,
               ),
             ),
           ],
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: TextButton.icon(
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _fetchConsultations()),
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 16, color: AppColors.primary),
+              label: const Text(
+                'Book New',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12.5,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                backgroundColor: AppColors.primary.withOpacity(0.1),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+            ),
+          ),
+        ],
+        elevation: 0,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _fetchConsultations,
-              child: TabBarView(
-                controller: _tabController,
+              child: Column(
                 children: [
-                  _buildList(upcoming, isUpcoming: true, isDark: isDark),
-                  _buildList(past, isUpcoming: false, isDark: isDark),
+                  _buildCareSpecialistCard(isDark, upcoming.length, past.length),
+                  _buildSegmentedTabSelector(isDark, upcoming.length, past.length),
+                  _buildFilterChipsRow(isDark, upcoming: upcoming, past: past),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildList(upcoming, isUpcoming: true, isDark: isDark),
+                        _buildList(past, isUpcoming: false, isDark: isDark),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        elevation: 3,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text(
-          'Book Consultation',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+    );
+  }
+
+  Widget _buildCareSpecialistCard(bool isDark, int upcomingCount, int pastCount) {
+    final cardBg = isDark ? AppColors.slate900 : Colors.white;
+    final cardBorder = isDark ? AppColors.slate800 : const Color(0xFFE2E8F0);
+    final textPrimary = isDark ? Colors.white : AppColors.slate900;
+    final textSecondary = isDark ? AppColors.slate400 : AppColors.slate600;
+    final hasPass = _activePass != null && _activePass!.isActive;
+    final remainingSessions = _activePass?.consultationsRemaining ?? 0;
+
+    if (_assignedDietitian == null) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cardBorder),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
-        onPressed: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _fetchConsultations()),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.primaryDark.withOpacity(0.3) : AppColors.primarySubtle,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.medical_services_outlined, color: AppColors.primary, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Clinical Nutrition Care',
+                              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: textPrimary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: isDark ? AppColors.slate800 : AppColors.slate100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Unassigned',
+                              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Dedicated Clinical Dietitian',
+                        style: TextStyle(fontSize: 11, color: textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.consultationBook).then((_) => _fetchConsultations()),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.09),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Book', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                        SizedBox(width: 2),
+                        Icon(Icons.add_rounded, size: 12, color: AppColors.primary),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Divider(height: 1, color: cardBorder),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: hasPass ? const Color(0xFF10B981).withOpacity(0.12) : const Color(0xFF0284C7).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    hasPass ? Icons.verified_user_rounded : Icons.info_outline_rounded,
+                    size: 14,
+                    color: hasPass ? const Color(0xFF059669) : const Color(0xFF0284C7),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    hasPass
+                        ? '${_activePass!.planName} • $remainingSessions Session${remainingSessions == 1 ? '' : 's'} Remaining'
+                        : 'Book your first session to be paired with a clinical specialist',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: hasPass ? const Color(0xFF059669) : textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    final dietitian = _assignedDietitian!;
+    final avatarUrl = dietitian.photoUrl;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row 1: Doctor info + Avatar + View Profile Button
+          Row(
+            children: [
+              // Avatar with verified badge ring
+              Stack(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.primaryDark.withOpacity(0.4) : AppColors.primarySubtle,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 1.5),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: (avatarUrl != null && avatarUrl.isNotEmpty)
+                        ? Image.network(
+                            AppConfig.resolveMediaUrl(avatarUrl) ?? avatarUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Center(
+                              child: Icon(Icons.person_rounded, color: AppColors.primary, size: 28),
+                            ),
+                          )
+                        : const Center(
+                            child: Icon(Icons.person_rounded, color: AppColors.primary, size: 28),
+                          ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: cardBg, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              // Dietitian Name & Title
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      dietitian.name.startsWith('Dr')
+                          ? dietitian.name
+                          : 'Dr. ${dietitian.name}',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: textPrimary,
+                        letterSpacing: -0.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF059669).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Assigned RD',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF059669),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            dietitian.qualification ?? 'Registered Dietitian (RD)',
+                            style: TextStyle(fontSize: 11, color: textSecondary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // View Profile Action Button
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DietitianProfileScreen(
+                        dietitian: dietitian,
+                        initialPass: _activePass,
+                      ),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.09),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Profile',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      Icon(Icons.arrow_forward_ios_rounded, size: 9, color: AppColors.primary),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Divider
+          Divider(height: 1, color: cardBorder),
+          const SizedBox(height: 10),
+          // Row 2: Care status & metrics summary
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: hasPass
+                            ? const Color(0xFF10B981).withOpacity(0.12)
+                            : const Color(0xFF0284C7).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        hasPass ? Icons.verified_user_rounded : Icons.medical_information_rounded,
+                        size: 14,
+                        color: hasPass ? const Color(0xFF059669) : const Color(0xFF0284C7),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        hasPass
+                            ? '${_activePass!.planName} • $remainingSessions Session${remainingSessions == 1 ? '' : 's'} Left'
+                            : '1-on-1 Confidential HD Video Care',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: hasPass ? const Color(0xFF059669) : textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.star_rounded, size: 13, color: Color(0xFFF59E0B)),
+                    const SizedBox(width: 3),
+                    Text(
+                      (dietitian.rating != null && dietitian.rating! > 0)
+                          ? dietitian.rating!.toStringAsFixed(1)
+                          : '4.9',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppColors.slate800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
+  Widget _buildSegmentedTabSelector(bool isDark, int upcomingCount, int pastCount) {
+    final isUpcomingActive = _tabController.index == 0;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? AppColors.slate800 : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicator: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(0.35),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        labelColor: Colors.white,
+        unselectedLabelColor: isDark ? AppColors.slate400 : AppColors.slate600,
+        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        tabs: [
+          Tab(
+            height: 38,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.event_available_rounded, size: 16),
+                const SizedBox(width: 6),
+                const Text('Upcoming'),
+                const SizedBox(width: 6),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isUpcomingActive
+                        ? Colors.white.withOpacity(0.25)
+                        : (isDark ? AppColors.slate800 : const Color(0xFFE2E8F0)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$upcomingCount',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: isUpcomingActive
+                          ? Colors.white
+                          : (isDark ? AppColors.slate300 : AppColors.slate700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Tab(
+            height: 38,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.history_edu_rounded, size: 16),
+                const SizedBox(width: 6),
+                const Text('Past History'),
+                const SizedBox(width: 6),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: !isUpcomingActive
+                        ? Colors.white.withOpacity(0.25)
+                        : (isDark ? AppColors.slate800 : const Color(0xFFE2E8F0)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$pastCount',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: !isUpcomingActive
+                          ? Colors.white
+                          : (isDark ? AppColors.slate300 : AppColors.slate700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChipsRow(
+    bool isDark, {
+    required List<ConsultationModel> upcoming,
+    required List<ConsultationModel> past,
+  }) {
+    final isUpcomingTab = _tabController.index == 0;
+    final currentList = isUpcomingTab ? upcoming : past;
+
+    final scheduledCount = upcoming.where((c) =>
+        (c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING') &&
+        !c.isRescheduled).length;
+    final rescheduledUpcomingCount = upcoming.where((c) => c.isRescheduled).length;
+    final rescheduledPastCount = past.where((c) => c.isRescheduled).length;
+    final completedCount = past.where((c) => c.status == 'COMPLETED' || c.status == 'VIDEO_COMPLETED').length;
+    final cancelledCount = past.where((c) =>
+        c.status == 'CANCELLED' || c.status == 'NO_SHOW' || c.status == 'DIETITIAN_NO_SHOW').length;
+
+    final filterOptions = [
+      _FilterOption(
+        id: 'ALL',
+        label: 'All',
+        count: currentList.length,
+        icon: Icons.grid_view_rounded,
+        activeColor: AppColors.primary,
+        targetTab: null,
+      ),
+      _FilterOption(
+        id: 'SCHEDULED',
+        label: 'Scheduled',
+        count: scheduledCount,
+        icon: Icons.event_available_rounded,
+        activeColor: const Color(0xFF2563EB),
+        targetTab: 0,
+      ),
+      _FilterOption(
+        id: 'RESCHEDULED',
+        label: 'Rescheduled',
+        count: isUpcomingTab ? rescheduledUpcomingCount : rescheduledPastCount,
+        icon: Icons.update_rounded,
+        activeColor: const Color(0xFFD97706),
+        targetTab: null,
+      ),
+      _FilterOption(
+        id: 'COMPLETED',
+        label: 'Completed',
+        count: completedCount,
+        icon: Icons.check_circle_outline_rounded,
+        activeColor: const Color(0xFF059669),
+        targetTab: 1,
+      ),
+      _FilterOption(
+        id: 'CANCELLED',
+        label: 'Cancelled',
+        count: cancelledCount,
+        icon: Icons.cancel_outlined,
+        activeColor: const Color(0xFFDC2626),
+        targetTab: 1,
+      ),
+    ];
+
+    return Container(
+      height: 38,
+      margin: const EdgeInsets.fromLTRB(0, 2, 0, 6),
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: filterOptions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (ctx, idx) {
+          final opt = filterOptions[idx];
+          final isSelected = _selectedStatusFilter == opt.id;
+
+          return InkWell(
+            onTap: () => _handleFilterTap(opt),
+            borderRadius: BorderRadius.circular(20),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? opt.activeColor.withOpacity(isDark ? 0.22 : 0.12)
+                    : (isDark ? AppColors.slate900 : Colors.white),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? opt.activeColor
+                      : (isDark ? AppColors.slate800 : const Color(0xFFE2E8F0)),
+                  width: isSelected ? 1.5 : 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: opt.activeColor.withOpacity(0.18),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    opt.icon,
+                    size: 13,
+                    color: isSelected
+                        ? opt.activeColor
+                        : (isDark ? AppColors.slate400 : AppColors.slate600),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    opt.label,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected
+                          ? opt.activeColor
+                          : (isDark ? AppColors.slate300 : AppColors.slate700),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? opt.activeColor.withOpacity(0.2)
+                          : (isDark ? AppColors.slate800 : const Color(0xFFF1F5F9)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${opt.count}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? opt.activeColor
+                            : (isDark ? AppColors.slate400 : AppColors.slate500),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _handleFilterTap(_FilterOption opt) {
+    setState(() {
+      if (_selectedStatusFilter == opt.id && opt.id != 'ALL') {
+        _selectedStatusFilter = 'ALL';
+      } else {
+        _selectedStatusFilter = opt.id;
+        if (opt.targetTab != null && _tabController.index != opt.targetTab) {
+          _tabController.animateTo(opt.targetTab!);
+        } else if (opt.id == 'RESCHEDULED') {
+          final isUpcoming = _tabController.index == 0;
+          final upcomingRescheduled = _consultations.where((c) =>
+              (c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING') && c.isRescheduled).length;
+          final pastRescheduled = _consultations.where((c) =>
+              (c.status == 'VIDEO_COMPLETED' || c.status == 'COMPLETED' || c.status == 'CANCELLED' || c.status == 'NO_SHOW') && c.isRescheduled).length;
+          if (isUpcoming && upcomingRescheduled == 0 && pastRescheduled > 0) {
+            _tabController.animateTo(1);
+          } else if (!isUpcoming && pastRescheduled == 0 && upcomingRescheduled > 0) {
+            _tabController.animateTo(0);
+          }
+        }
+      }
+    });
+  }
+
+  String _getFilterLabel(String filterId) {
+    switch (filterId) {
+      case 'SCHEDULED':
+        return 'Scheduled';
+      case 'RESCHEDULED':
+        return 'Rescheduled';
+      case 'COMPLETED':
+        return 'Completed';
+      case 'CANCELLED':
+        return 'Cancelled';
+      default:
+        return '';
+    }
+  }
+
+  Widget _buildContextualBanner({required bool isUpcoming, required bool isDark}) {
+    if (isUpcoming) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0284C7).withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF0284C7).withOpacity(0.22)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.videocam_outlined, size: 18, color: Color(0xFF0284C7)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Video calls unlock 10 mins before your scheduled slot. Join on time to review your metabolic metrics & weekly diet plan.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.35,
+                  color: isDark ? const Color(0xFFBAE6FD) : const Color(0xFF0369A1),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.22)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.verified_outlined, size: 18, color: Color(0xFF10B981)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Clinical session records, dietitian dietary notes, prescribed caloric targets, and follow-up consultation history.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.35,
+                  color: isDark ? const Color(0xFFA7F3D0) : const Color(0xFF047857),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   Widget _buildList(List<ConsultationModel> items, {required bool isUpcoming, required bool isDark}) {
+    List<ConsultationModel> displayItems = items;
+    if (_selectedStatusFilter != 'ALL') {
+      displayItems = items.where((c) {
+        switch (_selectedStatusFilter) {
+          case 'SCHEDULED':
+            return (c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING') && !c.isRescheduled;
+          case 'RESCHEDULED':
+            return c.isRescheduled;
+          case 'COMPLETED':
+            return c.status == 'COMPLETED' || c.status == 'VIDEO_COMPLETED';
+          case 'CANCELLED':
+            return c.status == 'CANCELLED' || c.status == 'NO_SHOW' || c.status == 'DIETITIAN_NO_SHOW';
+          default:
+            return true;
+        }
+      }).toList();
+    }
+
     if (items.isEmpty) {
       return Center(
         child: SingleChildScrollView(
@@ -373,12 +1272,73 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
       );
     }
 
+    if (displayItems.isEmpty) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.slate800 : AppColors.slate100,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.filter_list_off_rounded,
+                  size: 30,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No ${_getFilterLabel(_selectedStatusFilter)} Consultations',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isDark ? Colors.white : AppColors.slate900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'There are no ${isUpcoming ? 'upcoming' : 'past'} consultations matching this status.',
+                style: const TextStyle(color: AppColors.slate500, fontSize: 13, height: 1.4),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _selectedStatusFilter = 'ALL';
+                  });
+                },
+                icon: const Icon(Icons.clear_rounded, size: 16),
+                label: const Text('Show All Consultations'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 88),
+      itemCount: displayItems.length + 1,
+      separatorBuilder: (_, idx) => SizedBox(height: idx == 0 ? 10 : 14),
       itemBuilder: (ctx, idx) {
-        final c = items[idx];
+        if (idx == 0) {
+          return _buildContextualBanner(isUpcoming: isUpcoming, isDark: isDark);
+        }
+        final c = displayItems[idx - 1];
         return _buildConsultationCard(c, isUpcoming: isUpcoming, isDark: isDark);
       },
     );
@@ -426,7 +1386,13 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildStatusChip(c.isDietitianNoShow ? 'DIETITIAN_NO_SHOW' : c.status),
+                    _buildStatusChip(
+                      c.isDietitianNoShow
+                          ? 'DIETITIAN_NO_SHOW'
+                          : (c.isRescheduled && (c.status == 'SCHEDULED' || c.status == 'RESCHEDULED')
+                              ? 'RESCHEDULED'
+                              : c.status),
+                    ),
                     Flexible(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -569,6 +1535,32 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
                           child: Text(
                             'Session Concluded • Dietitian is currently finalizing clinical metrics and nutrition goals from the clinic portal.',
                             style: TextStyle(fontSize: 11, color: Color(0xFF92400E), height: 1.3),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (c.isRescheduled && (c.status == 'SCHEDULED' || c.status == 'RESCHEDULED')) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.update_rounded, size: 14, color: Color(0xFFD97706)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            c.reason != null && c.reason!.isNotEmpty
+                                ? 'Rescheduled: ${c.reason}'
+                                : 'Session has been rescheduled to a new time slot.',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -768,6 +1760,12 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
         fg = const Color(0xFF1D4ED8);
         label = 'CONFIRMED';
         icon = Icons.calendar_today_rounded;
+        break;
+      case 'RESCHEDULED':
+        bg = const Color(0xFFFEF3C7);
+        fg = const Color(0xFFD97706);
+        label = 'RESCHEDULED';
+        icon = Icons.update_rounded;
         break;
       case 'IN_PROGRESS':
         bg = const Color(0xFFFEF3C7);
@@ -1488,4 +2486,22 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
       ),
     );
   }
+}
+
+class _FilterOption {
+  final String id;
+  final String label;
+  final int count;
+  final IconData icon;
+  final Color activeColor;
+  final int? targetTab;
+
+  const _FilterOption({
+    required this.id,
+    required this.label,
+    required this.count,
+    required this.icon,
+    required this.activeColor,
+    this.targetTab,
+  });
 }

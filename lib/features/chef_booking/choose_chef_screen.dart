@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/theme/app_colors.dart';
@@ -106,21 +107,31 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.slate900,
-        title: const Text(
+        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+        foregroundColor: isDark ? Colors.white : AppColors.slate900,
+        title: Text(
           'Choose your chef',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.slate900),
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : AppColors.slate900,
+          ),
         ),
         actions: [
           IconButton(
             tooltip: 'Refresh availability',
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loading ? null : _load,
+            onPressed: _loading
+                ? null
+                : () {
+                    HapticFeedback.lightImpact();
+                    _load();
+                  },
           ),
         ],
       ),
@@ -149,7 +160,10 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
         title: 'Couldn’t load chefs',
         body: _error!,
         actionLabel: 'Try again',
-        onAction: _load,
+        onAction: () {
+          HapticFeedback.lightImpact();
+          _load();
+        },
       );
     }
 
@@ -168,7 +182,10 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
           _AutoAssignTile(
             selected: _selectedId == null,
             recommended: available.isNotEmpty ? available.first : null,
-            onTap: () => setState(() => _selectedId = null),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _selectedId = null);
+            },
           ),
           const SizedBox(height: 18),
           _SectionHeader(
@@ -186,7 +203,10 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
                 child: _ChefCard(
                   chef: c,
                   selected: _selectedId == c.id,
-                  onTap: () => setState(() => _selectedId = c.id),
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _selectedId = c.id);
+                  },
                   onViewProfile: () => _showProfile(c),
                 ),
               ),
@@ -214,6 +234,7 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
   }
 
   Widget _buildConfirmBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final chef = _selectedChef;
     final label = chef == null ? 'Continue with auto-assign' : 'Continue with ${chef.name}';
     return SafeArea(
@@ -221,15 +242,22 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? AppColors.slate900 : Colors.white,
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, -2)),
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.35 : 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
           ],
         ),
         child: SizedBox(
           height: 50,
           child: ElevatedButton(
-            onPressed: _confirm,
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              _confirm();
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -249,6 +277,7 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
   }
 
   void _showProfile(AvailableChefModel chef) {
+    HapticFeedback.lightImpact();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -258,6 +287,7 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
         selected: _selectedId == chef.id,
         onSelect: chef.available
             ? () {
+                HapticFeedback.selectionClick();
                 Navigator.pop(ctx);
                 setState(() => _selectedId = chef.id);
               }
@@ -275,19 +305,23 @@ class _HubStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final open = result.hubOpen;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.slate900 : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.slate200),
+        border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(color: AppColors.primarySubtle, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.primary.withOpacity(0.2) : AppColors.primarySubtle,
+              shape: BoxShape.circle,
+            ),
             child: const Icon(Icons.store_mall_directory_rounded, size: 18, color: AppColors.primary),
           ),
           const SizedBox(width: 12),
@@ -299,7 +333,11 @@ class _HubStrip extends StatelessWidget {
                   result.hubName ?? 'Your service hub',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isDark ? Colors.white : AppColors.slate900,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -312,8 +350,12 @@ class _HubStrip extends StatelessWidget {
           const SizedBox(width: 8),
           _Pill(
             label: open ? 'Open now' : 'Closed now',
-            color: open ? AppColors.successDark : AppColors.amber800,
-            background: open ? AppColors.successLight : AppColors.amber100,
+            color: open
+                ? (isDark ? const Color(0xFF34D399) : AppColors.successDark)
+                : (isDark ? const Color(0xFFFBBF24) : AppColors.amber800),
+            background: open
+                ? (isDark ? const Color(0xFF064E3B) : AppColors.successLight)
+                : (isDark ? const Color(0xFF78350F) : AppColors.amber100),
           ),
         ],
       ),
@@ -330,6 +372,7 @@ class _AutoAssignTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final hint = recommended == null
         ? 'We’ll assign the nearest free certified chef after payment.'
         : 'Right now that’s ${recommended!.name}'
@@ -358,14 +401,31 @@ class _AutoAssignTile extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  children: const [
-                    Text('Let EBIC pick the best chef',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
-                    _Pill(label: 'Fastest', color: AppColors.primaryDark, background: AppColors.primarySubtle),
+                  children: [
+                    Text(
+                      'Let EBIC pick the best chef',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                      ),
+                    ),
+                    _Pill(
+                      label: 'Fastest',
+                      color: isDark ? const Color(0xFF34D399) : AppColors.primaryDark,
+                      background: isDark ? const Color(0xFF064E3B) : AppColors.primarySubtle,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(hint, style: const TextStyle(fontSize: 12, color: AppColors.slate600, height: 1.3)),
+                Text(
+                  hint,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.slate300 : AppColors.slate600,
+                    height: 1.3,
+                  ),
+                ),
               ],
             ),
           ),
@@ -387,6 +447,7 @@ class _ChefCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final dimmed = !chef.available;
     final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -394,7 +455,16 @@ class _ChefCard extends StatelessWidget {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            EBICAvatar(name: chef.name, imageUrl: chef.photoUrl, radius: 24),
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? AppColors.primary : (isDark ? AppColors.slate700 : AppColors.slate200),
+                  width: selected ? 2 : 1,
+                ),
+              ),
+              child: EBICAvatar(name: chef.name, imageUrl: chef.photoUrl, radius: 24),
+            ),
             Positioned(
               right: -1,
               bottom: -1,
@@ -404,7 +474,7 @@ class _ChefCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: chef.available ? AppColors.success : AppColors.slate400,
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
+                  border: Border.all(color: isDark ? AppColors.slate900 : Colors.white, width: 2),
                 ),
               ),
             ),
@@ -422,12 +492,20 @@ class _ChefCard extends StatelessWidget {
                       chef.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                      ),
                     ),
                   ),
                   if (chef.recommended) ...[
                     const SizedBox(width: 6),
-                    const _Pill(label: 'Best match', color: AppColors.amber800, background: AppColors.amber100),
+                    _Pill(
+                      label: 'Best match',
+                      color: isDark ? const Color(0xFFFBBF24) : AppColors.amber800,
+                      background: isDark ? const Color(0xFF78350F) : AppColors.amber100,
+                    ),
                   ],
                 ],
               ),
@@ -441,8 +519,8 @@ class _ChefCard extends StatelessWidget {
                   label: chef.availableAt != null
                       ? '${chef.statusLabel} · free ~${_formatTime(context, chef.availableAt!)}'
                       : chef.statusLabel,
-                  color: AppColors.slate700,
-                  background: AppColors.slate100,
+                  color: isDark ? AppColors.slate300 : AppColors.slate700,
+                  background: isDark ? AppColors.slate800 : AppColors.slate100,
                   icon: Icons.schedule_rounded,
                 ),
               if (chef.cookedForYouCount > 0 || chef.specialities.isNotEmpty || !chef.fromYourHub) ...[
@@ -454,24 +532,28 @@ class _ChefCard extends StatelessWidget {
                     if (chef.cookedForYouCount > 0)
                       _Pill(
                         label: 'Cooked for you ${chef.cookedForYouCount}×',
-                        color: AppColors.primaryDark,
-                        background: AppColors.primarySubtle,
+                        color: isDark ? const Color(0xFF34D399) : AppColors.primaryDark,
+                        background: isDark ? const Color(0xFF064E3B) : AppColors.primarySubtle,
                         icon: Icons.favorite_rounded,
                       ),
                     if (!chef.fromYourHub)
                       _Pill(
                         label: 'From ${chef.hubName}',
-                        color: AppColors.secondary,
-                        background: const Color(0xFFE0F2FE),
+                        color: isDark ? const Color(0xFF38BDF8) : AppColors.secondary,
+                        background: isDark ? const Color(0xFF0C4A6E) : const Color(0xFFE0F2FE),
                       ),
                     ...chef.specialities.take(3).map(
-                          (s) => _Pill(label: s, color: AppColors.slate700, background: AppColors.slate100),
+                          (s) => _Pill(
+                            label: s,
+                            color: isDark ? AppColors.slate300 : AppColors.slate700,
+                            background: isDark ? AppColors.slate800 : AppColors.slate100,
+                          ),
                         ),
                     if (chef.specialities.length > 3)
                       _Pill(
                         label: '+${chef.specialities.length - 3}',
-                        color: AppColors.slate600,
-                        background: AppColors.slate100,
+                        color: isDark ? AppColors.slate400 : AppColors.slate600,
+                        background: isDark ? AppColors.slate800 : AppColors.slate100,
                       ),
                   ],
                 ),
@@ -484,10 +566,12 @@ class _ChefCard extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 6),
                     minimumSize: const Size(0, 30),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: AppColors.primaryDark,
+                    foregroundColor: isDark ? AppColors.primaryLight : AppColors.primaryDark,
                   ),
-                  child: const Text('View profile & reviews',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'View profile & reviews',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ],
@@ -513,6 +597,7 @@ class _MetaLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final parts = <InlineSpan>[];
     if (chef.rating != null) {
       parts.add(const WidgetSpan(
@@ -521,13 +606,13 @@ class _MetaLine extends StatelessWidget {
       ));
       parts.add(TextSpan(
         text: ' ${chef.rating!.toStringAsFixed(1)}',
-        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.slate800),
+        style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.slate800),
       ));
       parts.add(TextSpan(text: ' (${chef.ratingCount})'));
     } else {
-      parts.add(const TextSpan(
+      parts.add(TextSpan(
         text: 'New chef',
-        style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.slate700),
+        style: TextStyle(fontWeight: FontWeight.w600, color: isDark ? AppColors.slate300 : AppColors.slate700),
       ));
     }
     if (chef.experienceYears != null && chef.experienceYears! > 0) {
@@ -550,13 +635,14 @@ class _TravelLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final eta = chef.etaMinutes;
     final km = chef.distanceKm;
     if (eta == null && km == null) {
-      return const _Pill(
+      return _Pill(
         label: 'Available now',
-        color: AppColors.successDark,
-        background: AppColors.successLight,
+        color: isDark ? const Color(0xFF34D399) : AppColors.successDark,
+        background: isDark ? const Color(0xFF064E3B) : AppColors.successLight,
         icon: Icons.check_circle_rounded,
       );
     }
@@ -572,7 +658,11 @@ class _TravelLine extends StatelessWidget {
             ].join('  ·  '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryDark),
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.primaryLight : AppColors.primaryDark,
+            ),
           ),
         ),
       ],
@@ -589,11 +679,12 @@ class _ChefProfileSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SafeArea(
         top: false,
@@ -604,7 +695,10 @@ class _ChefProfileSheet extends StatelessWidget {
               width: 40,
               height: 4,
               margin: const EdgeInsets.only(top: 12, bottom: 8),
-              decoration: BoxDecoration(color: AppColors.slate300, borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate700 : AppColors.slate300,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             Flexible(
               child: ListView(
@@ -619,26 +713,35 @@ class _ChefProfileSheet extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(chef.name,
-                                style: const TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate900)),
+                            Text(
+                              chef.name,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : AppColors.slate900,
+                              ),
+                            ),
                             const SizedBox(height: 2),
-                            Text('Certified EBIC chef · ${chef.hubName}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
+                            Text(
+                              'Certified EBIC chef · ${chef.hubName}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                            ),
                             const SizedBox(height: 6),
                             chef.available
-                                ? const _Pill(
+                                ? _Pill(
                                     label: 'Available now',
-                                    color: AppColors.successDark,
-                                    background: AppColors.successLight,
-                                    icon: Icons.check_circle_rounded)
+                                    color: isDark ? const Color(0xFF34D399) : AppColors.successDark,
+                                    background: isDark ? const Color(0xFF064E3B) : AppColors.successLight,
+                                    icon: Icons.check_circle_rounded,
+                                  )
                                 : _Pill(
                                     label: chef.statusLabel,
-                                    color: AppColors.slate700,
-                                    background: AppColors.slate100,
-                                    icon: Icons.schedule_rounded),
+                                    color: isDark ? AppColors.slate300 : AppColors.slate700,
+                                    background: isDark ? AppColors.slate800 : AppColors.slate100,
+                                    icon: Icons.schedule_rounded,
+                                  ),
                           ],
                         ),
                       ),
@@ -672,8 +775,11 @@ class _ChefProfileSheet extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.primarySubtle,
+                        color: isDark ? AppColors.primary.withOpacity(0.18) : AppColors.primarySubtle,
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark ? AppColors.primary.withOpacity(0.3) : AppColors.primarySubtle,
+                        ),
                       ),
                       child: Row(
                         children: [
@@ -688,7 +794,11 @@ class _ChefProfileSheet extends StatelessWidget {
                                 if (chef.cookedForYouCount > 0)
                                   'Has cooked for you ${chef.cookedForYouCount} time${chef.cookedForYouCount == 1 ? '' : 's'}',
                               ].join('\n'),
-                              style: const TextStyle(fontSize: 12.5, color: AppColors.primaryDark, height: 1.4),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: isDark ? AppColors.primaryLight : AppColors.primaryDark,
+                                height: 1.4,
+                              ),
                             ),
                           ),
                         ],
@@ -697,20 +807,36 @@ class _ChefProfileSheet extends StatelessWidget {
                   ],
                   if (chef.specialities.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    const Text('Specialities',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
+                    Text(
+                      'Specialities',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
                       children: chef.specialities
-                          .map((s) => _Pill(label: s, color: AppColors.slate700, background: AppColors.slate100))
+                          .map((s) => _Pill(
+                                label: s,
+                                color: isDark ? AppColors.slate300 : AppColors.slate700,
+                                background: isDark ? AppColors.slate800 : AppColors.slate100,
+                              ))
                           .toList(),
                     ),
                   ],
                   const SizedBox(height: 18),
-                  const Text('Recent reviews',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900)),
+                  Text(
+                    'Recent reviews',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDark ? Colors.white : AppColors.slate900,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   if (chef.recentReviews.isEmpty)
                     const Text('No written reviews yet.',
@@ -727,17 +853,22 @@ class _ChefProfileSheet extends StatelessWidget {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: onSelect,
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      onSelect!();
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: Text(selected ? 'Selected' : 'Choose ${chef.name}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(
+                      selected ? 'Selected' : 'Choose ${chef.name}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ),
@@ -754,13 +885,14 @@ class _ReviewTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.slate50,
+        color: isDark ? AppColors.slate800 : AppColors.slate50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.slate200),
+        border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -776,7 +908,14 @@ class _ReviewTile extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(review.comment, style: const TextStyle(fontSize: 12.5, color: AppColors.slate700, height: 1.35)),
+          Text(
+            review.comment,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: isDark ? AppColors.slate300 : AppColors.slate700,
+              height: 1.35,
+            ),
+          ),
         ],
       ),
     );
@@ -793,25 +932,34 @@ class _Stat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
         decoration: BoxDecoration(
-          color: AppColors.slate50,
+          color: isDark ? AppColors.slate800 : AppColors.slate50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.slate200),
+          border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
         ),
         child: Column(
           children: [
             Icon(icon, size: 18, color: iconColor),
             const SizedBox(height: 4),
-            Text(value,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.slate900)),
-            Text(label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 10.5, color: AppColors.slate500)),
+            Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: isDark ? Colors.white : AppColors.slate900,
+              ),
+            ),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10.5, color: AppColors.slate500),
+            ),
           ],
         ),
       ),
@@ -828,11 +976,18 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$title ($count)',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900)),
+        Text(
+          '$title ($count)',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+            color: isDark ? Colors.white : AppColors.slate900,
+          ),
+        ),
         const SizedBox(height: 2),
         Text(subtitle, style: const TextStyle(fontSize: 11.5, color: AppColors.slate500)),
       ],
@@ -846,17 +1001,22 @@ class _NoneAvailableCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.amber50,
+        color: isDark ? const Color(0xFF451A03).withOpacity(0.4) : AppColors.amber50,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.amber200),
+        border: Border.all(color: isDark ? const Color(0xFF78350F) : AppColors.amber200),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, color: AppColors.amber700, size: 20),
+          Icon(
+            Icons.info_outline_rounded,
+            color: isDark ? const Color(0xFFFBBF24) : AppColors.amber700,
+            size: 20,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -864,14 +1024,22 @@ class _NoneAvailableCard extends StatelessWidget {
               children: [
                 Text(
                   hubOpen ? 'No chef is free for this visit right now' : 'Your hub is closed right now',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: AppColors.amber800),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13.5,
+                    color: isDark ? const Color(0xFFFDE68A) : AppColors.amber800,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   hubOpen
                       ? 'Every nearby chef is on another booking or off duty. Pull down to refresh in a few minutes.'
                       : 'Chefs start taking visits when the hub opens. Pull down to refresh later.',
-                  style: const TextStyle(fontSize: 12, color: AppColors.amber800, height: 1.35),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? const Color(0xFFFCD34D) : AppColors.amber800,
+                    height: 1.35,
+                  ),
                 ),
               ],
             ),
@@ -924,6 +1092,7 @@ class _MessageState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -932,12 +1101,20 @@ class _MessageState extends StatelessWidget {
           children: [
             Icon(icon, size: 40, color: AppColors.slate400),
             const SizedBox(height: 12),
-            Text(title,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate800)),
+            Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: isDark ? Colors.white : AppColors.slate800,
+              ),
+            ),
             const SizedBox(height: 6),
-            Text(body,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12.5, color: AppColors.slate500)),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12.5, color: AppColors.slate500),
+            ),
             const SizedBox(height: 14),
             OutlinedButton(onPressed: onAction, child: Text(actionLabel)),
           ],
@@ -956,6 +1133,7 @@ class _SelectableShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -965,15 +1143,19 @@ class _SelectableShell extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: selected ? AppColors.primarySubtle : Colors.white,
+            color: selected
+                ? (isDark ? AppColors.primary.withOpacity(0.18) : AppColors.primarySubtle)
+                : (isDark ? AppColors.slate900 : Colors.white),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? AppColors.primary : AppColors.slate200,
+              color: selected
+                  ? AppColors.primary
+                  : (isDark ? AppColors.slate800 : AppColors.slate200),
               width: selected ? 1.8 : 1,
             ),
             boxShadow: selected
-                ? [BoxShadow(color: AppColors.primary.withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 3))]
-                : null,
+                ? [BoxShadow(color: AppColors.primary.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 3))]
+                : (isDark ? null : [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6, offset: const Offset(0, 2))]),
           ),
           child: child,
         ),

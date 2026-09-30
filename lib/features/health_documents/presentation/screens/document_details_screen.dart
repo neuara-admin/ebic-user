@@ -57,7 +57,10 @@ class _DocumentDetailsScreenState extends State<DocumentDetailsScreen> {
     if (_document == null) return;
     setState(() => _isTogglingAccess = true);
     try {
-      await _repository.setDietitianAccess(widget.documentId, widget.memberId, allow);
+      final memberId =
+          _document!.householdMemberId.isNotEmpty ? _document!.householdMemberId : widget.memberId;
+      final ok = await _repository.setDietitianAccess(widget.documentId, memberId, allow);
+      if (!ok) throw Exception('Please try again.');
       // Reload document details to reflect state
       final updated = await _repository.getDocumentDetail(widget.documentId);
       if (mounted) {
@@ -80,7 +83,7 @@ class _DocumentDetailsScreenState extends State<DocumentDetailsScreen> {
       if (mounted) {
         setState(() => _isTogglingAccess = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update access: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text("Couldn't update sharing. ${e.toString().replaceAll('Exception: ', '')}"), backgroundColor: Colors.red),
         );
       }
     }

@@ -499,21 +499,38 @@ class AssignedDietitianModel {
   final String id;
   final String name;
   final String? photoUrl;
+  final String? qualification;
   final List<String> specializations;
+  final int? experienceYears;
+  final String? bio;
+  final String? languages;
+  final double? rating;
 
   AssignedDietitianModel({
     required this.id,
     required this.name,
     this.photoUrl,
+    this.qualification,
     this.specializations = const [],
+    this.experienceYears,
+    this.bio,
+    this.languages,
+    this.rating,
   });
 
   factory AssignedDietitianModel.fromJson(Map<String, dynamic> json) {
+    final rawLangs = json['languages'];
+    final langStr = rawLangs is List ? rawLangs.join(', ') : rawLangs?.toString();
     return AssignedDietitianModel(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Assigned Dietitian',
       photoUrl: json['photoUrl']?.toString(),
+      qualification: json['qualification']?.toString(),
       specializations: (json['specializations'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      experienceYears: int.tryParse(json['experienceYears']?.toString() ?? ''),
+      bio: json['bio']?.toString(),
+      languages: langStr,
+      rating: double.tryParse(json['rating']?.toString() ?? ''),
     );
   }
 }

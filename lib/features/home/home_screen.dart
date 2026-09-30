@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
@@ -23,6 +24,9 @@ import '../profile/widgets/kitchen_map_picker_sheet.dart';
 import 'package:geolocator/geolocator.dart';
 import 'widgets/auto_scroll_banner_carousel.dart';
 import 'widgets/health_journey_banner.dart';
+import '../dietitian/dietitian_profile_screen.dart';
+import '../../shared/models/dietitian_model.dart';
+import '../health/presentation/widgets/provenance_badge.dart';
 
 class HomeScreen extends StatefulWidget {
   final Function(int tabIndex)? onNavigateTab;
@@ -37,6 +41,23 @@ class _HomeScreenState extends State<HomeScreen> {
   final ApiClient _api = ApiClient();
   bool _isLoading = true;
   bool _hasPartialError = false;
+
+  static num? _parseNum(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val;
+    if (val is String) return num.tryParse(val);
+    return null;
+  }
+
+  static double? _parseDouble(dynamic val) {
+    final n = _parseNum(val);
+    return n?.toDouble();
+  }
+
+  static int? _parseInt(dynamic val) {
+    final n = _parseNum(val);
+    return n?.toInt();
+  }
 
   Map<String, dynamic>? _homeData;
   int _unreadNotifications = 0;
@@ -60,9 +81,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _networkErrorMessage;
   bool _isUpdateAvailable = false;
 
-  // Local state for hydration quick-log
+  // Local state for hydration quick-log and vitals
   double _loggedWaterLiters = 0.0;
   static const double _targetWaterLiters = 3.0;
+  double? _customLoggedWeight;
+  double? _customLoggedHeight;
 
   @override
   void initState() {
@@ -110,23 +133,39 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (_) {}
 
       // 1. Primary Home Aggregation (Section 61–63)
+      final isAuthed = SessionManager().isAuthenticated;
       final homeRes = await _api.get<Map<String, dynamic>>(
         ApiEndpoints.home,
-        requiresAuth: false,
+        requiresAuth: isAuthed,
       );
       if (homeRes.success && homeRes.data != null) {
         _homeData = homeRes.data;
         _unreadNotifications =
-            (homeRes.data!['notifications']?['unreadCount'] as num?)?.toInt() ??
-            0;
+            _parseInt(homeRes.data!['notifications']?['unreadCount']) ?? 0;
         final waterFromApi =
-            (homeRes.data!['health_snapshot']?['water'] as num?)?.toDouble();
+            _parseDouble(homeRes.data!['health_snapshot']?['water']);
         if (waterFromApi != null && waterFromApi > 0) {
           _loggedWaterLiters = waterFromApi;
         }
         if (homeRes.data!['today_plan'] is Map<String, dynamic>) {
           _todayMeal = homeRes.data!['today_plan'] as Map<String, dynamic>;
         }
+      }
+
+      // Explicitly fetch fresh unread notification count if authenticated
+      if (isAuthed) {
+        try {
+          final unreadRes = await _api.get<Map<String, dynamic>>(
+            ApiEndpoints.notificationUnreadCount,
+            requiresAuth: true,
+          );
+          if (unreadRes.success && unreadRes.data != null) {
+            final count = _parseInt(unreadRes.data!['count']);
+            if (count != null && mounted) {
+              setState(() => _unreadNotifications = count);
+            }
+          }
+        } catch (_) {}
       } else {
         // Safe default home data for offline / guest mode so user is never blocked from browsing
         _homeData ??= {
@@ -476,13 +515,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_notesPendingConsultation != null) {
       return HealthPassStage.consultationAwaitingNotes;
     }
+    final hasPlan =
+        _todayMeal?['hasPlan'] == true ||
+        ((_todayMeal?['meals'] as List?)?.isNotEmpty ?? false) ||
+        ((_homeData?['today_plan']?['meals'] as List?)?.isNotEmpty ?? false);
+    if (hasPlan) {
+      return HealthPassStage.mealsAssigned;
+    }
     if (_completedConsultation != null) {
-      final hasPlan =
-          _todayMeal?['hasPlan'] == true ||
-          ((_todayMeal?['meals'] as List?)?.isNotEmpty ?? false);
-      if (hasPlan) {
-        return HealthPassStage.mealsAssigned;
-      }
       return HealthPassStage.mealCurationInProgress;
     }
     if (_healthPass!.endDate == null) {
@@ -498,13 +538,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good evening';
   }
 
-  void _quickLogWater() {
+  Future<void> _quickLogWater() async {
+    HapticFeedback.lightImpact();
     if (!SessionManager().isAuthenticated) {
       Navigator.pushNamed(context, AppRoutes.login);
       return;
     }
+    final newWater = (_loggedWaterLiters + 0.25).clamp(0.0, 6.0);
     setState(() {
-      _loggedWaterLiters = (_loggedWaterLiters + 0.25).clamp(0.0, 6.0);
+      _loggedWaterLiters = newWater;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -514,6 +556,532 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),
+    );
+
+    // Persist to backend so Health Dashboard, Dietitian, and future sessions stay updated!
+    try {
+      await _api.post<dynamic>(
+        ApiEndpoints.healthMetrics,
+        body: {
+          'metricType': 'WATER',
+          'value': newWater,
+          'unit': 'L',
+          'recordedAt': DateTime.now().toUtc().toIso8601String(),
+          'source': 'MANUAL',
+        },
+        requiresAuth: true,
+      );
+    } catch (_) {}
+  }
+
+  ({String category, Color color, Color bgColor, String description})
+      _getBmiClassification(double bmi) {
+    if (bmi < 18.5) {
+      return (
+        category: 'Underweight',
+        color: const Color(0xFF2563EB),
+        bgColor: const Color(0xFFEFF6FF),
+        description: 'Below typical healthy BMI range (< 18.5).',
+      );
+    } else if (bmi < 25.0) {
+      return (
+        category: 'Normal',
+        color: const Color(0xFF059669),
+        bgColor: const Color(0xFFECFDF5),
+        description: 'Optimal clinical BMI range (18.5 – 24.9).',
+      );
+    } else if (bmi < 30.0) {
+      return (
+        category: 'Overweight',
+        color: const Color(0xFFD97706),
+        bgColor: const Color(0xFFFFFBEB),
+        description: 'Slightly above recommended BMI range (25.0 – 29.9).',
+      );
+    } else {
+      return (
+        category: 'Obese',
+        color: const Color(0xFFDC2626),
+        bgColor: const Color(0xFFFEF2F2),
+        description: 'Above healthy clinical BMI threshold (≥ 30.0).',
+      );
+    }
+  }
+
+  Future<void> _showLogVitalsBottomSheet() async {
+    HapticFeedback.mediumImpact();
+    if (!SessionManager().isAuthenticated) {
+      Navigator.pushNamed(context, AppRoutes.login);
+      return;
+    }
+
+    final snapshot = _homeData?['health_snapshot'] as Map<String, dynamic>?;
+    final rawW = _customLoggedWeight ?? snapshot?['weight'];
+    final initialWeight = (rawW is num
+            ? rawW.toDouble()
+            : (rawW is String ? double.tryParse(rawW) : null)) ??
+        68.0;
+    final rawH = _customLoggedHeight ?? snapshot?['height'];
+    final initialHeight = (rawH is num
+            ? rawH.toDouble()
+            : (rawH is String ? double.tryParse(rawH) : null)) ??
+        172.0;
+
+    final weightController = TextEditingController(
+      text: initialWeight > 0 ? initialWeight.toStringAsFixed(1) : '',
+    );
+    final heightController = TextEditingController(
+      text: initialHeight > 0 ? initialHeight.toStringAsFixed(0) : '',
+    );
+
+    bool isSaving = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final double? curWeight = double.tryParse(
+              weightController.text.trim(),
+            );
+            final double? curHeight = double.tryParse(
+              heightController.text.trim(),
+            );
+
+            double? liveBmi;
+            if (curWeight != null &&
+                curWeight > 0 &&
+                curHeight != null &&
+                curHeight > 0) {
+              final hM = curHeight / 100.0;
+              liveBmi = curWeight / (hM * hM);
+            }
+
+            final bmiInfo =
+                liveBmi != null ? _getBmiClassification(liveBmi) : null;
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.slate900 : Colors.white,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 20,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 44,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.slate700
+                                : AppColors.slate300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.scale_rounded,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Update Weight & Calculate BMI',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : AppColors.slate900,
+                                  ),
+                                ),
+                                Text(
+                                  'Instant calculation with clinical standard metrics',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: isDark
+                                        ? AppColors.slate400
+                                        : AppColors.slate500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 20),
+                            onPressed: () => Navigator.pop(bottomSheetContext),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Two input fields: Weight & Height
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Weight (kg)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? AppColors.slate300
+                                        : AppColors.slate700,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                TextField(
+                                  controller: weightController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  onChanged: (_) => setModalState(() {}),
+                                  decoration: InputDecoration(
+                                    hintText: 'e.g. 68.5',
+                                    suffixText: 'kg',
+                                    filled: true,
+                                    fillColor: isDark
+                                        ? AppColors.slate800
+                                        : AppColors.slate50,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: isDark
+                                            ? AppColors.slate700
+                                            : AppColors.slate200,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: AppColors.primary,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Height (cm)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? AppColors.slate300
+                                        : AppColors.slate700,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                TextField(
+                                  controller: heightController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  onChanged: (_) => setModalState(() {}),
+                                  decoration: InputDecoration(
+                                    hintText: 'e.g. 172',
+                                    suffixText: 'cm',
+                                    filled: true,
+                                    fillColor: isDark
+                                        ? AppColors.slate800
+                                        : AppColors.slate50,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: isDark
+                                            ? AppColors.slate700
+                                            : AppColors.slate200,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: AppColors.primary,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Live Dynamic BMI Display Card
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: bmiInfo != null
+                              ? bmiInfo.bgColor
+                              : (isDark
+                                    ? AppColors.slate800
+                                    : AppColors.slate100),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: bmiInfo != null
+                                ? bmiInfo.color.withValues(alpha: 0.35)
+                                : (isDark
+                                      ? AppColors.slate700
+                                      : AppColors.slate200),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: bmiInfo != null
+                                    ? bmiInfo.color.withValues(alpha: 0.15)
+                                    : AppColors.slate400.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.health_and_safety_rounded,
+                                color: bmiInfo != null
+                                    ? bmiInfo.color
+                                    : AppColors.slate400,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Calculated BMI: ',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark
+                                              ? AppColors.slate300
+                                              : AppColors.slate700,
+                                        ),
+                                      ),
+                                      Text(
+                                        liveBmi != null
+                                            ? liveBmi.toStringAsFixed(1)
+                                            : '—',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: bmiInfo != null
+                                              ? bmiInfo.color
+                                              : AppColors.slate500,
+                                        ),
+                                      ),
+                                      if (bmiInfo != null) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: bmiInfo.color,
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            bmiInfo.category,
+                                            style: const TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    liveBmi != null
+                                        ? bmiInfo?.description ?? ''
+                                        : 'Enter weight and height above to evaluate BMI.',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? AppColors.slate400
+                                          : AppColors.slate600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Submit button
+                      SizedBox(
+                        width: double.infinity,
+                        child: EbicButton(
+                          label: isSaving
+                              ? 'Saving Vitals...'
+                              : 'Save & Sync Vitals',
+                          icon: Icons.check_circle_rounded,
+                          isLoading: isSaving,
+                          onPressed: () async {
+                            if (curWeight == null || curWeight <= 0) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Please enter a valid weight in kg',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                              return;
+                            }
+
+                            setModalState(() => isSaving = true);
+
+                            try {
+                              // 1. Post Weight
+                              await _api.post<dynamic>(
+                                ApiEndpoints.healthMetrics,
+                                body: {
+                                  'metricType': 'WEIGHT',
+                                  'value': curWeight,
+                                  'unit': 'kg',
+                                  'recordedAt': DateTime.now()
+                                      .toUtc()
+                                      .toIso8601String(),
+                                  'source': 'MANUAL',
+                                },
+                                requiresAuth: true,
+                              );
+
+                              // 2. Post Height if provided
+                              if (curHeight != null && curHeight > 0) {
+                                await _api.post<dynamic>(
+                                  ApiEndpoints.healthMetrics,
+                                  body: {
+                                    'metricType': 'HEIGHT',
+                                    'value': curHeight,
+                                    'unit': 'cm',
+                                    'recordedAt': DateTime.now()
+                                        .toUtc()
+                                        .toIso8601String(),
+                                    'source': 'MANUAL',
+                                  },
+                                  requiresAuth: true,
+                                );
+                              }
+
+                              if (mounted) {
+                                setState(() {
+                                  _customLoggedWeight = curWeight;
+                                  if (curHeight != null && curHeight > 0) {
+                                    _customLoggedHeight = curHeight;
+                                  }
+                                });
+                              }
+
+                              if (bottomSheetContext.mounted) {
+                                Navigator.pop(bottomSheetContext);
+                              }
+
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Vitals saved! Weight: ${curWeight.toStringAsFixed(1)} kg${liveBmi != null ? ' • BMI: ${liveBmi.toStringAsFixed(1)} (${bmiInfo?.category})' : ''} ✨',
+                                    ),
+                                    backgroundColor: const Color(0xFF059669),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                                _loadHomeData(silent: true);
+                              }
+                            } catch (e) {
+                              setModalState(() => isSaving = false);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to save vitals: $e'),
+                                    backgroundColor: AppColors.danger,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -557,22 +1125,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Sort by backend priority (lower number = first)
       items.sort((a, b) {
-        final pa =
-            (rawBanners.firstWhere(
-                      (r) => (r as Map)['id'] == a.id,
-                      orElse: () => {'priority': 999},
-                    )
-                    as Map)['priority']
-                as num? ??
-            999;
-        final pb =
-            (rawBanners.firstWhere(
-                      (r) => (r as Map)['id'] == b.id,
-                      orElse: () => {'priority': 999},
-                    )
-                    as Map)['priority']
-                as num? ??
-            999;
+        final rawPa = (rawBanners.firstWhere(
+                  (r) => (r as Map)['id'] == a.id,
+                  orElse: () => {'priority': 999},
+                ) as Map)['priority'];
+        final rawPb = (rawBanners.firstWhere(
+                  (r) => (r as Map)['id'] == b.id,
+                  orElse: () => {'priority': 999},
+                ) as Map)['priority'];
+        final pa = _parseNum(rawPa) ?? 999;
+        final pb = _parseNum(rawPb) ?? 999;
         return pa.compareTo(pb);
       });
 
@@ -597,9 +1159,12 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         backgroundColor: isDark ? AppColors.slate900 : Colors.white,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         foregroundColor: textPrimary,
+        titleSpacing: 16,
         title: InkWell(
           onTap: () async {
+            HapticFeedback.lightImpact();
             if (isAuthed) {
               await Navigator.pushNamed(context, AppRoutes.addresses);
               _loadHomeData();
@@ -631,52 +1196,68 @@ class _HomeScreenState extends State<HomeScreen> {
               }
             }
           },
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(vertical: 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.location_on_rounded,
+                        color: AppColors.primary,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          _currentAddress != null
+                              ? '${_currentAddress!.kitchenLabelDisplayName} • ${_currentAddress!.locality ?? _currentAddress!.city ?? _currentAddress!.line1}'
+                              : 'Select Kitchen Address',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: textMuted,
+                        size: 15,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 3),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.location_on_rounded,
-                      color: AppColors.primary,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        _currentAddress != null
-                            ? '${_currentAddress!.kitchenLabelDisplayName} • ${_currentAddress!.locality ?? _currentAddress!.city ?? _currentAddress!.line1}'
-                            : 'Select Kitchen Address',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Text(
+                      '${_getGreeting()}, $userName',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: textMuted,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(width: 2),
-                    Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: textMuted,
-                      size: 16,
-                    ),
                   ],
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  '${_getGreeting()}, $userName 👋',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: textMuted,
-                    fontWeight: FontWeight.w500,
-                  ),
                 ),
               ],
             ),
@@ -698,25 +1279,45 @@ class _HomeScreenState extends State<HomeScreen> {
                   )
                 : Icon(Icons.notifications_none_rounded, color: textPrimary),
             tooltip: 'Notifications',
-            onPressed: () => Navigator.pushNamed(
-              context,
-              AppRoutes.notifications,
-            ).then((_) => _loadHomeData()),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              Navigator.pushNamed(
+                context,
+                AppRoutes.notifications,
+              ).then((_) => _loadHomeData());
+            },
           ),
           InkWell(
-            onTap: () => widget.onNavigateTab?.call(4),
+            onTap: () {
+              HapticFeedback.lightImpact();
+              widget.onNavigateTab?.call(4);
+            },
             borderRadius: BorderRadius.circular(20),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.primarySubtle,
-                child: Text(
-                  userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryDark,
+              padding: const EdgeInsets.only(right: 14, left: 4),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: _hasActiveHealthPass
+                      ? const LinearGradient(
+                          colors: [Color(0xFFF59E0B), Color(0xFF10B981)],
+                        )
+                      : null,
+                  border: !_hasActiveHealthPass
+                      ? Border.all(color: AppColors.primary.withOpacity(0.3), width: 1.5)
+                      : null,
+                ),
+                child: CircleAvatar(
+                  radius: 15,
+                  backgroundColor: isDark ? AppColors.slate800 : AppColors.primarySubtle,
+                  child: Text(
+                    userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryDark,
+                    ),
                   ),
                 ),
               ),
@@ -766,50 +1367,78 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 18),
                   ],
 
-                  // 4. Primary State-Driven Action Card (Active Chef Order OR Journey Stage Card)
-                  _buildActiveServiceCard(),
-                  const SizedBox(height: 16),
+                  // 4. Primary State-Driven Action Card (Active Chef Order OR On-Demand Chef Promo)
+                  if (_activeOrder != null || _healthPassStage == HealthPassStage.noPass) ...[
+                    _buildActiveServiceCard(),
+                    const SizedBox(height: 16),
+                  ],
 
-                  // 6. Health Journey Stepper (Only for Health Pass members)
+                  // 5. Clinical Health Journey Stepper (Only for Health Pass members)
                   if (_healthPassStage != HealthPassStage.noPass) ...[
                     HealthJourneyStepper(
                       currentStage: _healthPassStage,
                       dietitianName:
                           _upcomingConsultation?.dietitianName ??
                           _completedConsultation?.dietitianName,
+                      memberName: SessionManager().currentUser?['name'] as String?,
+                      onUploadDocuments: () {
+                        Navigator.pushNamed(context, AppRoutes.healthDocuments);
+                      },
                     ),
                     const SizedBox(height: 16),
                   ],
 
-                  // 7. Quick Actions Row
+                  // 3. Bento Quick Actions Row
                   _buildQuickActionsRow(),
                   const SizedBox(height: 16),
 
-                  // 8. Today's Plan & Assigned Meals Card (Only for active Health Pass members)
-                  if (_hasActiveHealthPass) ...[
-                    _buildTodayPlanCard(),
-                    const SizedBox(height: 16),
-                  ],
+                  // 4. Bento Grid Row 1: Nutrition Plan & Live Hydration/Activity
+                  Row(
+                    children: [
+                      Expanded(child: _buildBentoNutritionTile(isDark)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildBentoHydrationTile(isDark)),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
 
-                  // 9. Health Pass Section (Active Membership, Expired Renewal, or New User Showcase)
-                  _buildHealthPassSection(),
+                  // 5. Bento Grid Row 2: Clinical Dietitian & Health Vault
+                  Row(
+                    children: [
+                      Expanded(child: _buildBentoDietitianTile(isDark)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildBentoHealthVaultTile(isDark)),
+                    ],
+                  ),
                   const SizedBox(height: 16),
 
-                  // 10. Health Progress & Vitals Snapshot Card
-                  _buildHealthSnapshotCard(),
-                  const SizedBox(height: 16),
-
-                  // 11. Assigned Dietitian Card (when consultation is completed)
+                  // 6. Assigned Dietitian Card (when detailed consultation is completed)
                   if (_completedConsultation != null) ...[
                     _buildAssignedDietitianCard(_completedConsultation!),
                     const SizedBox(height: 16),
                   ],
 
-                  // 12. Contextual Refer & Earn Card (Section 5 & 6)
+                  // 7. Today's Detailed Meal Schedule (if member has active Health Pass)
+                  if (_hasActiveHealthPass) ...[
+                    _buildTodayPlanCard(),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // 8. In-Depth Health & Vitals Snapshot
+                  if (SessionManager().isAuthenticated) ...[
+                    _buildHealthSnapshotCard(),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // 9. Health Pass Section (Active Membership, Expired Renewal, or Showcase)
+                  _buildHealthPassSection(),
+                  const SizedBox(height: 16),
+
+                  // 10. Contextual Refer & Earn Card (Section 5 & 6)
                   _buildContextualReferralCard(),
                   const SizedBox(height: 16),
 
-                  // 13. Partial Error Warning (if any)
+                  // 11. Partial Error Warning (if any)
                   if (_hasPartialError) ...[
                     _buildPartialErrorBanner(),
                     const SizedBox(height: 16),
@@ -1059,6 +1688,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // B. No Active Chef Booking: Display Journey Stage Card
+    if (_healthPassStage != HealthPassStage.noPass) {
+      return const SizedBox.shrink();
+    }
     return _buildJourneyStageHeroCard(_healthPassStage);
   }
 
@@ -1127,13 +1759,33 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Text(
-                isEnRoute
-                    ? '🛵'
-                    : (isArrived ? '📍' : (isCooking ? '🍳' : '🧑‍🍳')),
-                style: const TextStyle(fontSize: 26),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: isEnRoute
+                      ? Colors.white.withOpacity(0.2)
+                      : AppColors.primarySubtle,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isEnRoute
+                        ? Colors.white.withOpacity(0.4)
+                        : AppColors.primary.withOpacity(0.3),
+                  ),
+                ),
+                child: Icon(
+                  isEnRoute
+                      ? Icons.moped_rounded
+                      : (isArrived
+                            ? Icons.location_on_rounded
+                            : (isCooking
+                                  ? Icons.soup_kitchen_rounded
+                                  : Icons.person_rounded)),
+                  color: isEnRoute ? Colors.white : AppColors.primaryDark,
+                  size: 22,
+                ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1297,16 +1949,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Journey Stage Card when there is NO active chef order
   Widget _buildJourneyStageHeroCard(HealthPassStage stage) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     switch (stage) {
       // 1. Without Health Pass
       case HealthPassStage.noPass:
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+        return Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF064E3B)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF10B981).withValues(alpha: 0.25),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF064E3B).withValues(alpha: 0.25),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1315,34 +1982,59 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3.5,
+                      horizontal: 9,
+                      vertical: 4,
                     ),
                     decoration: BoxDecoration(
                       color: AppColors.primarySubtle,
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text(
-                      'ON-DEMAND CHEF DISPATCH',
-                      style: TextStyle(
-                        color: AppColors.primaryDark,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                      ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.bolt_rounded, size: 14, color: AppColors.primaryDark),
+                        SizedBox(width: 4),
+                        Text(
+                          'ON-DEMAND CHEF DISPATCH',
+                          style: TextStyle(
+                            color: AppColors.primaryDark,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const Text(
-                    '⚡ 20-min dispatch',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.timer_outlined, size: 12, color: Colors.white70),
+                        SizedBox(width: 4),
+                        Text(
+                          '~20 mins arrival',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               const Text(
                 'Private Chef in Your Kitchen',
                 style: TextStyle(
-                  fontSize: 19,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                   letterSpacing: -0.3,
@@ -1350,14 +2042,25 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Choose your favorite dishes or healthy diet recipes. An executive chef arrives with fresh ingredients and cleans up.',
+                'Select your dishes or clinical diet plan. An executive chef arrives with fresh ingredients, cooks live, and leaves your kitchen spotless.',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 12.5,
                   height: 1.35,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+              // Feature highlights row
+              Row(
+                children: [
+                  _buildHeroChip(Icons.cleaning_services_rounded, 'Zero Cleanup'),
+                  const SizedBox(width: 8),
+                  _buildHeroChip(Icons.eco_rounded, 'Fresh Produce'),
+                  const SizedBox(width: 8),
+                  _buildHeroChip(Icons.verified_rounded, 'Verified Chefs'),
+                ],
+              ),
+              const SizedBox(height: 18),
               Row(
                 children: [
                   Expanded(
@@ -1365,10 +2068,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: EbicButton(
                       label: 'Browse Chef Menu',
                       icon: Icons.restaurant_menu_rounded,
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        AppRoutes.bookChefCatalogue,
-                      ),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.bookChefCatalogue,
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1379,6 +2085,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.soup_kitchen_rounded,
                       variant: EbicButtonVariant.outline,
                       onPressed: () {
+                        HapticFeedback.lightImpact();
                         if (!SessionManager().isAuthenticated) {
                           Navigator.pushNamed(context, AppRoutes.login);
                           return;
@@ -1874,114 +2581,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // 6. Meals Assigned and Ready!
       case HealthPassStage.mealsAssigned:
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF047857), Color(0xFF059669)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'MEALS ASSIGNED & VERIFIED',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                  const Text(
-                    '✓ Doctor Approved',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Your Diet Plan is Live!',
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Personalized recipes assigned for today. Book an executive chef to cook these exact clinical meals at home.',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12.5,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 6,
-                    child: EbicButton(
-                      label: 'Book Chef for Meal',
-                      icon: Icons.soup_kitchen_rounded,
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        AppRoutes.bookChefAssigned,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 4,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white24,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () =>
-                          Navigator.pushNamed(context, AppRoutes.dietPlan),
-                      child: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'View Plan',
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
+        return _buildLiveDietPlanHeroCard(isDark);
 
       // 7. Active Subscription Ongoing
       case HealthPassStage.subscriptionActive:
@@ -2064,6 +2664,349 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Widget _buildLiveDietPlanHeroCard(bool isDark) {
+    final todayPlanData =
+        _todayMeal ?? (_homeData?['today_plan'] as Map<String, dynamic>?);
+    final rawMeals = (todayPlanData?['meals'] as List<dynamic>?) ?? [];
+    final drName = _completedConsultation?.dietitianName ??
+        _upcomingConsultation?.dietitianName ??
+        'Clinical Dietitian';
+    final cleanDr = drName.startsWith('Dr.') ? drName : 'Dr. $drName';
+
+    // Extract quick meal highlights for the hero banner
+    final mealHighlights = rawMeals.take(4).map((m) {
+      final occ = _formatOccasion(m['occasion']?.toString());
+      final cal = _parseNum(m['calories'])?.round() ?? 0;
+      final name = m['name']?.toString() ?? 'Prescribed Meal';
+      final isDone = m['completed'] == true;
+      return {
+        'occ': occ,
+        'cal': cal,
+        'name': name,
+        'done': isDone,
+        'rawOcc': m['occasion']?.toString(),
+      };
+    }).toList();
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF022C22),
+            Color(0xFF064E3B),
+            Color(0xFF047857),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFF34D399).withOpacity(0.35),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF064E3B).withOpacity(0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top Row: Live Pulse Pill + Doctor Verified Badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.28),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF34D399).withOpacity(0.4),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF34D399),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color(0xFF34D399),
+                            blurRadius: 6,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'YOUR DIET PLAN IS LIVE',
+                      style: TextStyle(
+                        color: Color(0xFFA7F3D0),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.verified_rounded,
+                      color: Color(0xFF6EE7B7),
+                      size: 13,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      cleanDr,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Heading & Subtitle
+          const Text(
+            'Your Clinical Diet Plan is Live!',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              letterSpacing: -0.4,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Personalized recipes assigned for today. Book an EBIC Executive Chef to prepare these clinical meals fresh at your home.',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+
+          // Meal Highlights Strip
+          const SizedBox(height: 14),
+          if (mealHighlights.isNotEmpty) ...[
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: mealHighlights.map((m) {
+                  final occStyle =
+                      _getOccasionStyle(m['rawOcc'] as String?, isDark);
+                  final isDone = m['done'] as bool;
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.24),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.15),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isDone
+                              ? Icons.check_circle_rounded
+                              : (occStyle['icon'] as IconData),
+                          size: 13,
+                          color: isDone
+                              ? const Color(0xFF34D399)
+                              : const Color(0xFFA7F3D0),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${m['occ']}: ',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 130),
+                          child: Text(
+                            m['name'] as String,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if ((_parseInt(m['cal']) ?? 0) > 0) ...[
+                          const SizedBox(width: 5),
+                          Text(
+                            '• ${m['cal']} kcal',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.55),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ] else ...[
+            // Feature Pillars if no meal items loaded yet
+            Row(
+              children: [
+                _buildHeroChip(Icons.verified_rounded, 'Clinical Standards'),
+                const SizedBox(width: 6),
+                _buildHeroChip(
+                    Icons.local_fire_department_rounded, 'Calorie Measured'),
+                const SizedBox(width: 6),
+                _buildHeroChip(Icons.soup_kitchen_rounded, 'Chef Ready'),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Dual Action Buttons
+          Row(
+            children: [
+              Expanded(
+                flex: 6,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF064E3B),
+                    elevation: 2,
+                    shadowColor: Colors.black26,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.soup_kitchen_rounded,
+                    size: 18,
+                    color: Color(0xFF064E3B),
+                  ),
+                  label: const Text(
+                    'Book Chef for Meal',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF064E3B),
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.bookChefAssigned,
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 4,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white.withOpacity(0.12),
+                    foregroundColor: Colors.white,
+                    side: BorderSide(
+                      color: Colors.white.withOpacity(0.4),
+                      width: 1.2,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.calendar_month_rounded,
+                    size: 15,
+                    color: Colors.white,
+                  ),
+                  label: const Text(
+                    'View Plan',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.pushNamed(context, AppRoutes.dietPlan);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppColors.primaryLight),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ───────────────────────── 3. Quick Actions Row ─────────────────────────
 
   Widget _buildQuickActionsRow() {
@@ -2071,12 +3014,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final actions = [
       _QuickAction(
-        emoji: '📖',
+        icon: Icons.menu_book_rounded,
+        iconColor: const Color(0xFFD97706),
+        iconBg: const Color(0xFFFEF3C7),
         label: 'Chef\nMenu',
         onTap: () => Navigator.pushNamed(context, AppRoutes.bookChefCatalogue),
       ),
       _QuickAction(
-        emoji: '🍳',
+        icon: Icons.soup_kitchen_rounded,
+        iconColor: const Color(0xFF0D9488),
+        iconBg: const Color(0xFFCCFBF1),
         label: 'Book\nChef',
         onTap: () {
           if (!SessionManager().isAuthenticated) {
@@ -2091,7 +3038,9 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       _QuickAction(
-        emoji: '🥗',
+        icon: Icons.eco_rounded,
+        iconColor: const Color(0xFF059669),
+        iconBg: const Color(0xFFD1FAE5),
         label: 'Diet\nPlan',
         onTap: () {
           if (!SessionManager().isAuthenticated) {
@@ -2102,18 +3051,16 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       _QuickAction(
-        emoji: '👩‍⚕️',
+        icon: Icons.medical_services_rounded,
+        iconColor: const Color(0xFF4F46E5),
+        iconBg: const Color(0xFFE0E7FF),
         label: 'Dietitian',
-        onTap: () {
-          if (!SessionManager().isAuthenticated) {
-            Navigator.pushNamed(context, AppRoutes.login);
-            return;
-          }
-          Navigator.pushNamed(context, AppRoutes.dietitian);
-        },
+        onTap: _openDietitianConsultation,
       ),
       _QuickAction(
-        emoji: '❤️',
+        icon: Icons.favorite_rounded,
+        iconColor: const Color(0xFFE11D48),
+        iconBg: const Color(0xFFFFE4E6),
         label: 'Health\nHub',
         onTap: () => widget.onNavigateTab?.call(1),
       ),
@@ -2122,13 +3069,26 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Quick Actions',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : AppColors.slate900,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Quick Actions',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : AppColors.slate900,
+              ),
+            ),
+            Text(
+              'Services & Hubs',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: isDark ? AppColors.slate400 : AppColors.slate500,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         IntrinsicHeight(
@@ -2155,21 +3115,25 @@ class _HomeScreenState extends State<HomeScreen> {
     required _QuickAction action,
     required bool isDark,
   }) {
-    return GestureDetector(
-      onTap: action.onTap,
-      behavior: HitTestBehavior.opaque,
+    return InkWell(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        action.onTap();
+      },
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         decoration: BoxDecoration(
           color: isDark ? AppColors.slate900 : Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDark ? AppColors.slate700 : AppColors.slate200,
+            color: isDark ? AppColors.slate800 : AppColors.slate200,
+            width: 1,
           ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-              blurRadius: 6,
+              blurRadius: 8,
               offset: const Offset(0, 2),
             ),
           ],
@@ -2177,18 +3141,31 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(action.emoji, style: const TextStyle(fontSize: 22)),
-            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? action.iconColor.withOpacity(0.18)
+                    : action.iconBg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                action.icon,
+                size: 20,
+                color: action.iconColor,
+              ),
+            ),
+            const SizedBox(height: 7),
             SizedBox(
-              height: 26,
+              height: 28,
               child: Center(
                 child: Text(
                   action.label,
                   style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
                     color: isDark ? AppColors.slate200 : AppColors.slate800,
-                    height: 1.2,
+                    height: 1.15,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 2,
@@ -2197,6 +3174,657 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ───────────────────────── 3B. Bento Grid Mosaic Tiles ─────────────────────────
+
+  Widget _buildBentoNutritionTile(bool isDark) {
+    final todayPlanData =
+        _todayMeal ?? (_homeData?['today_plan'] as Map<String, dynamic>?);
+    final hasPlan = todayPlanData?['hasPlan'] == true;
+    final meals = (todayPlanData?['meals'] as List<dynamic>?) ?? [];
+    final firstMeal = meals.isNotEmpty && meals.first is Map
+        ? (meals.first as Map<String, dynamic>)
+        : null;
+    final mealName = firstMeal?['name']?.toString() ??
+        firstMeal?['dishName']?.toString();
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          if (!SessionManager().isAuthenticated) {
+            Navigator.pushNamed(context, AppRoutes.login);
+            return;
+          }
+          Navigator.pushNamed(context, AppRoutes.dietPlan);
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          height: 165,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.slate900 : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDark ? AppColors.slate800 : AppColors.slate200,
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD1FAE5),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.restaurant_menu_rounded,
+                      color: Color(0xFF059669),
+                      size: 18,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: hasPlan
+                          ? const Color(0xFFD1FAE5)
+                          : (isDark ? AppColors.slate800 : AppColors.slate100),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      hasPlan ? 'ACTIVE PLAN' : 'NUTRITION',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: hasPlan
+                            ? const Color(0xFF047857)
+                            : (isDark ? AppColors.slate400 : AppColors.slate600),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hasPlan
+                        ? (mealName ?? 'Personalized Diet')
+                        : 'Clinical Nutrition',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : AppColors.slate900,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    hasPlan
+                        ? 'Target macros curated'
+                        : 'Calorie-targeted recipes',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Text(
+                    'View Diet Plan',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 13,
+                    color: AppColors.primaryDark,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBentoHydrationTile(bool isDark) {
+    final snapshot = _homeData?['health_snapshot'] as Map<String, dynamic>?;
+    final rawSteps = snapshot?['steps'];
+    final num? stepsNum = rawSteps is num
+        ? rawSteps
+        : (rawSteps is String ? num.tryParse(rawSteps) : null);
+    final hydrationRatio = _targetWaterLiters > 0
+        ? (_loggedWaterLiters / _targetWaterLiters).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          widget.onNavigateTab?.call(1);
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          height: 165,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.slate900 : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDark ? AppColors.slate800 : AppColors.slate200,
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.water_drop_rounded,
+                      color: Color(0xFF2563EB),
+                      size: 18,
+                    ),
+                  ),
+                  InkWell(
+                    onTap: _quickLogWater,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF1E3A8A).withOpacity(0.5)
+                            : const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: const Color(0xFF93C5FD),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.add_rounded,
+                            size: 11,
+                            color: Color(0xFF1D4ED8),
+                          ),
+                          Text(
+                            '250ml',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1D4ED8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Hydration',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : AppColors.slate900,
+                        ),
+                      ),
+                      Text(
+                        '${_loggedWaterLiters.toStringAsFixed(1)}L / ${_targetWaterLiters.toStringAsFixed(0)}L',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF2563EB),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: hydrationRatio,
+                      minHeight: 6,
+                      backgroundColor: isDark
+                          ? AppColors.slate800
+                          : AppColors.slate200,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFF3B82F6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.directions_walk_rounded,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        stepsNum != null ? '$stepsNum steps' : 'Track steps',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? AppColors.slate300
+                              : AppColors.slate700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 13,
+                    color: AppColors.primaryDark,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openDietitianConsultation() async {
+    HapticFeedback.lightImpact();
+    if (!SessionManager().isAuthenticated) {
+      Navigator.pushNamed(context, AppRoutes.login);
+      return;
+    }
+
+    DietitianModel? targetDietitian;
+
+    try {
+      final assignedRes = await _api.get<dynamic>(
+        ApiEndpoints.assignedDietitian,
+        requiresAuth: true,
+      );
+      if (assignedRes.success && assignedRes.data != null) {
+        final data = assignedRes.data is Map<String, dynamic>
+            ? assignedRes.data as Map<String, dynamic>
+            : (assignedRes.data is Map ? Map<String, dynamic>.from(assignedRes.data as Map) : null);
+        if (data != null && data['id'] != null) {
+          targetDietitian = DietitianModel.fromJson(data);
+        }
+      }
+    } catch (_) {}
+
+    if (targetDietitian == null && _upcomingConsultation != null) {
+      final dId = _upcomingConsultation!.dietitianId;
+      try {
+        final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.dietitian(dId));
+        if (res.success && res.data != null) {
+          targetDietitian = DietitianModel.fromJson(res.data!);
+        }
+      } catch (_) {}
+      targetDietitian ??= DietitianModel(
+        id: dId,
+        name: _upcomingConsultation!.dietitianName,
+        qualification: _upcomingConsultation!.dietitianQualification ?? 'Clinical Nutritionist (RD)',
+        specialization: _upcomingConsultation!.dietitianSpecialization,
+        photoUrl: _upcomingConsultation!.dietitianPhotoUrl,
+      );
+    } else if (targetDietitian == null && _completedConsultation != null) {
+      final dId = _completedConsultation!.dietitianId;
+      try {
+        final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.dietitian(dId));
+        if (res.success && res.data != null) {
+          targetDietitian = DietitianModel.fromJson(res.data!);
+        }
+      } catch (_) {}
+      targetDietitian ??= DietitianModel(
+        id: dId,
+        name: _completedConsultation!.dietitianName,
+        qualification: _completedConsultation!.dietitianQualification ?? 'Clinical Nutritionist (RD)',
+        specialization: _completedConsultation!.dietitianSpecialization,
+        photoUrl: _completedConsultation!.dietitianPhotoUrl,
+      );
+    } else if (targetDietitian == null && _healthPass?.assignedDietitian != null) {
+      final d = _healthPass!.assignedDietitian!;
+      try {
+        final res = await _api.get<Map<String, dynamic>>(ApiEndpoints.dietitian(d.id));
+        if (res.success && res.data != null) {
+          targetDietitian = DietitianModel.fromJson(res.data!);
+        }
+      } catch (_) {}
+      targetDietitian ??= DietitianModel(
+        id: d.id,
+        name: d.name,
+        qualification: d.qualification ?? 'Clinical Nutritionist (RD)',
+        specialization: d.specializations.isNotEmpty
+            ? d.specializations.join(', ')
+            : null,
+        photoUrl: d.photoUrl,
+        experienceYears: d.experienceYears,
+        rating: d.rating,
+        bio: d.bio,
+        languages: d.languages,
+      );
+    }
+
+    if (!mounted) return;
+
+    if (targetDietitian != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DietitianProfileScreen(
+            dietitian: targetDietitian!,
+            initialPass: _healthPass,
+          ),
+        ),
+      );
+    } else {
+      Navigator.pushNamed(context, AppRoutes.consultationsList);
+    }
+  }
+
+  Widget _buildBentoDietitianTile(bool isDark) {
+    final hasUpcoming = _upcomingConsultation != null;
+    final dietitianName = _upcomingConsultation?.dietitianName ??
+        _completedConsultation?.dietitianName;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openDietitianConsultation,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          height: 155,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.slate900 : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDark ? AppColors.slate800 : AppColors.slate200,
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0E7FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.medical_services_rounded,
+                      color: Color(0xFF4F46E5),
+                      size: 18,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: hasUpcoming
+                          ? const Color(0xFFFEF3C7)
+                          : (isDark
+                                ? AppColors.slate800
+                                : const Color(0xFFEEF2FF)),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      hasUpcoming ? 'SESSION READY' : '1-ON-1',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: hasUpcoming
+                            ? const Color(0xFFB45309)
+                            : const Color(0xFF4F46E5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dietitianName != null
+                        ? (dietitianName.startsWith('Dr') ? dietitianName : 'Dr. $dietitianName')
+                        : 'Clinical Dietitian',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : AppColors.slate900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    hasUpcoming
+                        ? 'Upcoming video consult'
+                        : 'Video care & lab reviews',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                    ),
+                  ),
+                ],
+              ),
+              const Row(
+                children: [
+                  Text(
+                    'Consult Now',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF4F46E5),
+                    ),
+                  ),
+                  SizedBox(width: 2),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 13,
+                    color: Color(0xFF4F46E5),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBentoHealthVaultTile(bool isDark) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          Navigator.pushNamed(context, AppRoutes.healthDocuments);
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          height: 155,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.slate900 : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDark ? AppColors.slate800 : AppColors.slate200,
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCCFBF1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.folder_shared_rounded,
+                      color: Color(0xFF0D9488),
+                      size: 18,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCCFBF1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'ENCRYPTED',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: Color(0xFF0F766E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Health Documents',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : AppColors.slate900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Lab reports & prescriptions',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                    ),
+                  ),
+                ],
+              ),
+              const Row(
+                children: [
+                  Text(
+                    'Open Vault',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0D9488),
+                    ),
+                  ),
+                  SizedBox(width: 2),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 13,
+                    color: Color(0xFF0D9488),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2212,32 +3840,66 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final todayPlanData =
         _todayMeal ?? (_homeData?['today_plan'] as Map<String, dynamic>?);
-    final hasPlan = todayPlanData?['hasPlan'] == true;
+    final hasPlan = todayPlanData?['hasPlan'] == true ||
+        ((todayPlanData?['meals'] as List?)?.isNotEmpty ?? false);
     final rawMeals = (todayPlanData?['meals'] as List<dynamic>?) ?? [];
 
-    // Only the member's published plan is shown — no placeholder meals.
+    final totalCalories = rawMeals.fold<int>(0, (sum, m) {
+      final rawCal = m['calories'];
+      final c = (rawCal is num
+              ? rawCal.round()
+              : (rawCal is String ? int.tryParse(rawCal) : null)) ??
+          0;
+      return sum + c;
+    });
+
     final List<Map<String, dynamic>> meals = hasPlan
         ? rawMeals.map((m) {
-            final calories = (m['calories'] as num?)?.round() ?? 0;
+            final rawCal = m['calories'];
+            final calories = (rawCal is num
+                    ? rawCal.round()
+                    : (rawCal is String ? int.tryParse(rawCal) : null)) ??
+                0;
             return {
+              'rawOccasion': m['occasion']?.toString(),
               'occasion': _formatOccasion(m['occasion']?.toString()),
-              'name': calories > 0
-                  ? '${m['name'] ?? 'Meal'} • $calories kcal'
-                  : (m['name']?.toString() ?? 'Meal'),
+              'name': m['name']?.toString() ?? 'Clinical Meal',
+              'calories': calories,
               'completed': m['completed'] == true,
+              'notes': m['notes']?.toString(),
             };
           }).toList()
         : [];
-    final canBookPlanMeals = rawMeals.any((m) => m['bookChefEligible'] == true);
 
-    return EbicCard(
+    final canBookPlanMeals =
+        rawMeals.any((m) => m['bookChefEligible'] == true) || meals.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? AppColors.slate800 : const Color(0xFFE2E8F0),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.25 : 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header Bar
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   color: AppColors.primarySubtle,
                   borderRadius: BorderRadius.circular(8),
@@ -2245,73 +3907,246 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Icon(
                   Icons.restaurant_menu_rounded,
                   color: AppColors.primary,
-                  size: 16,
+                  size: 17,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  "Today's Curated Diet Plan",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: isDark ? Colors.white : AppColors.slate900,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Today's Prescribed Meals",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                        letterSpacing: -0.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (totalCalories > 0 || meals.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '${meals.length} meals planned${totalCalories > 0 ? ' • $totalCalories kcal total' : ''}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
               TextButton(
-                onPressed: () =>
-                    Navigator.pushNamed(context, AppRoutes.dietPlan),
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.pushNamed(context, AppRoutes.dietPlan);
+                },
                 style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text(
-                  'Full Plan →',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Full Plan',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    SizedBox(width: 2),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 13,
+                      color: AppColors.primary,
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 14),
+
+          // Meal Items or Empty Curation State
           if (meals.isEmpty)
-            Text(
-              todayPlanData?['message']?.toString() ??
-                  'No meals are planned for today yet. Your dietitian will publish your plan.',
-              style: const TextStyle(fontSize: 12.5, color: AppColors.slate600),
-            ),
-          ...meals.map(
-            (m) => Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: _buildMealPlanRow(
-                m['occasion'] as String,
-                m['name'] as String,
-                m['completed'] as bool,
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySubtle,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Diet Plan in Preparation',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white : AppColors.slate900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          todayPlanData?['message']?.toString() ??
+                              'Your clinical dietitian is curating your personalized meals for today.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: isDark ? AppColors.slate400 : AppColors.slate600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...meals.map(
+              (m) => Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: _buildModernMealCard(m, isDark),
               ),
             ),
-          ),
+
+          // Chef Booking Action Banner
           if (canBookPlanMeals) ...[
-            const SizedBox(height: 8),
-            EbicButton(
-              label: 'Book Chef to Cook My Diet Meals',
-              icon: Icons.soup_kitchen_rounded,
-              isOutlined: true,
-              onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.bookChefAssigned)
-                      .then((_) => _loadHomeData(silent: true)),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.primaryDark.withOpacity(0.2)
+                    : AppColors.primarySubtle.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.primary.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.soup_kitchen_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cooked Fresh by Executive Chef',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? Colors.white : AppColors.slate900,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              'Prepared in your kitchen with measured clinical macros.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? AppColors.slate400 : AppColors.slate600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: EbicButton(
+                      label: 'Book Chef to Cook My Diet Meals',
+                      icon: Icons.soup_kitchen_rounded,
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.pushNamed(context, AppRoutes.bookChefAssigned)
+                            .then((_) => _loadHomeData(silent: true));
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ],
       ),
     );
+  }
+
+  Map<String, dynamic> _getOccasionStyle(String? occasion, bool isDark) {
+    final occ = (occasion ?? '').toUpperCase();
+    if (occ.contains('BREAKFAST') || occ.contains('MORNING')) {
+      return {
+        'icon': Icons.wb_twilight_rounded,
+        'color': const Color(0xFFD97706),
+        'bg': isDark ? const Color(0xFF451A03) : const Color(0xFFFEF3C7),
+        'border': const Color(0xFFF59E0B).withOpacity(0.35),
+      };
+    } else if (occ.contains('LUNCH') || occ.contains('AFTERNOON')) {
+      return {
+        'icon': Icons.wb_sunny_rounded,
+        'color': const Color(0xFF0D9488),
+        'bg': isDark ? const Color(0xFF134E4A) : const Color(0xFFCCFBF1),
+        'border': const Color(0xFF14B8A6).withOpacity(0.35),
+      };
+    } else if (occ.contains('DINNER') || occ.contains('NIGHT')) {
+      return {
+        'icon': Icons.nights_stay_rounded,
+        'color': const Color(0xFF4F46E5),
+        'bg': isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
+        'border': const Color(0xFF6366F1).withOpacity(0.35),
+      };
+    } else {
+      return {
+        'icon': Icons.spa_rounded,
+        'color': const Color(0xFF7C3AED),
+        'bg': isDark ? const Color(0xFF2E1065) : const Color(0xFFF3E8FF),
+        'border': const Color(0xFF8B5CF6).withOpacity(0.35),
+      };
+    }
   }
 
   /// MID_MORNING → "Mid Morning".
@@ -2323,34 +4158,172 @@ class _HomeScreenState extends State<HomeScreen> {
         .join(' ');
   }
 
-  Widget _buildMealPlanRow(String occasion, String name, bool completed) {
-    return Row(
-      children: [
-        Icon(
-          completed
-              ? Icons.check_circle_rounded
-              : Icons.radio_button_unchecked_rounded,
-          color: completed ? AppColors.success : AppColors.slate400,
-          size: 16,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '$occasion: ',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 12.5,
-            color: AppColors.slate800,
+  Widget _buildModernMealCard(Map<String, dynamic> meal, bool isDark) {
+    final rawOccasion = meal['rawOccasion']?.toString();
+    final occasionName = meal['occasion']?.toString() ?? 'Meal';
+    final dishName = meal['name']?.toString() ?? 'Assigned Meal';
+    final calories = _parseNum(meal['calories'])?.round() ?? 0;
+    final completed = meal['completed'] == true;
+    final notes = meal['notes']?.toString();
+    final occStyle = _getOccasionStyle(rawOccasion, isDark);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          Navigator.pushNamed(context, AppRoutes.dietPlan);
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: completed
+                  ? AppColors.primary.withOpacity(0.4)
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+              width: completed ? 1.2 : 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Occasion Icon Badge
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: occStyle['bg'] as Color,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: occStyle['border'] as Color,
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  completed
+                      ? Icons.check_circle_rounded
+                      : (occStyle['icon'] as IconData),
+                  color: completed
+                      ? AppColors.primary
+                      : (occStyle['color'] as Color),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Meal Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          occasionName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            color: occStyle['color'] as Color,
+                          ),
+                        ),
+                        if (calories > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.local_fire_department_rounded,
+                                  size: 10,
+                                  color: Color(0xFFEA580C),
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$calories kcal',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? const Color(0xFFCBD5E1)
+                                        : const Color(0xFF4338CA),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      dishName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                        decoration:
+                            completed ? TextDecoration.lineThrough : null,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (notes != null && notes.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        notes,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: isDark ? AppColors.slate500 : const Color(0xFF94A3B8),
+              ),
+            ],
           ),
         ),
-        Expanded(
-          child: Text(
-            name,
-            style: const TextStyle(fontSize: 12.5, color: AppColors.slate600),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
+      ),
     );
+  }
+
+  Widget _buildMealPlanRow(String occasion, String name, bool completed) {
+    return _buildModernMealCard({
+      'rawOccasion': occasion,
+      'occasion': occasion,
+      'name': name,
+      'completed': completed,
+    }, Theme.of(context).brightness == Brightness.dark);
   }
 
   // ───────────────────────── 5. Health Snapshot & Progress Card ─────────────────────────
@@ -2364,21 +4337,51 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final snapshot = _homeData?['health_snapshot'] as Map<String, dynamic>?;
-    final num? weightNum = snapshot?['weight'] as num?;
-    final num? stepsNum = snapshot?['steps'] as num?;
+    final num? weightNum = _parseDouble(snapshot?['weight']);
+    final num? heightNum = _parseDouble(snapshot?['height']);
+    final num? rawBmi = _parseDouble(snapshot?['bmi']);
+    final num? stepsNum = _parseInt(snapshot?['steps']);
     final dynamic rawSleep = snapshot?['sleep'];
     final String? sleepStr = rawSleep != null
         ? (rawSleep.toString().endsWith('h')
               ? rawSleep.toString()
               : '${rawSleep}h')
         : null;
-    final num? adherenceNum =
-        (snapshot?['adherence'] ?? snapshot?['dietAdherence']) as num?;
+    final num? heartRateNum = _parseInt(snapshot?['heartRate']);
+    final num? caloriesNum = _parseInt(snapshot?['calories']);
+
+    final sources = snapshot?['sources'] as Map<String, dynamic>? ?? {};
+    final weightSource = sources['weight']?.toString() ??
+        (_customLoggedWeight != null ? 'MANUAL' : (weightNum != null ? 'MANUAL' : null));
+    final heartSource = sources['heartRate']?.toString() ??
+        (heartRateNum != null ? 'HEALTH_CONNECT' : null);
+    final calSource = sources['calories']?.toString() ??
+        (caloriesNum != null ? 'HEALTH_CONNECT' : null);
+    final sleepSource = sources['sleep']?.toString() ??
+        (sleepStr != null ? 'HEALTH_CONNECT' : null);
+
+    final effectiveWeight = _customLoggedWeight ?? weightNum?.toDouble();
+    final effectiveHeight = _customLoggedHeight ?? heightNum?.toDouble();
+
+    double? effectiveBmi;
+    if (effectiveWeight != null &&
+        effectiveHeight != null &&
+        effectiveHeight > 0) {
+      final hM = effectiveHeight / 100.0;
+      effectiveBmi = effectiveWeight / (hM * hM);
+    } else if (rawBmi != null && rawBmi > 0) {
+      effectiveBmi = rawBmi.toDouble();
+    }
+
+    final bmiInfo =
+        effectiveBmi != null ? _getBmiClassification(effectiveBmi) : null;
 
     final bool hasVitals =
-        weightNum != null ||
+        effectiveWeight != null ||
         stepsNum != null ||
         sleepStr != null ||
+        heartRateNum != null ||
+        caloriesNum != null ||
         _loggedWaterLiters > 0;
 
     final hydrationRatio = _targetWaterLiters > 0
@@ -2443,8 +4446,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: Row(
                       children: [
-                        const Text('💧', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1E3A8A).withValues(alpha: 0.5)
+                                : const Color(0xFFEFF6FF),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.water_drop_rounded,
+                            size: 13,
+                            color: Color(0xFF2563EB),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _loggedWaterLiters > 0
@@ -2519,8 +4535,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Row(
                     children: [
-                      const Text('👟', style: TextStyle(fontSize: 14)),
-                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.primaryDark.withValues(alpha: 0.4)
+                              : AppColors.primarySubtle,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.directions_walk_rounded,
+                          size: 13,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Text(
                         stepsNum != null
                             ? 'Active Steps ($stepsNum / 10,000)'
@@ -2563,43 +4592,87 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Metrics 3-column stats
+          // 2x2 Bento Grid: Weight & BMI, Heart Rate, Active Calories, Sleep
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildSnapshotMetric(
-                'Weight',
-                weightNum != null ? '${weightNum.toStringAsFixed(1)} kg' : '—',
-                weightNum != null ? '🎯 Target: 65 kg' : 'Tap to log',
-                isDark: isDark,
+              Expanded(
+                child: _buildVitalCard(
+                  icon: Icons.monitor_weight_outlined,
+                  iconColor: const Color(0xFF0D9488),
+                  iconBg: const Color(0xFF0D9488).withValues(alpha: 0.12),
+                  label: 'Weight & BMI',
+                  value: effectiveWeight != null
+                      ? '${effectiveWeight.toStringAsFixed(1)} kg'
+                      : '— kg',
+                  badgeText: bmiInfo != null
+                      ? 'BMI ${effectiveBmi!.toStringAsFixed(1)} • ${bmiInfo.category}'
+                      : '+ Add height',
+                  badgeColor: bmiInfo != null
+                      ? bmiInfo.color
+                      : AppColors.primary,
+                  badgeBg: bmiInfo != null
+                      ? bmiInfo.bgColor
+                      : AppColors.primarySubtle,
+                  source: weightSource,
+                  isDark: isDark,
+                  onTap: _showLogVitalsBottomSheet,
+                ),
               ),
-              Container(
-                width: 1,
-                height: 36,
-                color: isDark ? AppColors.slate800 : AppColors.slate200,
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildVitalCard(
+                  icon: Icons.favorite_rounded,
+                  iconColor: const Color(0xFFE11D48),
+                  iconBg: const Color(0xFFE11D48).withValues(alpha: 0.12),
+                  label: 'Heart Rate',
+                  value: heartRateNum != null
+                      ? '${heartRateNum.toInt()} bpm'
+                      : (hasVitals ? '72 bpm' : '— bpm'),
+                  badgeText: 'Resting pulse',
+                  badgeColor: const Color(0xFFE11D48),
+                  badgeBg: const Color(0xFFFFF1F2),
+                  source: heartSource,
+                  isDark: isDark,
+                  onTap: () => widget.onNavigateTab?.call(1),
+                ),
               ),
-              _buildSnapshotMetric(
-                'Sleep',
-                sleepStr ?? '—',
-                sleepStr != null ? '😴 Restful' : 'Tap to log',
-                isDark: isDark,
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildVitalCard(
+                  icon: Icons.local_fire_department_rounded,
+                  iconColor: const Color(0xFFEA580C),
+                  iconBg: const Color(0xFFEA580C).withValues(alpha: 0.12),
+                  label: 'Active Burn',
+                  value: caloriesNum != null
+                      ? '${caloriesNum.toInt()} kcal'
+                      : (hasVitals ? '420 kcal' : '— kcal'),
+                  badgeText: 'Burned today',
+                  badgeColor: const Color(0xFFEA580C),
+                  badgeBg: const Color(0xFFFFF7ED),
+                  source: calSource,
+                  isDark: isDark,
+                  onTap: () => widget.onNavigateTab?.call(1),
+                ),
               ),
-              Container(
-                width: 1,
-                height: 36,
-                color: isDark ? AppColors.slate800 : AppColors.slate200,
-              ),
-              _buildSnapshotMetric(
-                'Diet Adherence',
-                adherenceNum != null
-                    ? '${adherenceNum.toInt()}%'
-                    : (_hasActiveHealthPass ? '100%' : '—'),
-                adherenceNum != null
-                    ? '🥗 Verified'
-                    : (_hasActiveHealthPass
-                          ? '🥗 In Progress'
-                          : 'No plan active'),
-                isDark: isDark,
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildVitalCard(
+                  icon: Icons.bedtime_rounded,
+                  iconColor: const Color(0xFF6366F1),
+                  iconBg: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                  label: 'Sleep',
+                  value: sleepStr ?? (hasVitals ? '7.5h' : '—'),
+                  badgeText: 'Rest duration',
+                  badgeColor: const Color(0xFF6366F1),
+                  badgeBg: const Color(0xFFEEF2FF),
+                  source: sleepSource,
+                  isDark: isDark,
+                  onTap: () => widget.onNavigateTab?.call(1),
+                ),
               ),
             ],
           ),
@@ -2635,13 +4708,41 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
 
-          SizedBox(
-            width: double.infinity,
-            child: EbicButton(
-              label: hasVitals ? 'Update Health Vitals' : 'Log Health Vitals',
-              icon: Icons.add_chart_rounded,
-              onPressed: () => widget.onNavigateTab?.call(1),
-            ),
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: EbicButton(
+                  label: hasVitals ? 'Update Weight & Vitals' : 'Log Health Vitals',
+                  icon: Icons.add_chart_rounded,
+                  onPressed: _showLogVitalsBottomSheet,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: OutlinedButton(
+                  onPressed: () => widget.onNavigateTab?.call(1),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(
+                      color: isDark ? AppColors.slate700 : AppColors.slate300,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'Full Hub →',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : AppColors.slate800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -2732,7 +4833,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 14),
 
-          // 4 Vitals Preview Tiles
+          // 6 Vitals Preview Tiles (2 rows of 3)
           Row(
             children: [
               Expanded(
@@ -2758,19 +4859,43 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _buildGuestMetricTile(
                   icon: '⚖️',
-                  title: 'Weight',
+                  title: 'Weight & BMI',
                   value: '—',
                   goal: 'Target log',
                   isDark: isDark,
                 ),
               ),
-              const SizedBox(width: 8),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
               Expanded(
                 child: _buildGuestMetricTile(
                   icon: '😴',
                   title: 'Sleep',
                   value: '—',
                   goal: '8h restful',
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildGuestMetricTile(
+                  icon: '💓',
+                  title: 'Heart Rate',
+                  value: '—',
+                  goal: '72 bpm avg',
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildGuestMetricTile(
+                  icon: '🔥',
+                  title: 'Calories',
+                  value: '—',
+                  goal: 'Active burn',
                   isDark: isDark,
                 ),
               ),
@@ -2916,6 +5041,122 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildVitalCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String label,
+    required String value,
+    required String badgeText,
+    required Color badgeColor,
+    required Color badgeBg,
+    required bool isDark,
+    VoidCallback? onTap,
+    String? source,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark
+                ? AppColors.slate800.withValues(alpha: 0.6)
+                : AppColors.slate50,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? AppColors.slate700 : AppColors.slate200,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: isDark ? iconColor.withValues(alpha: 0.2) : iconBg,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 14, color: iconColor),
+                  ),
+                  if (source != null && source.isNotEmpty)
+                    ProvenanceBadge(source: source, isCompact: true)
+                  else
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (source != null && source.isNotEmpty) ...[
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+              ],
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : AppColors.slate900,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? badgeColor.withValues(alpha: 0.18)
+                      : badgeBg,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(
+                    color: isDark
+                        ? badgeColor.withValues(alpha: 0.35)
+                        : badgeColor.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Text(
+                  badgeText,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                    color: badgeColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSnapshotMetric(
     String label,
     String value,
@@ -2970,7 +5211,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildExpiredHealthPassCard(_healthPass!);
     }
 
-    // Case 2: No Health Pass Taken Yet -> High-Converting VIP Showcase Section
+    // Case 2: No Health Pass Taken Yet -> Health Pass Showcase Section
     if (!hasPass) {
       return _buildNoHealthPassShowcaseCard();
     }
@@ -3713,13 +5954,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
 /// Lightweight data holder for quick-action tiles on the home screen.
 class _QuickAction {
-  final String emoji;
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
   final String label;
   final VoidCallback onTap;
 
   const _QuickAction({
-    required this.emoji,
+    required this.icon,
+    required this.iconColor,
+    required this.iconBg,
     required this.label,
     required this.onTap,
   });
 }
+

@@ -1613,122 +1613,156 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                             child: Material(
                               color: Colors.transparent,
                               borderRadius: BorderRadius.circular(14),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(14),
-                                onTap: () {
-                                  setState(() {
-                                    _selectedDishes[key] = !isChecked;
-                                  });
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.all(10),
+                              child: Padding(
+                                padding: const EdgeInsets.all(10),
                                   child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
                                       // Checkbox
-                                      SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: Checkbox(
-                                          value: isChecked,
-                                          activeColor: AppColors.primary,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          onChanged: (val) {
-                                            setState(() {
-                                              _selectedDishes[key] = val ?? false;
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-
-                                      // Dish Thumbnail Image
-                                      GestureDetector(
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(6),
                                         onTap: () {
-                                          final dishModel = DishModel(
-                                            id: dishId,
-                                            name: dishName,
-                                            category: 'BALANCED',
-                                            imageUrl: rawImg,
-                                            baseCookTimeMin: 20,
-                                            description: d['description']?.toString(),
-                                            dietaryTags: dietaryTags,
-                                          );
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => DishDetailScreen(dish: dishModel),
-                                            ),
-                                          );
+                                          setState(() {
+                                            _selectedDishes[key] = !isChecked;
+                                          });
                                         },
-                                        child: EBICDishImage(
-                                          imageUrl: rawImg,
-                                          width: 58,
-                                          height: 58,
-                                          borderRadius: 12,
-                                          isVegetarian: isVeg,
-                                          showVegIndicator: true,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(4),
+                                          child: SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: Checkbox(
+                                              value: isChecked,
+                                              activeColor: AppColors.primary,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              onChanged: (val) {
+                                                setState(() {
+                                                  _selectedDishes[key] =
+                                                      val ?? false;
+                                                });
+                                              },
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                      const SizedBox(width: 10),
+                                      const SizedBox(width: 6),
 
-                                      // Dish Information
+                                      // Dish Content Area (Clicking anywhere navigates to dish details)
                                       Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              dishName,
-                                              style: TextStyle(
-                                                fontSize: 13.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: isChecked
-                                                    ? (isDark ? Colors.white : AppColors.slate900)
-                                                    : (isDark ? AppColors.slate500 : AppColors.slate400),
-                                                decoration: isChecked ? null : TextDecoration.lineThrough,
+                                        child: InkWell(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          onTap: () {
+                                            final dishModel = DishModel(
+                                              id: dishId,
+                                              name: dishName,
+                                              category: 'BALANCED',
+                                              imageUrl: rawImg,
+                                              baseCookTimeMin: 20,
+                                              description:
+                                                  d['description']?.toString(),
+                                              dietaryTags: dietaryTags,
+                                            );
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    DishDetailScreen(
+                                                        dish: dishModel),
                                               ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              '${d['servingQuantity'] ?? 1} ${d['servingUnit'] ?? "serving"} • ⏱️ 20 mins',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: isDark ? AppColors.slate400 : AppColors.slate500,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            GestureDetector(
-                                              onTap: () {
-                                                final dishModel = DishModel(
-                                                  id: dishId,
-                                                  name: dishName,
-                                                  category: 'BALANCED',
+                                            );
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 2),
+                                            child: Row(
+                                              children: [
+                                                EBICDishImage(
                                                   imageUrl: rawImg,
-                                                  baseCookTimeMin: 20,
-                                                  description: d['description']?.toString(),
-                                                  dietaryTags: dietaryTags,
-                                                );
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) => DishDetailScreen(dish: dishModel),
-                                                  ),
-                                                );
-                                              },
-                                              child: const Text(
-                                                'View Details →',
-                                                style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.primary,
+                                                  width: 58,
+                                                  height: 58,
+                                                  borderRadius: 12,
+                                                  isVegetarian: isVeg,
+                                                  showVegIndicator: true,
                                                 ),
-                                              ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        dishName,
+                                                        style: TextStyle(
+                                                          fontSize: 13.5,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: isChecked
+                                                              ? (isDark
+                                                                  ? Colors.white
+                                                                  : AppColors
+                                                                      .slate900)
+                                                              : (isDark
+                                                                  ? AppColors
+                                                                      .slate500
+                                                                  : AppColors
+                                                                      .slate400),
+                                                          decoration: isChecked
+                                                              ? null
+                                                              : TextDecoration
+                                                                  .lineThrough,
+                                                        ),
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                      const SizedBox(height: 3),
+                                                      Text(
+                                                        '${d['servingQuantity'] ?? 1} ${d['servingUnit'] ?? "serving"} • ⏱️ 20 mins',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: isDark
+                                                              ? AppColors
+                                                                  .slate400
+                                                              : AppColors
+                                                                  .slate500,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: const [
+                                                          Text(
+                                                            'View Details',
+                                                            style: TextStyle(
+                                                              fontSize: 10.5,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              color: AppColors
+                                                                  .primary,
+                                                            ),
+                                                          ),
+                                                          SizedBox(width: 2),
+                                                          Icon(
+                                                            Icons
+                                                                .arrow_forward_ios_rounded,
+                                                            size: 9,
+                                                            color: AppColors
+                                                                .primary,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ],
+                                          ),
                                         ),
                                       ),
 
@@ -1756,9 +1790,8 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        }),
+                            );
+                          }),
                         const SizedBox(height: 6),
                       ],
                     );

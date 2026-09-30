@@ -322,18 +322,65 @@ class _HealthMetricDetailScreenState extends State<HealthMetricDetailScreen> {
     );
   }
 
+  double? _parseDouble(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val.toDouble();
+    if (val is String) return double.tryParse(val);
+    return null;
+  }
+
   Widget _buildBodyView() {
-    final weight = _data?['currentWeightKg'];
-    final bmi = _data?['bmi'];
-    final height = _data?['heightCm'];
+    final weight = _parseDouble(_data?['currentWeightKg']);
+    final rawBmi = _parseDouble(_data?['bmi']);
+    final height = _parseDouble(_data?['heightCm']);
+
+    double? bmi = rawBmi;
+    if ((bmi == null || bmi <= 0) && weight != null && height != null && height > 0) {
+      final hM = height / 100.0;
+      bmi = double.parse((weight / (hM * hM)).toStringAsFixed(1));
+    }
+
+    String bmiCategory = 'Pending';
+    Color bmiColor = const Color(0xFF0D9488);
+    if (bmi != null && bmi > 0) {
+      if (bmi < 18.5) {
+        bmiCategory = 'Underweight';
+        bmiColor = const Color(0xFF0284C7);
+      } else if (bmi < 25.0) {
+        bmiCategory = 'Normal';
+        bmiColor = const Color(0xFF059669);
+      } else if (bmi < 30.0) {
+        bmiCategory = 'Overweight';
+        bmiColor = const Color(0xFFD97706);
+      } else {
+        bmiCategory = 'Obese';
+        bmiColor = const Color(0xFFDC2626);
+      }
+    }
+
+    // Spectrum Progress: 4 distinct clinical zones
+    double? meterProgress;
+    if (bmi != null && bmi > 0) {
+      if (bmi < 18.5) {
+        meterProgress = ((bmi - 12.0) / (18.5 - 12.0) * 0.25).clamp(0.04, 0.23);
+      } else if (bmi < 25.0) {
+        meterProgress = 0.25 + ((bmi - 18.5) / (25.0 - 18.5) * 0.25).clamp(0.01, 0.23);
+      } else if (bmi < 30.0) {
+        meterProgress = 0.50 + ((bmi - 25.0) / (30.0 - 25.0) * 0.25).clamp(0.01, 0.23);
+      } else {
+        meterProgress = (0.75 + ((bmi - 30.0) / 10.0) * 0.25).clamp(0.77, 0.96);
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHeroMetricCard(
           title: 'CURRENT BODY WEIGHT',
-          value: weight != null ? '$weight kg' : 'Syncing...',
-          subtitle: bmi != null ? 'Body Mass Index: $bmi kg/m²' : 'BMI automatically calculated',
+          value: weight != null ? '${weight.toStringAsFixed(1)} kg' : 'Syncing...',
+          subtitle: bmi != null
+              ? 'Body Mass Index: ${bmi.toStringAsFixed(1)} kg/m² ($bmiCategory)'
+              : 'BMI automatically calculated',
           icon: Icons.monitor_weight_rounded,
           color: const Color(0xFF0D9488),
         ),
@@ -341,13 +388,208 @@ class _HealthMetricDetailScreenState extends State<HealthMetricDetailScreen> {
         Row(
           children: [
             Expanded(
-              child: _buildMiniStatCard('Height', height != null ? '$height cm' : 'Not set', Icons.height_rounded),
+              child: _buildMiniStatCard(
+                'Height',
+                height != null ? '${height.toInt()} cm' : 'Not set',
+                Icons.height_rounded,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _buildMiniStatCard('BMI Category', bmi != null ? (bmi < 25 ? 'Normal' : 'Overweight') : 'Pending', Icons.health_and_safety_rounded),
+              child: _buildMiniStatCard(
+                'BMI Category',
+                bmi != null ? '$bmiCategory (${bmi.toStringAsFixed(1)})' : 'Pending',
+                Icons.health_and_safety_rounded,
+              ),
             ),
           ],
+        ),
+        const SizedBox(height: 16),
+
+        // BMI Spectrum Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.slate200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'BMI CLINICAL SPECTRUM',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: AppColors.slate500,
+                    ),
+                  ),
+                  if (bmi != null && bmi > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: bmiColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${bmi.toStringAsFixed(1)} • $bmiCategory',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: bmiColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Bar + Pointer Stack
+              SizedBox(
+                height: 22,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(5),
+                        child: SizedBox(
+                          height: 8,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                flex: 25,
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF38BDF8),
+                                    borderRadius: BorderRadius.horizontal(left: Radius.circular(5)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 2.5),
+                              Expanded(
+                                flex: 25,
+                                child: Container(
+                                  color: const Color(0xFF10B981),
+                                ),
+                              ),
+                              const SizedBox(width: 2.5),
+                              Expanded(
+                                flex: 25,
+                                child: Container(
+                                  color: const Color(0xFFF59E0B),
+                                ),
+                              ),
+                              const SizedBox(width: 2.5),
+                              Expanded(
+                                flex: 25,
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFEF4444),
+                                    borderRadius: BorderRadius.horizontal(right: Radius.circular(5)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (meterProgress != null)
+                      FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: meterProgress,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            width: 6,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: AppColors.slate900,
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: const [
+                  Expanded(
+                    child: Text(
+                      'Under (<18.5)',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0284C7),
+                      ),
+                      textAlign: TextAlign.left,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Normal (18.5-24.9)',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF059669),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Over (25-29.9)',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFD97706),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Obese (≥30)',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFDC2626),
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );

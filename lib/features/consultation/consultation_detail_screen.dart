@@ -333,7 +333,22 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
     String title;
     String subtitle;
 
-    switch (c.status) {
+    final effectiveStatus = (c.isRescheduled && (c.status == 'SCHEDULED' || c.status == 'RESCHEDULED'))
+        ? 'RESCHEDULED'
+        : c.status;
+
+    switch (effectiveStatus) {
+      case 'RESCHEDULED':
+        bg = const Color(0xFFFEF3C7);
+        border = const Color(0xFFF59E0B);
+        iconColor = const Color(0xFFD97706);
+        titleColor = const Color(0xFF92400E);
+        icon = Icons.update_rounded;
+        title = 'Consultation Rescheduled';
+        subtitle = c.reason != null && c.reason!.isNotEmpty
+            ? 'Rescheduled: ${c.reason}. Your new time slot is reserved.'
+            : 'Your consultation has been rescheduled to a new time slot.';
+        break;
       case 'IN_PROGRESS':
         bg = const Color(0xFFFEF3C7);
         border = const Color(0xFFF59E0B);

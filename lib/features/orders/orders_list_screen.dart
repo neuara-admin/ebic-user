@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
@@ -9,6 +10,13 @@ import '../../shared/models/order_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
+
+enum ChefBookingFilter {
+  all,
+  completed,
+  cancelledByChef,
+  cancelledByCustomer,
+}
 
 class OrdersListScreen extends StatefulWidget {
   const OrdersListScreen({super.key});
@@ -24,9 +32,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   List<OrderModel> _orders = [];
   bool _isLoading = true;
   String? _errorMessage;
-
-  String _currentFilter = 'ALL';
-  String _previousFilter = 'ALL';
+  ChefBookingFilter _selectedFilter = ChefBookingFilter.all;
 
   @override
   void initState() {
@@ -94,12 +100,21 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       }
 
       if (mounted) {
+        final parsed = rawList
+            .map((json) => OrderModel.fromJson(json is Map<String, dynamic> ? json : {}))
+            .toList();
+        final currentCount = parsed.where(_isCurrent).length;
+        final previousCount = parsed.where((o) => !_isCurrent(o)).length;
+
         setState(() {
-          _orders = rawList
-              .map((json) => OrderModel.fromJson(json is Map<String, dynamic> ? json : {}))
-              .toList();
+          _orders = parsed;
           _isLoading = false;
         });
+
+        // If user has no active bookings but has past visits, seamlessly show Previous Bookings
+        if (currentCount == 0 && previousCount > 0 && _tabController.index == 0) {
+          _tabController.animateTo(1);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -128,31 +143,67 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     // 2. Previous Bookings (Completed, Cancelled)
     final allPreviousOrders = _orders.where((o) => !_isCurrent(o)).toList();
 
-    // Apply Filters
-    final filteredCurrent = allCurrentOrders.where((o) {
-      if (_currentFilter == 'EN_ROUTE') {
-        return o.status == 'CHEF_EN_ROUTE' || o.status == 'EN_ROUTE' || o.status == 'CHEF_ARRIVED' || o.status == 'ARRIVED';
-      } else if (_currentFilter == 'COOKING') {
-        return o.status == 'IN_PROGRESS' || o.status == 'COOKING' || o.status == 'PLATING';
-      } else if (_currentFilter == 'SCHEDULED') {
-        return o.status == 'DRAFT' || o.status == 'CREATED' || o.status == 'SEARCHING' || o.status == 'CONFIRMED' || o.status == 'PENDING';
+    // 3. Filter previous bookings based on selected status filter
+    final filteredPreviousOrders = allPreviousOrders.where((o) {
+      switch (_selectedFilter) {
+        case ChefBookingFilter.all:
+          return true;
+        case ChefBookingFilter.completed:
+          return o.isCompleted;
+        case ChefBookingFilter.cancelledByChef:
+          return o.isCancelledByChef;
+        case ChefBookingFilter.cancelledByCustomer:
+          return o.isCancelledByCustomer;
       }
-      return true;
     }).toList();
 
-    final filteredPrevious = allPreviousOrders.where((o) {
-      if (_previousFilter == 'COMPLETED') {
-        return o.status == 'COMPLETED';
-      } else if (_previousFilter == 'CANCELLED') {
-        return o.isCancelled;
-      }
-      return true;
-    }).toList();
+    String previousEmptyTitle;
+    String previousEmptySubtitle;
+    switch (_selectedFilter) {
+      case ChefBookingFilter.all:
+        previousEmptyTitle = 'No previous bookings yet';
+        previousEmptySubtitle = 'Your past chef visits, receipts, and order summaries will be archived here.';
+        break;
+      case ChefBookingFilter.completed:
+        previousEmptyTitle = 'No completed bookings';
+        previousEmptySubtitle = 'Completed culinary visits and fulfilled dining sessions will appear here.';
+        break;
+      case ChefBookingFilter.cancelledByChef:
+        previousEmptyTitle = 'No bookings cancelled by chef';
+        previousEmptySubtitle = 'None of your chef bookings were cancelled or rejected by an assigned culinary partner.';
+        break;
+      case ChefBookingFilter.cancelledByCustomer:
+        previousEmptyTitle = 'No bookings cancelled by you';
+        previousEmptySubtitle = 'You have not cancelled any chef bookings.';
+        break;
+    }
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(
-        title: Text('Chef Bookings & Orders', style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Chef Bookings',
+              style: TextStyle(
+                color: textPrimary,
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+                letterSpacing: -0.3,
+              ),
+            ),
+            Text(
+              'Culinary visits & dining history',
+              style: TextStyle(
+                color: textMuted,
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
         backgroundColor: isDark ? AppColors.slate900 : Colors.white,
         foregroundColor: textPrimary,
         elevation: 0,
@@ -163,15 +214,67 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             onPressed: _fetchOrders,
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: isDark ? AppColors.primaryLight : AppColors.primaryDark,
-          unselectedLabelColor: isDark ? AppColors.slate400 : AppColors.slate600,
-          indicatorColor: isDark ? AppColors.primaryLight : AppColors.primary,
-          tabs: [
-            Tab(text: 'Current Bookings (${allCurrentOrders.length})'),
-            Tab(text: 'Previous Bookings (${allPreviousOrders.length})'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(56),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+            height: 46,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                width: 1,
+              ),
+            ),
+            padding: const EdgeInsets.all(3.5),
+            child: TabBar(
+              controller: _tabController,
+              splashFactory: NoSplash.splashFactory,
+              overlayColor: const MaterialStatePropertyAll(Colors.transparent),
+              indicatorSize: TabBarIndicatorSize.tab,
+              dividerColor: Colors.transparent,
+              labelPadding: EdgeInsets.zero,
+              onTap: (_) => HapticFeedback.selectionClick(),
+              indicator: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.primaryLight.withOpacity(0.35)
+                      : AppColors.primary.withOpacity(0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDark ? 0.35 : 0.06),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              tabs: [
+                Tab(
+                  child: _buildTabItem(
+                    index: 0,
+                    label: 'Current Bookings',
+                    count: allCurrentOrders.length,
+                    icon: Icons.soup_kitchen_rounded,
+                    isDark: isDark,
+                  ),
+                ),
+                Tab(
+                  child: _buildTabItem(
+                    index: 1,
+                    label: 'Previous Bookings',
+                    count: allPreviousOrders.length,
+                    icon: Icons.history_rounded,
+                    isDark: isDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
       body: _isLoading
@@ -197,52 +300,42 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      // Current Bookings Tab
-                      Column(
-                        children: [
-                          _buildFilterRow(
-                            chips: [
-                              {'id': 'ALL', 'label': 'All Current'},
-                              {'id': 'EN_ROUTE', 'label': 'En Route / Arriving'},
-                              {'id': 'COOKING', 'label': 'Cooking Now'},
-                              {'id': 'SCHEDULED', 'label': 'Upcoming Scheduled'},
-                            ],
-                            selectedId: _currentFilter,
-                            onSelected: (id) => setState(() => _currentFilter = id),
-                            isDark: isDark,
-                          ),
-                          Expanded(
-                            child: _buildOrdersList(
-                              filteredCurrent,
-                              emptyTitle: 'No current chef bookings',
-                              emptySubtitle: 'Book a home chef for personalized dining cooked fresh in your kitchen.',
-                              isDark: isDark,
-                              textPrimary: textPrimary,
-                              textSecondary: textSecondary,
-                              textMuted: textMuted,
-                            ),
-                          ),
-                        ],
+                      // Current Bookings Tab (Live / Active)
+                      _buildOrdersList(
+                        allCurrentOrders,
+                        emptyTitle: 'No current chef bookings',
+                        emptySubtitle: 'Book a home chef for personalized dining cooked fresh in your kitchen.',
+                        isDark: isDark,
+                        textPrimary: textPrimary,
+                        textSecondary: textSecondary,
+                        textMuted: textMuted,
+                        secondaryEmptyAction: allPreviousOrders.isNotEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: TextButton.icon(
+                                  onPressed: () {
+                                    HapticFeedback.selectionClick();
+                                    _tabController.animateTo(1);
+                                  },
+                                  icon: const Icon(Icons.history_rounded, size: 16),
+                                  label: Text('View Past Bookings (${allPreviousOrders.length})'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: isDark ? AppColors.primaryLight : AppColors.primary,
+                                  ),
+                                ),
+                              )
+                            : null,
                       ),
 
-                      // Previous Bookings Tab
+                      // Previous Bookings Tab with status filters
                       Column(
                         children: [
-                          _buildFilterRow(
-                            chips: [
-                              {'id': 'ALL', 'label': 'All Previous'},
-                              {'id': 'COMPLETED', 'label': 'Completed'},
-                              {'id': 'CANCELLED', 'label': 'Cancelled'},
-                            ],
-                            selectedId: _previousFilter,
-                            onSelected: (id) => setState(() => _previousFilter = id),
-                            isDark: isDark,
-                          ),
+                          _buildFilterChipsBar(allPreviousOrders, isDark),
                           Expanded(
                             child: _buildOrdersList(
-                              filteredPrevious,
-                              emptyTitle: 'No previous bookings yet',
-                              emptySubtitle: 'Your past chef visits, receipts, and order summaries will be archived here.',
+                              filteredPreviousOrders,
+                              emptyTitle: previousEmptyTitle,
+                              emptySubtitle: previousEmptySubtitle,
                               isDark: isDark,
                               textPrimary: textPrimary,
                               textSecondary: textSecondary,
@@ -257,43 +350,211 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildFilterRow({
-    required List<Map<String, String>> chips,
-    required String selectedId,
-    required ValueChanged<String> onSelected,
+  Widget _buildTabItem({
+    required int index,
+    required String label,
+    required int count,
+    required IconData icon,
     required bool isDark,
   }) {
+    return AnimatedBuilder(
+      animation: _tabController.animation!,
+      builder: (context, _) {
+        final animValue = _tabController.animation?.value ?? _tabController.index.toDouble();
+        final isSelected = animValue.round() == index;
+        final textPrimary = isDark ? Colors.white : AppColors.slate900;
+        final textMuted = isDark ? AppColors.slate400 : AppColors.slate500;
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected
+                  ? (isDark ? AppColors.primaryLight : AppColors.primary)
+                  : textMuted,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isSelected ? textPrimary : textMuted,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isDark ? AppColors.primaryLight.withOpacity(0.2) : AppColors.primary)
+                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: isSelected
+                      ? (isDark ? AppColors.primaryLight : Colors.white)
+                      : (isDark ? AppColors.slate300 : AppColors.slate700),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterChipsBar(List<OrderModel> previousOrders, bool isDark) {
+    final allCount = previousOrders.length;
+    final completedCount = previousOrders.where((o) => o.isCompleted).length;
+    final cancelledByChefCount = previousOrders.where((o) => o.isCancelledByChef).length;
+    final cancelledByCustomerCount = previousOrders.where((o) => o.isCancelledByCustomer).length;
+
     return Container(
-      width: double.infinity,
-      color: isDark ? AppColors.slate900 : Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
         child: Row(
-          children: chips.map((c) {
-            final isSelected = c['id'] == selectedId;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(
-                  c['label']!,
+          children: [
+            _buildFilterChip(
+              filter: ChefBookingFilter.all,
+              label: 'All Bookings',
+              count: allCount,
+              icon: Icons.receipt_long_rounded,
+              isDark: isDark,
+            ),
+            const SizedBox(width: 8),
+            _buildFilterChip(
+              filter: ChefBookingFilter.completed,
+              label: 'Completed',
+              count: completedCount,
+              icon: Icons.check_circle_outline_rounded,
+              isDark: isDark,
+            ),
+            const SizedBox(width: 8),
+            _buildFilterChip(
+              filter: ChefBookingFilter.cancelledByChef,
+              label: 'Cancelled by Chef',
+              count: cancelledByChefCount,
+              icon: Icons.person_off_outlined,
+              isDark: isDark,
+            ),
+            const SizedBox(width: 8),
+            _buildFilterChip(
+              filter: ChefBookingFilter.cancelledByCustomer,
+              label: 'Cancelled by You',
+              count: cancelledByCustomerCount,
+              icon: Icons.cancel_outlined,
+              isDark: isDark,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required ChefBookingFilter filter,
+    required String label,
+    required int count,
+    required IconData icon,
+    required bool isDark,
+  }) {
+    final isSelected = _selectedFilter == filter;
+
+    final bgColor = isSelected
+        ? (isDark ? AppColors.primary.withOpacity(0.2) : AppColors.primary)
+        : (isDark ? const Color(0xFF1E293B) : Colors.white);
+
+    final borderColor = isSelected
+        ? (isDark ? AppColors.primaryLight.withOpacity(0.55) : AppColors.primaryDark)
+        : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0));
+
+    final textColor = isSelected
+        ? (isDark ? AppColors.primaryLight : Colors.white)
+        : (isDark ? AppColors.slate300 : AppColors.slate700);
+
+    final iconColor = isSelected
+        ? (isDark ? AppColors.primaryLight : Colors.white)
+        : (isDark ? AppColors.slate400 : AppColors.slate500);
+
+    final pillBg = isSelected
+        ? (isDark ? AppColors.primaryLight.withOpacity(0.25) : Colors.white.withOpacity(0.25))
+        : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9));
+
+    final pillTextColor = isSelected
+        ? (isDark ? AppColors.primaryLight : Colors.white)
+        : (isDark ? AppColors.slate300 : AppColors.slate600);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() {
+            _selectedFilter = filter;
+          });
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: borderColor, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isSelected ? (isDark ? 0.25 : 0.08) : (isDark ? 0.08 : 0.02)),
+                blurRadius: 4,
+                offset: const Offset(0, 1.5),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: iconColor),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: textColor,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: pillBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
                   style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSelected
-                        ? Colors.white
-                        : (isDark ? Colors.white70 : AppColors.slate700),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: pillTextColor,
                   ),
                 ),
-                selected: isSelected,
-                selectedColor: AppColors.primary,
-                backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
-                onSelected: (_) => onSelected(c['id']!),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                visualDensity: VisualDensity.compact,
               ),
-            );
-          }).toList(),
+            ],
+          ),
         ),
       ),
     );
@@ -307,6 +568,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     required Color textPrimary,
     required Color textSecondary,
     required Color textMuted,
+    Widget? secondaryEmptyAction,
   }) {
     if (items.isEmpty) {
       final isAuthed = SessionManager().isAuthenticated;
@@ -363,6 +625,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   },
                 ),
               ),
+              if (secondaryEmptyAction != null) secondaryEmptyAction,
             ],
           ),
         ),
@@ -372,204 +635,371 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
 
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemBuilder: (ctx, idx) {
-        final order = items[idx];
-        final isCancelled = order.status.toUpperCase().contains('CANCEL');
-        final isActive = !isCancelled &&
-            order.status.toUpperCase() != 'COMPLETED' &&
-            order.status.toUpperCase() != 'CLOSED';
+        return _buildBentoOrderCard(
+          context: ctx,
+          order: items[idx],
+          isDark: isDark,
+          textPrimary: textPrimary,
+          textSecondary: textSecondary,
+          textMuted: textMuted,
+          dateFormat: dateFormat,
+        );
+      },
+    );
+  }
 
-        return EbicCard(
-          onTap: () async {
-            await Navigator.pushNamed(
-              context,
-              AppRoutes.orderDetail,
-              arguments: {'orderId': order.id, 'order': order},
-            );
-            if (mounted) _fetchOrders();
-          },
+  Widget _buildBentoOrderCard({
+    required BuildContext context,
+    required OrderModel order,
+    required bool isDark,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color textMuted,
+    required DateFormat dateFormat,
+  }) {
+    final isCancelled = order.status.toUpperCase().contains('CANCEL');
+    final isActive = !isCancelled &&
+        order.status.toUpperCase() != 'COMPLETED' &&
+        order.status.toUpperCase() != 'CLOSED';
+    final hasEndOtp = isActive && order.statusStepIndex >= 4 && order.completionOtp != null;
+    final hasStartOtp = isActive && !hasEndOtp && order.startOtp != null;
+    final activeOtp = hasEndOtp ? order.completionOtp : (hasStartOtp ? order.startOtp : null);
+    final otpLabel = hasEndOtp ? 'END OTP' : 'START OTP';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          HapticFeedback.lightImpact();
+          await Navigator.pushNamed(
+            context,
+            AppRoutes.orderDetail,
+            arguments: {'orderId': order.id, 'order': order},
+          );
+          if (mounted) _fetchOrders();
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isActive
+                  ? (isDark ? AppColors.primary.withOpacity(0.4) : AppColors.primary.withOpacity(0.25))
+                  : (isDark ? AppColors.slate800 : const Color(0xFFE2E8F0)),
+              width: isActive ? 1.6 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isActive
+                    ? AppColors.primary.withOpacity(isDark ? 0.2 : 0.08)
+                    : Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+                blurRadius: isActive ? 16 : 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header: Booking Ref & Status Badge
+              // ── BENTO CELL 1: Header (Ref, Occasion, Status, Date) ──
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      order.bookingReference ?? order.id.substring(0, 10).toUpperCase(),
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textPrimary),
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                order.bookingReference ?? order.id.substring(0, 10).toUpperCase(),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 15,
+                                  color: textPrimary,
+                                  letterSpacing: -0.2,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                              ),
+                              child: Text(
+                                order.occasionLabel,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? AppColors.slate300 : AppColors.slate700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.calendar_today_rounded, size: 11.5, color: textMuted),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                dateFormat.format(order.createdAt),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 11, color: textMuted),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
                   StatusBadge(status: order.status),
                 ],
               ),
-              const SizedBox(height: 4),
 
-              // Date, Occasion, and OTP Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
+              // Kitchen Address snippet if present
+              if (order.address?.line1 != null && order.address!.line1.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B).withOpacity(0.5) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isDark ? const Color(0xFF334155).withOpacity(0.5) : const Color(0xFFF1F5F9)),
+                  ),
+                  child: Row(
                     children: [
-                      Icon(Icons.event_note_rounded, size: 13, color: textMuted),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${dateFormat.format(order.createdAt)} • ${order.occasionLabel}',
-                        style: TextStyle(fontSize: 11, color: textMuted),
+                      const Icon(Icons.location_on_outlined, size: 13, color: AppColors.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${order.address!.label ?? "Kitchen"}: ${order.address!.line1}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, color: textSecondary),
+                        ),
                       ),
                     ],
                   ),
-                  if (isActive) ...[
-                    if (order.statusStepIndex >= 4) ...[
-                      // Real code only — hidden until the backend has provided it
-                      if (order.completionOtp != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFAF5FF),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFA855F7)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.verified_rounded, size: 11, color: Color(0xFF7E22CE)),
-                            const SizedBox(width: 4),
-                            Text(
-                              'END OTP: ${order.completionOtp}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF7E22CE),
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else if (order.startOtp != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFECFDF5),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF10B981)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.key_rounded, size: 11, color: Color(0xFF047857)),
-                            const SizedBox(width: 4),
-                            Text(
-                              'START OTP: ${order.startOtp}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF047857),
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-
-              // Address snippet if available
-              if (order.address?.line1 != null && order.address!.line1.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(Icons.location_on_outlined, size: 13, color: textMuted),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        '${order.address!.label ?? "Kitchen"}: ${order.address!.line1}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11, color: textMuted),
-                      ),
-                    ),
-                  ],
                 ),
               ],
-              Divider(height: 16, color: isDark ? AppColors.slate800 : AppColors.slate200),
 
-              // Assigned Chef Info Row (if assigned or active)
-              if (order.assignedChef != null || isActive) ...[
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: AppColors.primarySubtle,
-                      child: const Icon(Icons.person, size: 18, color: AppColors.primary),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 12),
+
+              // ── BENTO CELL 2: 2-Column Bento Grid Row (Chef & OTP/Duration) ──
+              Row(
+                children: [
+                  // Left Bento Cell: Executive Chef
+                  Expanded(
+                    flex: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
                         children: [
-                          Text(
-                            order.chefName ?? 'Executive Chef Assigned',
-                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: textPrimary),
+                          CircleAvatar(
+                            radius: 15,
+                            backgroundColor: isDark ? AppColors.primary.withOpacity(0.2) : AppColors.primarySubtle,
+                            child: const Icon(Icons.person_rounded, size: 16, color: AppColors.primary),
                           ),
-                          const Text('Certified EBIC Chef • 4.9 ★', style: TextStyle(fontSize: 10.5, color: AppColors.slate500)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  order.chefName ?? (isActive ? 'Chef Assigned' : 'Executive Chef'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 1),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.star_rounded, size: 12, color: Color(0xFFF59E0B)),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '4.9 ★ Certified',
+                                      style: TextStyle(fontSize: 10, color: textMuted, fontWeight: FontWeight.w500),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: order.isInstant
-                            ? AppColors.primarySubtle
-                            : (isDark ? AppColors.slate800 : const Color(0xFFF1F5F9)),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        order.isInstant ? 'Instant Cook' : 'Scheduled',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: order.isInstant ? AppColors.primaryDark : AppColors.slate600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
+                  ),
 
-              // Items summary in a styled card container
+                  const SizedBox(width: 8),
+
+                  // Right Bento Cell: Security OTP or Prep Duration
+                  Expanded(
+                    flex: 5,
+                    child: activeOtp != null
+                        ? InkWell(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              Clipboard.setData(ClipboardData(text: activeOtp));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('$otpLabel copied to clipboard!'),
+                                  duration: const Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: hasEndOtp
+                                    ? (isDark ? const Color(0xFF2E1065) : const Color(0xFFFAF5FF))
+                                    : (isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5)),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: hasEndOtp ? const Color(0xFFA855F7) : const Color(0xFF10B981),
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        otpLabel,
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w900,
+                                          color: hasEndOtp
+                                              ? (isDark ? const Color(0xFFD8B4FE) : const Color(0xFF7E22CE))
+                                              : (isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857)),
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                      Icon(
+                                        Icons.copy_rounded,
+                                        size: 11,
+                                        color: hasEndOtp
+                                            ? (isDark ? const Color(0xFFD8B4FE) : const Color(0xFF7E22CE))
+                                            : (isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    activeOtp,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: hasEndOtp
+                                          ? (isDark ? Colors.white : const Color(0xFF6B21A8))
+                                          : (isDark ? Colors.white : const Color(0xFF065F46)),
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'PREP DURATION',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: textMuted,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.timer_outlined, size: 13, color: AppColors.primary),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        '${order.cookingTimeMinutes} mins',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: textPrimary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              // ── BENTO CELL 3: Dishes Bento Strip ──
               Container(
+                width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.slate800.withOpacity(0.5) : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9)),
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                 ),
                 child: Column(
                   children: [
                     ...order.items.take(3).map((item) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          padding: const EdgeInsets.symmetric(vertical: 2.5),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Expanded(
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.restaurant_menu_rounded, size: 13, color: AppColors.primary),
+                                    const Icon(Icons.restaurant_menu_rounded, size: 12, color: AppColors.primary),
                                     const SizedBox(width: 6),
-                                    Flexible(
+                                    Expanded(
                                       child: Text(
                                         '${item.quantity}x ${item.dishName}',
-                                        style: TextStyle(fontSize: 12.5, color: textSecondary, fontWeight: FontWeight.w600),
+                                        style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w600),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
@@ -583,7 +1013,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                                         ),
                                         child: const Text(
                                           'Diet Plan',
-                                          style: TextStyle(fontSize: 8.5, color: Color(0xFF047857), fontWeight: FontWeight.bold),
+                                          style: TextStyle(fontSize: 8, color: Color(0xFF047857), fontWeight: FontWeight.bold),
                                         ),
                                       ),
                                     ],
@@ -593,7 +1023,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                               const SizedBox(width: 8),
                               Text(
                                 '₹${item.price.toStringAsFixed(0)}',
-                                style: TextStyle(fontSize: 12.5, color: textPrimary, fontWeight: FontWeight.bold),
+                                style: TextStyle(fontSize: 12, color: textPrimary, fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
@@ -605,59 +1035,65 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                           alignment: Alignment.centerLeft,
                           child: Text(
                             '+${order.items.length - 3} more dishes curated',
-                            style: TextStyle(fontSize: 11, color: textMuted, fontWeight: FontWeight.w600),
+                            style: TextStyle(fontSize: 10.5, color: textMuted, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ),
                   ],
                 ),
               ),
-              Divider(height: 16, color: isDark ? AppColors.slate800 : AppColors.slate200),
 
-              // Total & Cooking time
+              const SizedBox(height: 12),
+
+              // ── BENTO CELL 4: Price & Bill Strip ──
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.timer_outlined, size: 14, color: textMuted),
-                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.primary.withOpacity(0.18) : AppColors.primarySubtle,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(Icons.receipt_rounded, size: 13, color: AppColors.primary),
+                      ),
+                      const SizedBox(width: 6),
                       Text(
-                        '${order.cookingTimeMinutes} mins prep & cook',
-                        style: TextStyle(fontSize: 12, color: textSecondary),
+                        order.isInstant ? 'Instant Cook Fee' : 'Total Service Bill',
+                        style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
                   Text(
                     '₹${order.totalAmount.toStringAsFixed(0)}',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textPrimary),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: textPrimary),
                   ),
                 ],
               ),
+
               const SizedBox(height: 12),
 
-              // Action buttons (2-Tier Non-Overflowing Responsive Layout)
+              // ── BENTO CELL 5: Action Buttons ──
               if (isActive) ...[
                 SizedBox(
                   width: double.infinity,
+                  height: 42,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 1,
                     ),
                     icon: const Icon(Icons.navigation_rounded, size: 16),
-                    label: const FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        'Track Chef Live on GPS',
-                        maxLines: 1,
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
-                      ),
+                    label: const Text(
+                      'Track Chef Live on GPS',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                     onPressed: () {
+                      HapticFeedback.lightImpact();
                       Navigator.pushNamed(
                         context,
                         AppRoutes.chefTracking,
@@ -688,6 +1124,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                         ),
                       ),
                       onPressed: () async {
+                        HapticFeedback.lightImpact();
                         await Navigator.pushNamed(
                           context,
                           AppRoutes.orderDetail,
@@ -716,6 +1153,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                         ),
                       ),
                       onPressed: () {
+                        HapticFeedback.lightImpact();
                         Navigator.pushNamed(
                           context,
                           AppRoutes.preparationChecklist,
@@ -735,8 +1173,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
+

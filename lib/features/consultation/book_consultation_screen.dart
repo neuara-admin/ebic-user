@@ -412,8 +412,16 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
 
     final isPendingKickoff = _activePass?.isConsultationPending == true && !_isFollowUp;
     final entitlement = _eligibility?['entitlement'] as Map<String, dynamic>?;
-    final remaining = (entitlement?['remaining'] as num?)?.toInt() ?? _activePass?.consultationsRemaining ?? 0;
-    final allocated = (entitlement?['allocated'] as num?)?.toInt();
+    final rawRem = entitlement?['remaining'];
+    final remaining = (rawRem is num
+            ? rawRem.toInt()
+            : (rawRem is String ? int.tryParse(rawRem) : null)) ??
+        _activePass?.consultationsRemaining ??
+        0;
+    final rawAlloc = entitlement?['allocated'];
+    final allocated = rawAlloc is num
+        ? rawAlloc.toInt()
+        : (rawAlloc is String ? int.tryParse(rawAlloc) : null);
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,

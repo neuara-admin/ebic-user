@@ -117,7 +117,12 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
         widget.confirmationData['address']?['street']?.toString() ??
         '';
     final memberName = widget.confirmationData['memberName']?.toString() ?? 'Self';
-    final isCancelled = (_liveOrder?['status']?.toString().toUpperCase() ?? '').contains('CANCEL');
+    final statusUpper = _liveOrder?['status']?.toString().toUpperCase() ?? '';
+    final isCancelled = statusUpper.contains('CANCEL') || statusUpper == 'FAILED_NO_SUPPLY';
+    final isCompleted = statusUpper == 'COMPLETED';
+    final isInactive = isCancelled || isCompleted;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return WillPopScope(
       onWillPop: () async {
@@ -125,18 +130,26 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
         return false;
       },
       child: Scaffold(
-        backgroundColor: AppColors.slate50,
+        backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
         appBar: AppBar(
           automaticallyImplyLeading: false,
           elevation: 0,
-          backgroundColor: Colors.white,
-          title: const Text(
-            'Booking Confirmed',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.slate900),
+          backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+          title: Text(
+            isCancelled
+                ? 'Booking Cancelled'
+                : isCompleted
+                    ? 'Visit Completed'
+                    : 'Booking Confirmed',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: isDark ? Colors.white : AppColors.slate900,
+            ),
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.close_rounded, color: AppColors.slate700),
+              icon: Icon(Icons.close_rounded, color: isDark ? Colors.white70 : AppColors.slate700),
               tooltip: 'Close & Return Home',
               onPressed: () {
                 Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainShell, (r) => false);
@@ -186,8 +199,8 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                   const SizedBox(height: 12),
                 ],
 
-                // 2. Live GPS Tracking & Chef Dispatch Card
-                _buildLiveGpsCard(chefName, arrivalMinutes, orderId, isCancelled),
+                // 2. Live GPS Tracking & Chef Dispatch Card (No GoogleMap if cancelled or completed)
+                _buildLiveGpsCard(chefName, arrivalMinutes, orderId, isCancelled, isCompleted, isDark),
                 const SizedBox(height: 16),
 
                 // 3. Booked Dishes & Portions Card
@@ -211,19 +224,43 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                 const SizedBox(height: 24),
 
                 // 8. Action Buttons
-                EbicButton(
-                  label: isCancelled ? 'Chef Booking Cancelled' : 'Track Chef on Live GPS',
-                  icon: isCancelled ? Icons.cancel_rounded : Icons.navigation_rounded,
-                  variant: isCancelled ? EbicButtonVariant.outline : EbicButtonVariant.primary,
-                  onPressed: isCancelled ? null : () {
-                    Navigator.pushNamed(
-                      context,
-                      AppRoutes.chefTracking,
-                      arguments: {'orderId': orderId},
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
+                if (!isInactive) ...[
+                  EbicButton(
+                    label: 'Track Chef on Live GPS',
+                    icon: Icons.navigation_rounded,
+                    variant: EbicButtonVariant.primary,
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.chefTracking,
+                        arguments: {'orderId': orderId},
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ] else if (isCancelled) ...[
+                  const EbicButton(
+                    label: 'Booking Cancelled',
+                    icon: Icons.cancel_rounded,
+                    variant: EbicButtonVariant.outline,
+                    onPressed: null,
+                  ),
+                  const SizedBox(height: 12),
+                ] else if (isCompleted) ...[
+                  EbicButton(
+                    label: 'View Order Summary',
+                    icon: Icons.receipt_long_rounded,
+                    variant: EbicButtonVariant.primary,
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.orderDetail,
+                        arguments: {'orderId': orderId},
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 EbicButton(
                   label: 'Ingredient Checklist',
                   icon: Icons.checklist_rtl_rounded,
@@ -418,135 +455,214 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
   }
 
   // ───────────────────────── 2. Live GPS & Chef Card ─────────────────────────
-  Widget _buildLiveGpsCard(String chefName, String? arrivalMinutes, String orderId, bool isCancelled) {
+  Widget _buildLiveGpsCard(
+    String chefName,
+    String? arrivalMinutes,
+    String orderId,
+    bool isCancelled,
+    bool isCompleted,
+    bool isDark,
+  ) {
+    final isInactive = isCancelled || isCompleted;
+
     return EbicCard(
       padding: EdgeInsets.zero,
       child: Column(
         children: [
-          // Live Google GPS Map Preview
-          ClipRRect(
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-            child: SizedBox(
-              height: 140,
-              width: double.infinity,
-              child: Stack(
+          if (isInactive)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isCancelled
+                      ? (isDark
+                          ? [const Color(0xFF451A1A), const Color(0xFF1E293B)]
+                          : [const Color(0xFFFEF2F2), Colors.white])
+                      : (isDark
+                          ? [const Color(0xFF064E3B), const Color(0xFF1E293B)]
+                          : [const Color(0xFFECFDF5), Colors.white]),
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark ? AppColors.slate800 : AppColors.slate200,
+                  ),
+                ),
+              ),
+              child: Row(
                 children: [
-                  GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: LatLng(
-                        (_kitchenLocation.latitude + _chefLocation.latitude) / 2,
-                        (_kitchenLocation.longitude + _chefLocation.longitude) / 2,
-                      ),
-                      zoom: 13.5,
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: (isCancelled ? AppColors.danger : AppColors.primary).withOpacity(0.12),
+                      shape: BoxShape.circle,
                     ),
-                    markers: isCancelled
-                        ? {
-                            Marker(
-                              markerId: const MarkerId('kitchen'),
-                              position: _kitchenLocation,
-                              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-                            ),
-                          }
-                        : _previewMarkers,
-                    polylines: isCancelled ? {} : _previewPolylines,
-                    zoomControlsEnabled: false,
-                    myLocationButtonEnabled: false,
-                    mapToolbarEnabled: false,
-                    compassEnabled: false,
-                    onTap: (_) {
-                      if (!isCancelled) {
-                        Navigator.pushNamed(context, AppRoutes.chefTracking, arguments: {'orderId': orderId});
-                      }
-                    },
-                  ),
-                  // ETA chip
-                  Positioned(
-                    top: 10,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.75),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: isCancelled ? AppColors.danger : AppColors.success,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              isCancelled
-                                  ? 'Booking Cancelled • GPS Inactive'
-                                  : arrivalMinutes != null
-                                      ? 'Chef arriving in ~$arrivalMinutes mins'
-                                      : 'Chef assignment in progress',
-                              maxLines: 1,
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
+                    child: Icon(
+                      isCancelled ? Icons.cancel_rounded : Icons.check_circle_rounded,
+                      color: isCancelled ? AppColors.danger : AppColors.primary,
+                      size: 24,
                     ),
                   ),
-                  // Live tracking badge button
-                  Positioned(
-                    bottom: 10,
-                    right: 12,
-                    child: InkWell(
-                      onTap: () {
-                        if (!isCancelled) {
-                          Navigator.pushNamed(context, AppRoutes.chefTracking, arguments: {'orderId': orderId});
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isCancelled ? AppColors.slate700 : AppColors.primary,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: isCancelled ? AppColors.danger : AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isCancelled ? 'BOOKING CANCELLED' : 'SERVICE COMPLETED',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: isCancelled ? AppColors.danger : AppColors.primary,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isCancelled
+                              ? 'Live GPS tracking is inactive'
+                              : 'Culinary visit completed & sanitized',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : AppColors.slate800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            // Live Google GPS Map Preview (ONLY shown when booking is active)
+            ClipRRect(
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+              child: SizedBox(
+                height: 140,
+                width: double.infinity,
+                child: Stack(
+                  children: [
+                    GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: LatLng(
+                          (_kitchenLocation.latitude + _chefLocation.latitude) / 2,
+                          (_kitchenLocation.longitude + _chefLocation.longitude) / 2,
+                        ),
+                        zoom: 13.5,
+                      ),
+                      markers: _previewMarkers,
+                      polylines: _previewPolylines,
+                      zoomControlsEnabled: false,
+                      myLocationButtonEnabled: false,
+                      mapToolbarEnabled: false,
+                      compassEnabled: false,
+                      onTap: (_) {
+                        Navigator.pushNamed(context, AppRoutes.chefTracking, arguments: {'orderId': orderId});
+                      },
+                    ),
+                    // ETA chip
+                    Positioned(
+                      top: 10,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.75),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white24),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              isCancelled ? Icons.cancel_outlined : Icons.navigation_rounded,
-                              color: Colors.white,
-                              size: 13,
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: AppColors.success,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 6),
                             FittedBox(
                               fit: BoxFit.scaleDown,
                               child: Text(
-                                isCancelled ? 'CANCELLED' : 'LIVE GPS',
+                                arrivalMinutes != null
+                                    ? 'Chef arriving in ~$arrivalMinutes mins'
+                                    : 'Chef assignment in progress',
                                 maxLines: 1,
-                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    // Live tracking badge button
+                    Positioned(
+                      bottom: 10,
+                      right: 12,
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.pushNamed(context, AppRoutes.chefTracking, arguments: {'orderId': orderId});
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.navigation_rounded,
+                                color: Colors.white,
+                                size: 13,
+                              ),
+                              SizedBox(width: 4),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  'LIVE GPS',
+                                  maxLines: 1,
+                                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
 
           // Chef Profile Details
           Padding(

@@ -640,20 +640,64 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: pass.coveredMembers.map((m) {
+                    final initials = m.name.isNotEmpty
+                        ? m.name.split(' ').map((n) => n.isNotEmpty ? n[0] : '').take(2).join().toUpperCase()
+                        : '?';
                     return Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isDark ? AppColors.slate800 : AppColors.slate100,
-                        borderRadius: BorderRadius.circular(8),
+                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(m.isPrimary ? Icons.star_rounded : Icons.person_outline, size: 14, color: AppColors.primary),
-                          const SizedBox(width: 6),
+                          CircleAvatar(
+                            radius: 11,
+                            backgroundColor: m.isPrimary ? AppColors.primary : AppColors.primarySubtle,
+                            child: Text(
+                              initials,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: m.isPrimary ? Colors.white : AppColors.primaryDark,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
                           Text(
-                            '${m.name} (${m.relationship})',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            m.name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : AppColors.slate900,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              m.relationship,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? AppColors.slate300 : AppColors.slate600,
+                              ),
+                            ),
                           ),
                         ],
                       ),

@@ -96,6 +96,28 @@ class OrderModel {
         s.contains('EXPIRED');
   }
 
+  bool get isCompleted => status.toUpperCase() == 'COMPLETED';
+
+  bool get isCancelledByChef {
+    final s = status.toUpperCase();
+    return s == 'CHEF_CANCELLED' ||
+        s.contains('NO_SUPPLY') ||
+        s.contains('FAILED_NO_SUPPLY') ||
+        s.contains('REJECT') ||
+        s.contains('CHEF_REJECT') ||
+        s.contains('SEARCHING_REPLACEMENT');
+  }
+
+  bool get isCancelledByCustomer {
+    final s = status.toUpperCase();
+    if (isCancelledByChef) return false;
+    return s == 'CANCELLED_CUSTOMER' ||
+        s == 'CANCELLED_NOSHOW' ||
+        s == 'CANCELLED' ||
+        s.contains('CUSTOMER') ||
+        isCancelled;
+  }
+
   String get occasionLabel {
     final o = bookingOption.toUpperCase();
     if (o == 'B' || o == 'BREAKFAST') return 'Breakfast';

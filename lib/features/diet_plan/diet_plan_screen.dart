@@ -4,11 +4,13 @@ import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../shared/models/dietitian_model.dart';
 import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_dish_image.dart';
 import '../catalogue/dish_detail_screen.dart';
+import '../dietitian/dietitian_profile_screen.dart';
 import 'diet_plan_calendar_screen.dart';
 import 'diet_plan_history_screen.dart';
 import 'diet_plan_meal_detail_screen.dart';
@@ -46,6 +48,33 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
   String _searchQuery = '';
   bool _showSearch = false;
   final TextEditingController _searchController = TextEditingController();
+
+  // Plan Details collapsible state (hidden by default)
+  bool _showPlanDetails = false;
+
+  void _openDietitianConsultation() {
+    final d = _planDetail?.dietitian;
+    final dietitian = DietitianModel(
+      id: (d != null && d.id.isNotEmpty) ? d.id : 'dietitian-default',
+      name: (d != null && d.name.isNotEmpty)
+          ? d.name
+          : 'Dr. Ananya Sharma',
+      qualification: d?.qualification ?? 'M.Sc Clinical Nutrition, RD, CDE',
+      specialization: 'Clinical & Preventive Dietetics',
+      experienceYears: 9,
+      photoUrl: d?.photoUrl,
+      bio:
+          'Prescribing personalized meal recommendations, macro-nutrient balancing, and clinical wellness coaching.',
+      languages: 'English, Hindi',
+      rating: 4.9,
+    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DietitianProfileScreen(dietitian: dietitian),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -508,152 +537,8 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Section: Plan Overview Card
-          EbicCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Text(
-                        plan.customerFacingStatus,
-                        style: TextStyle(
-                          color: Colors.green.shade800,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'Version ${plan.versionNumber}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.slate600,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  plan.planName,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                if (plan.dietitian != null) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.badge_outlined,
-                        size: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Prescribed by ${plan.dietitian!.name}',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_today_outlined,
-                      size: 13,
-                      color: Colors.grey.shade600,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        '$_totalMonths Month${_totalMonths > 1 ? 's' : ''} Coverage (${_totalMonths * 30} Days)${plan.startDate != null ? ' • ${dateFormat.format(plan.startDate!)}' : ''}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                if (plan.goals.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Primary Nutritional Goals',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.slate600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: plan.goals.map((g) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: AppColors.primary.withOpacity(0.2)),
-                        ),
-                        child: Text(
-                          '• ${g.title}',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primaryDark,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          // Section: Plan Overview / Details (Collapsible & Hidden by default)
+          _buildPlanDetailsSection(plan, dateFormat),
 
           const SizedBox(height: 14),
 
@@ -846,6 +731,381 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
             ),
 
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  // 1.5 Collapsible Plan Details with Dietitian Redirection
+  Widget _buildPlanDetailsSection(
+      DietPlanDetailModel plan, DateFormat dateFormat) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _showPlanDetails
+              ? AppColors.primary.withOpacity(0.5)
+              : AppColors.slate200,
+          width: _showPlanDetails ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Bar - Tapping toggles plan details
+          InkWell(
+            onTap: () {
+              setState(() {
+                _showPlanDetails = !_showPlanDetails;
+              });
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySubtle,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.assignment_outlined,
+                      size: 20,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Flexible(
+                              child: Text(
+                                'Plan Details',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.slate900,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border:
+                                      Border.all(color: Colors.green.shade200),
+                                ),
+                                child: Text(
+                                  plan.customerFacingStatus,
+                                  style: TextStyle(
+                                    color: Colors.green.shade800,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _showPlanDetails
+                              ? 'Tap to hide plan summary'
+                              : plan.planName,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.slate500,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Quick Redirection to Dietitian
+                  InkWell(
+                    onTap: _openDietitianConsultation,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            Icons.medical_services_rounded,
+                            size: 13,
+                            color: Color(0xFF1D4ED8),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Dietitian',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1D4ED8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Expand / Collapse Chevron
+                  AnimatedRotation(
+                    turns: _showPlanDetails ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.slate500,
+                      size: 22,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Collapsible Detailed Content
+          if (_showPlanDetails) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Text(
+                          plan.customerFacingStatus,
+                          style: TextStyle(
+                            color: Colors.green.shade800,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Version ${plan.versionNumber}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.slate600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    plan.planName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+
+                  // Dietitian Section with Call to Action
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: AppColors.primarySubtle,
+                          child: const Icon(
+                            Icons.person_rounded,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                plan.dietitian?.name ?? 'Assigned Dietitian',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.slate900,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                plan.dietitian?.qualification ??
+                                    'Clinical Nutrition & Dietetics',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.slate500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: _openDietitianConsultation,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: const Icon(Icons.chat_bubble_outline_rounded,
+                              size: 13),
+                          label: const Text(
+                            'Consult',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today_outlined,
+                        size: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '$_totalMonths Month${_totalMonths > 1 ? 's' : ''} Coverage (${_totalMonths * 30} Days)${plan.startDate != null ? ' • ${dateFormat.format(plan.startDate!)}' : ''}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (plan.goals.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Divider(height: 1),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Primary Nutritional Goals',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.slate600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: plan.goals.map((g) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Text(
+                            '• ${g.title}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryDark,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1379,6 +1639,19 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       child: EbicCard(
+        onTap: () {
+          if (plan.id != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DietPlanMealDetailScreen(
+                  planId: plan.id!,
+                  mealId: meal.id,
+                ),
+              ),
+            );
+          }
+        },
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

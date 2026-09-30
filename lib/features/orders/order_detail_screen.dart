@@ -436,6 +436,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       ),
                     ),
                     onPressed: () {
+                      HapticFeedback.lightImpact();
                       Navigator.pushNamed(
                         context,
                         AppRoutes.chefTracking,
@@ -716,6 +717,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             icon: const Icon(Icons.copy_rounded, color: Color(0xFF047857), size: 20),
             tooltip: 'Copy OTP',
             onPressed: () {
+              HapticFeedback.selectionClick();
               Clipboard.setData(ClipboardData(text: otp));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -876,6 +878,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             icon: const Icon(Icons.copy_rounded, color: Color(0xFF7E22CE), size: 20),
             tooltip: 'Copy OTP',
             onPressed: () {
+              HapticFeedback.selectionClick();
               Clipboard.setData(ClipboardData(text: otp));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -1678,6 +1681,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Widget _buildIngredientChecklistCard(BuildContext context, OrderModel order, bool isDark) {
     return EbicCard(
       onTap: () {
+        HapticFeedback.lightImpact();
         Navigator.pushNamed(
           context,
           AppRoutes.preparationChecklist,
@@ -1892,11 +1896,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => InvoiceDownloadService.downloadAndShare(
-                context,
-                endpoint: ApiEndpoints.orderInvoicePdf(order.id),
-                fileName: 'EBIC-Invoice-${order.bookingReference ?? order.id.substring(0, 8)}.pdf',
-              ),
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                InvoiceDownloadService.downloadAndShare(
+                  context,
+                  endpoint: ApiEndpoints.orderInvoicePdf(order.id),
+                  fileName: 'EBIC-Invoice-${order.bookingReference ?? order.id.substring(0, 8)}.pdf',
+                );
+              },
               icon: const Icon(Icons.receipt_long_rounded, size: 16),
               label: const Text('Download / Share Invoice', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
               style: OutlinedButton.styleFrom(
@@ -1986,6 +1993,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             onPressed: () {
+              HapticFeedback.lightImpact();
               Navigator.pushNamed(
                 context,
                 AppRoutes.chefTracking,
