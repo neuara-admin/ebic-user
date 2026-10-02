@@ -95,6 +95,8 @@ import '../../features/referrals/presentation/referral_home_screen.dart';
 import '../../features/referrals/presentation/referral_history_screen.dart';
 import '../../features/system/app_update_screen.dart';
 import '../../features/system/not_found_screen.dart';
+import '../../features/system/network_error_screen.dart';
+import '../../features/system/server_issue_screen.dart';
 
 // Shared models
 import '../../shared/models/consultation_model.dart';
@@ -117,6 +119,8 @@ class AppRouter {
     AppRoutes.accountRecovery,
     AppRoutes.appUpdate,
     AppRoutes.notFound,
+    AppRoutes.networkError,
+    AppRoutes.serverError,
     AppRoutes.mainShell,
     AppRoutes.home,
     AppRoutes.meals,
@@ -608,6 +612,28 @@ class AppRouter {
         final message = args is String ? args : null;
         return MaterialPageRoute(
           builder: (_) => NotFoundScreen(message: message),
+        );
+      case AppRoutes.networkError:
+        final map = (args is Map ? args : null);
+        final customMsg = map?['message'] as String?;
+        final onRetry = map?['onRetry'] as VoidCallback?;
+        return MaterialPageRoute(
+          builder: (_) => NetworkErrorScreen(
+            customMessage: customMsg,
+            onRetry: onRetry,
+          ),
+        );
+      case AppRoutes.serverError:
+        final map = (args is Map ? args : null);
+        final isMaint = map?['isMaintenance'] == true;
+        final downtime = map?['estimatedDowntime'] as String?;
+        final onRetry = map?['onRetry'] as VoidCallback?;
+        return MaterialPageRoute(
+          builder: (_) => ServerIssueScreen(
+            isMaintenance: isMaint,
+            estimatedDowntime: downtime,
+            onRetry: onRetry,
+          ),
         );
 
       default:

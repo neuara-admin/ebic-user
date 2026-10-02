@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
 enum BmiCategory {
-  underweight('Underweight', Color(0xFF2563EB), Color(0xFFDBEAFE), 'Below healthy weight. Nutrient-dense meals and strength training recommended.'),
-  normal('Normal weight', Color(0xFF059669), Color(0xFFD1FAE5), 'Healthy weight range. Maintain balanced nutrition and daily activity.'),
-  overweight('Overweight', Color(0xFFD97706), Color(0xFFFEF3C7), 'Above optimal range. Focus on portion control, fiber-rich meals, and cardio.'),
-  obese('Obese', Color(0xFFDC2626), Color(0xFFFEE2E2), 'Higher health risk range. Personalized clinical diet plan and physician guidance recommended.');
+  underweight('Underweight', Color(0xFF2563EB), Color(0xFFDBEAFE), 'Focus on nutrient-dense meals & strength.'),
+  normal('Normal weight', Color(0xFF059669), Color(0xFFD1FAE5), 'Optimal healthy range. Maintain balanced nutrition.'),
+  overweight('Overweight', Color(0xFFD97706), Color(0xFFFEF3C7), 'Target portion control and fiber-rich meals.'),
+  obese('Obese', Color(0xFFDC2626), Color(0xFFFEE2E2), 'Clinical diet plan and guidance recommended.');
 
   final String label;
   final Color color;
@@ -124,11 +124,18 @@ class BmiHealthWidget extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: category.color.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: category.color.withOpacity(0.3), width: 1.2),
+        color: category.color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: category.color.withOpacity(0.2), width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: category.color.withOpacity(0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,11 +254,11 @@ class BmiHealthWidget extends StatelessWidget {
           if (showRecommendation) ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: category.color.withOpacity(0.2)),
+                color: Colors.white.withOpacity(0.92),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: category.color.withOpacity(0.18), width: 1.0),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

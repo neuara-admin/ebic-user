@@ -100,9 +100,11 @@ class AppRoutes {
   static const String privacy = '/profile/privacy';
   static const String security = '/profile/security';
 
-  // System Screens (Module 20 Sections 313, 314, 320)
+  // System Screens (Module 20 Sections 313, 314, 316, 320)
   static const String appUpdate = '/system/update';
   static const String notFound = '/system/404';
+  static const String networkError = '/system/network-error';
+  static const String serverError = '/system/server-error';
 
   // Backwards compatibility aliases
   static const String bookingConfirmation = bookChefConfirmation;

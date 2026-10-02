@@ -2042,11 +2042,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Select your dishes or clinical diet plan. An executive chef arrives with fresh ingredients, cooks live, and leaves your kitchen spotless.',
+                'Executive chef cooks live in your kitchen.',
                 style: TextStyle(
                   color: Colors.white70,
-                  fontSize: 12.5,
-                  height: 1.35,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 14),
@@ -2152,11 +2152,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Connect with your clinical nutritionist to evaluate vitals, assign your doctor, and activate your Health Pass countdown.',
+                'Book your 1-on-1 session to activate your plan.',
                 style: TextStyle(
                   color: Colors.white70,
-                  fontSize: 12.5,
-                  height: 1.35,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 16),
@@ -2342,8 +2342,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Your consultation with ${c.dietitianDisplayName}${c.callEndedAt != null ? ' on ${_formatDateTime(c.callEndedAt!)}' : ''} is complete. Your dietitian\'s notes are pending.'
-                '${c.isInitial && passStart != null ? '\nYour Health Pass started on ${DateFormat('d MMM yyyy').format(passStart)}.' : ''}',
+                'Session completed • Dietitian is finalizing clinical notes.'
+                '${c.isInitial && passStart != null ? ' Pass started ${DateFormat('d MMM').format(passStart)}.' : ''}',
                 style: const TextStyle(
                   fontSize: 12.5,
                   color: AppColors.slate600,
@@ -2403,9 +2403,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                'Your consultation on ${_formatDateTime(c.scheduledAt)} wasn\'t started by your dietitian, so it was cancelled and not counted against your plan. Please book a new time.',
-                style: const TextStyle(
+              const Text(
+                'Cancelled by clinic • Free rebooking available anytime.',
+                style: TextStyle(
                   fontSize: 12.5,
                   color: AppColors.slate600,
                   height: 1.35,
@@ -2460,9 +2460,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                'It was scheduled for ${_formatDateTime(c.scheduledAt)}. Reschedule it at no extra cost — it still counts as this booking.',
-                style: const TextStyle(
+              const Text(
+                'Missed session • Reschedule anytime at no extra charge.',
+                style: TextStyle(
                   fontSize: 12.5,
                   color: AppColors.slate600,
                   height: 1.35,
@@ -2545,7 +2545,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Your consultation notes and clinical targets are being transformed into custom daily recipes. Estimated within 24 hours.',
+                'Custom daily recipes in curation • Ready within 24 hours.',
                 style: TextStyle(
                   fontSize: 12.5,
                   color: AppColors.slate600,
@@ -3115,66 +3115,53 @@ class _HomeScreenState extends State<HomeScreen> {
     required _QuickAction action,
     required bool isDark,
   }) {
-    return InkWell(
+    return EbicCard(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+      borderRadius: 16,
       onTap: () {
         HapticFeedback.lightImpact();
         action.onTap();
       },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? AppColors.slate800 : AppColors.slate200,
-            width: 1,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? action.iconColor.withOpacity(0.18)
+                  : action.iconBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: action.iconColor.withOpacity(0.20),
+                width: 0.8,
+              ),
+            ),
+            child: Icon(
+              action.icon,
+              size: 20,
+              color: action.iconColor,
+            ),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? action.iconColor.withOpacity(0.18)
-                    : action.iconBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                action.icon,
-                size: 20,
-                color: action.iconColor,
-              ),
-            ),
-            const SizedBox(height: 7),
-            SizedBox(
-              height: 28,
-              child: Center(
-                child: Text(
-                  action.label,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? AppColors.slate200 : AppColors.slate800,
-                    height: 1.15,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          const SizedBox(height: 7),
+          SizedBox(
+            height: 28,
+            child: Center(
+              child: Text(
+                action.label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? AppColors.slate200 : AppColors.slate800,
+                  height: 1.15,
                 ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -3192,129 +3179,121 @@ class _HomeScreenState extends State<HomeScreen> {
     final mealName = firstMeal?['name']?.toString() ??
         firstMeal?['dishName']?.toString();
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          if (!SessionManager().isAuthenticated) {
-            Navigator.pushNamed(context, AppRoutes.login);
-            return;
-          }
-          Navigator.pushNamed(context, AppRoutes.dietPlan);
-        },
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          height: 165,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isDark ? AppColors.slate800 : AppColors.slate200,
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFD1FAE5),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.restaurant_menu_rounded,
-                      color: Color(0xFF059669),
-                      size: 18,
+    return EbicCard(
+      borderRadius: 18,
+      padding: const EdgeInsets.all(14),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        if (!SessionManager().isAuthenticated) {
+          Navigator.pushNamed(context, AppRoutes.login);
+          return;
+        }
+        Navigator.pushNamed(context, AppRoutes.dietPlan);
+      },
+      child: SizedBox(
+        height: 138,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD1FAE5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFF10B981).withOpacity(0.25),
+                      width: 0.8,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2.5,
-                    ),
-                    decoration: BoxDecoration(
+                  child: const Icon(
+                    Icons.restaurant_menu_rounded,
+                    color: Color(0xFF059669),
+                    size: 18,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: hasPlan
+                        ? const Color(0xFFD1FAE5)
+                        : (isDark ? AppColors.slate800 : AppColors.slate100),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
                       color: hasPlan
-                          ? const Color(0xFFD1FAE5)
-                          : (isDark ? AppColors.slate800 : AppColors.slate100),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      hasPlan ? 'ACTIVE PLAN' : 'NUTRITION',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                        color: hasPlan
-                            ? const Color(0xFF047857)
-                            : (isDark ? AppColors.slate400 : AppColors.slate600),
-                      ),
+                          ? const Color(0xFF10B981).withOpacity(0.3)
+                          : (isDark ? AppColors.slate700 : AppColors.slate200),
+                      width: 0.8,
                     ),
                   ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    hasPlan
-                        ? (mealName ?? 'Personalized Diet')
-                        : 'Clinical Nutrition',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  child: Text(
+                    hasPlan ? 'ACTIVE PLAN' : 'NUTRITION',
                     style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppColors.slate900,
-                      height: 1.2,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: hasPlan
+                          ? const Color(0xFF047857)
+                          : (isDark ? AppColors.slate400 : AppColors.slate600),
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    hasPlan
-                        ? 'Target macros curated'
-                        : 'Calorie-targeted recipes',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? AppColors.slate400 : AppColors.slate500,
-                    ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasPlan
+                      ? (mealName ?? 'Personalized Diet')
+                      : 'Clinical Nutrition',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.2,
+                    color: isDark ? Colors.white : AppColors.slate900,
                   ),
-                ],
-              ),
-              Row(
-                children: [
-                  Text(
-                    'View Diet Plan',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryDark,
-                    ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  hasPlan
+                      ? 'Target macros curated'
+                      : 'Calorie-targeted recipes',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
                   ),
-                  const SizedBox(width: 2),
-                  const Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 13,
-                    color: AppColors.primaryDark,
+                ),
+              ],
+            ),
+            Row(
+              children: const [
+                Text(
+                  'View Diet Plan',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+                SizedBox(width: 2),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 13,
+                  color: AppColors.primary,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -3330,164 +3309,152 @@ class _HomeScreenState extends State<HomeScreen> {
         ? (_loggedWaterLiters / _targetWaterLiters).clamp(0.0, 1.0)
         : 0.0;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          widget.onNavigateTab?.call(1);
-        },
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          height: 165,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isDark ? AppColors.slate800 : AppColors.slate200,
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.water_drop_rounded,
-                      color: Color(0xFF2563EB),
-                      size: 18,
+    return EbicCard(
+      borderRadius: 18,
+      padding: const EdgeInsets.all(14),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        widget.onNavigateTab?.call(1);
+      },
+      child: SizedBox(
+        height: 138,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFF3B82F6).withOpacity(0.25),
+                      width: 0.8,
                     ),
                   ),
-                  InkWell(
-                    onTap: _quickLogWater,
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 3,
+                  child: const Icon(
+                    Icons.water_drop_rounded,
+                    color: Color(0xFF2563EB),
+                    size: 18,
+                  ),
+                ),
+                InkWell(
+                  onTap: _quickLogWater,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF1E3A8A).withOpacity(0.5)
+                          : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFF93C5FD),
+                        width: 0.8,
                       ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF1E3A8A).withOpacity(0.5)
-                            : const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: const Color(0xFF93C5FD),
-                          width: 0.8,
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add_rounded,
+                          size: 11,
+                          color: Color(0xFF1D4ED8),
                         ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.add_rounded,
-                            size: 11,
+                        Text(
+                          '250ml',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
                             color: Color(0xFF1D4ED8),
                           ),
-                          Text(
-                            '250ml',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1D4ED8),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Hydration',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppColors.slate900,
-                        ),
-                      ),
-                      Text(
-                        '${_loggedWaterLiters.toStringAsFixed(1)}L / ${_targetWaterLiters.toStringAsFixed(0)}L',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2563EB),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: hydrationRatio,
-                      minHeight: 6,
-                      backgroundColor: isDark
-                          ? AppColors.slate800
-                          : AppColors.slate200,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF3B82F6),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      _loggedWaterLiters.toStringAsFixed(1),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : AppColors.slate900,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.directions_walk_rounded,
-                        size: 14,
-                        color: AppColors.primary,
+                    const SizedBox(width: 2),
+                    Text(
+                      '/ ${_targetWaterLiters.toStringAsFixed(0)}L',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF2563EB),
                       ),
-                      const SizedBox(width: 3),
-                      Text(
-                        stepsNum != null ? '$stepsNum steps' : 'Track steps',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? AppColors.slate300
-                              : AppColors.slate700,
-                        ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: hydrationRatio,
+                    minHeight: 5,
+                    backgroundColor: isDark
+                        ? AppColors.slate800
+                        : AppColors.slate200,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF3B82F6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.directions_walk_rounded,
+                      size: 13,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      stepsNum != null ? '$stepsNum steps' : 'Track steps',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? AppColors.slate300
+                            : AppColors.slate700,
                       ),
-                    ],
-                  ),
-                  const Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 13,
-                    color: AppColors.primaryDark,
-                  ),
-                ],
-              ),
-            ],
-          ),
+                    ),
+                  ],
+                ),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 13,
+                  color: AppColors.primary,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -3592,239 +3559,223 @@ class _HomeScreenState extends State<HomeScreen> {
     final dietitianName = _upcomingConsultation?.dietitianName ??
         _completedConsultation?.dietitianName;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _openDietitianConsultation,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          height: 155,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isDark ? AppColors.slate800 : AppColors.slate200,
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE0E7FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.medical_services_rounded,
-                      color: Color(0xFF4F46E5),
-                      size: 18,
+    return EbicCard(
+      borderRadius: 18,
+      padding: const EdgeInsets.all(14),
+      onTap: _openDietitianConsultation,
+      child: SizedBox(
+        height: 138,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0E7FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFF4F46E5).withOpacity(0.25),
+                      width: 0.8,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2.5,
-                    ),
-                    decoration: BoxDecoration(
+                  child: const Icon(
+                    Icons.medical_services_rounded,
+                    color: Color(0xFF4F46E5),
+                    size: 18,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: hasUpcoming
+                        ? const Color(0xFFFEF3C7)
+                        : (isDark
+                            ? AppColors.slate800
+                            : const Color(0xFFEEF2FF)),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
                       color: hasUpcoming
-                          ? const Color(0xFFFEF3C7)
-                          : (isDark
-                                ? AppColors.slate800
-                                : const Color(0xFFEEF2FF)),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      hasUpcoming ? 'SESSION READY' : '1-ON-1',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                        color: hasUpcoming
-                            ? const Color(0xFFB45309)
-                            : const Color(0xFF4F46E5),
-                      ),
+                          ? const Color(0xFFF59E0B).withOpacity(0.3)
+                          : const Color(0xFF6366F1).withOpacity(0.3),
+                      width: 0.8,
                     ),
                   ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    dietitianName != null
-                        ? (dietitianName.startsWith('Dr') ? dietitianName : 'Dr. $dietitianName')
-                        : 'Clinical Dietitian',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Text(
+                    hasUpcoming ? 'SESSION READY' : '1-ON-1',
                     style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppColors.slate900,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: hasUpcoming
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFF4F46E5),
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    hasUpcoming
-                        ? 'Upcoming video consult'
-                        : 'Video care & lab reviews',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? AppColors.slate400 : AppColors.slate500,
-                    ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  dietitianName != null
+                      ? (dietitianName.startsWith('Dr') ? dietitianName : 'Dr. $dietitianName')
+                      : 'Clinical Dietitian',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.2,
+                    color: isDark ? Colors.white : AppColors.slate900,
                   ),
-                ],
-              ),
-              const Row(
-                children: [
-                  Text(
-                    'Consult Now',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF4F46E5),
-                    ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  hasUpcoming
+                      ? 'Upcoming video consult'
+                      : 'Video care & lab reviews',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
                   ),
-                  SizedBox(width: 2),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 13,
+                ),
+              ],
+            ),
+            Row(
+              children: const [
+                Text(
+                  'Consult Now',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
                     color: Color(0xFF4F46E5),
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+                SizedBox(width: 2),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 13,
+                  color: Color(0xFF4F46E5),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildBentoHealthVaultTile(bool isDark) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          Navigator.pushNamed(context, AppRoutes.healthDocuments);
-        },
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          height: 155,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isDark ? AppColors.slate800 : AppColors.slate200,
-              width: 1,
+    return EbicCard(
+      borderRadius: 18,
+      padding: const EdgeInsets.all(14),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        Navigator.pushNamed(context, AppRoutes.healthDocuments);
+      },
+      child: SizedBox(
+        height: 138,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFCCFBF1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFF0D9488).withOpacity(0.25),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.folder_shared_rounded,
+                    color: Color(0xFF0D9488),
+                    size: 18,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFCCFBF1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF0D9488).withOpacity(0.3),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: const Text(
+                    'ENCRYPTED',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: Color(0xFF0F766E),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.25 : 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFCCFBF1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.folder_shared_rounded,
-                      color: Color(0xFF0D9488),
-                      size: 18,
-                    ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Health Documents',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.2,
+                    color: isDark ? Colors.white : AppColors.slate900,
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFCCFBF1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'ENCRYPTED',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                        color: Color(0xFF0F766E),
-                      ),
-                    ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Lab reports & prescriptions',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
                   ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Health Documents',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppColors.slate900,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Lab reports & prescriptions',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? AppColors.slate400 : AppColors.slate500,
-                    ),
-                  ),
-                ],
-              ),
-              const Row(
-                children: [
-                  Text(
-                    'Open Vault',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0D9488),
-                    ),
-                  ),
-                  SizedBox(width: 2),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 13,
+                ),
+              ],
+            ),
+            Row(
+              children: const [
+                Text(
+                  'Open Vault',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
                     color: Color(0xFF0D9488),
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+                SizedBox(width: 2),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 13,
+                  color: Color(0xFF0D9488),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

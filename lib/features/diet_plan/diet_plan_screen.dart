@@ -1788,6 +1788,8 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
                   color: Colors.grey.shade600,
                   fontStyle: FontStyle.italic,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
             if (meal.plannedNutrition != null) ...[

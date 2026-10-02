@@ -132,7 +132,7 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: 186,
+          height: 160,
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
               if (notification.depth != 0) return false;
@@ -200,19 +200,19 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                             ),
                           ),
 
-                          // Multi-Layer Contrast Scrim Gradient Overlay for crystal clear typography
+                          // Multi-Layer Contrast Scrim Gradient: Leaves top 50% clear for photography
                           Container(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  Colors.black.withValues(alpha: 0.10),
-                                  Colors.black.withValues(alpha: 0.30),
-                                  Colors.black.withValues(alpha: 0.72),
-                                  Colors.black.withValues(alpha: 0.94),
+                                  Colors.transparent,
+                                  Colors.transparent,
+                                  Colors.black.withOpacity(0.48),
+                                  Colors.black.withOpacity(0.88),
                                 ],
-                                stops: const [0.0, 0.35, 0.70, 1.0],
+                                stops: const [0.0, 0.40, 0.72, 1.0],
                               ),
                             ),
                           ),
@@ -352,10 +352,10 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                                         banner.subtitle,
                                         style: TextStyle(
                                           color: Colors.white.withValues(alpha: 0.88),
-                                          fontSize: 12,
-                                          height: 1.35,
+                                          fontSize: 11.5,
+                                          height: 1.25,
                                         ),
-                                        maxLines: 2,
+                                        maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),

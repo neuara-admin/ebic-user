@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TokenStorage {
@@ -10,6 +11,11 @@ class TokenStorage {
   static const String _keyUserAvatar = 'ebic_auth_user_avatar';
   static const String _keyActiveMemberId = 'ebic_auth_active_member_id';
 
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+
   static bool _hasSessionCache = false;
   static bool get hasCachedSession => _hasSessionCache;
 
@@ -18,21 +24,53 @@ class TokenStorage {
     String? refreshToken,
   }) async {
     _hasSessionCache = accessToken.isNotEmpty;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyAccessToken, accessToken);
+    // Store sensitive JWT credentials in hardware-backed secure storage
+    await _secureStorage.write(key: _keyAccessToken, value: accessToken);
     if (refreshToken != null) {
-      await prefs.setString(_keyRefreshToken, refreshToken);
+      await _secureStorage.write(key: _keyRefreshToken, value: refreshToken);
     }
+    // Clean up any legacy unencrypted tokens from shared preferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyAccessToken);
+    await prefs.remove(_keyRefreshToken);
   }
 
   static Future<String?> getAccessToken() async {
+    try {
+      final token = await _secureStorage.read(key: _keyAccessToken);
+      if (token != null && token.isNotEmpty) {
+        return token;
+      }
+    } catch (_) {}
+
+    // Migration fallback for existing users upgrading to this version
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyAccessToken);
+    final legacyToken = prefs.getString(_keyAccessToken);
+    if (legacyToken != null && legacyToken.isNotEmpty) {
+      await _secureStorage.write(key: _keyAccessToken, value: legacyToken);
+      await prefs.remove(_keyAccessToken);
+      return legacyToken;
+    }
+    return null;
   }
 
   static Future<String?> getRefreshToken() async {
+    try {
+      final token = await _secureStorage.read(key: _keyRefreshToken);
+      if (token != null && token.isNotEmpty) {
+        return token;
+      }
+    } catch (_) {}
+
+    // Migration fallback for existing users
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyRefreshToken);
+    final legacyToken = prefs.getString(_keyRefreshToken);
+    if (legacyToken != null && legacyToken.isNotEmpty) {
+      await _secureStorage.write(key: _keyRefreshToken, value: legacyToken);
+      await prefs.remove(_keyRefreshToken);
+      return legacyToken;
+    }
+    return null;
   }
 
   static Future<void> saveUser({
@@ -99,6 +137,10 @@ class TokenStorage {
 
   static Future<void> clear() async {
     _hasSessionCache = false;
+    try {
+      await _secureStorage.delete(key: _keyAccessToken);
+      await _secureStorage.delete(key: _keyRefreshToken);
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyAccessToken);
     await prefs.remove(_keyRefreshToken);
