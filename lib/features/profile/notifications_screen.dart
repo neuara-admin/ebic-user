@@ -166,12 +166,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _markAsRead(n);
     final link = (n['deepLink'] ?? '').toString().toLowerCase();
     final entityType = (n['entityType'] ?? n['category'] ?? '').toString().toUpperCase();
+    final type = (n['type'] ?? '').toString().toUpperCase();
 
-    if (link.contains('/orders') || entityType == 'CHEF_BOOKING' || entityType == 'ORDER') {
+    if (link.contains('/chat') || entityType == 'CHAT_THREAD' || type == 'DIETITIAN_CHAT_MESSAGE') {
+      Navigator.pushNamed(context, AppRoutes.consultationsList);
+    } else if (link.contains('/orders') || entityType == 'CHEF_BOOKING' || entityType == 'ORDER') {
       Navigator.pushNamed(context, AppRoutes.orders);
     } else if (link.contains('/health-pass') || entityType == 'HEALTH_PASS') {
       Navigator.pushNamed(context, AppRoutes.healthPass);
-    } else if (link.contains('/diet-plans') || entityType == 'DIET_PLAN') {
+    } else if (link.contains('/diet-plan') || entityType == 'DIET_PLAN' || type == 'DIET_PLAN_READY') {
       Navigator.pushNamed(context, AppRoutes.dietPlan);
     } else if (link.contains('/consultations') || entityType == 'CONSULTATION' || entityType == 'DIETITIAN') {
       Navigator.pushNamed(context, AppRoutes.consultationsList);
@@ -184,6 +187,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   IconData _iconForCategory(String? category) {
     switch (category?.toUpperCase()) {
+      case 'CHAT_THREAD':
+      case 'CHAT':
+        return Icons.chat_bubble_outline_rounded;
       case 'CHEF_BOOKING':
       case 'CHEF_TRACKING':
       case 'ORDER':

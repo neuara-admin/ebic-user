@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "361752974328",
+    "project_id": "ebic-2969c",
+    "storage_bucket": "ebic-2969c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:361752974328:android:8ab016f2153e88c5cafc0d",
+        "android_client_info": {
+          "package_name": "com.ebic.user.ebic_user"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCVBoDJjHdO2EkOOyoXZ19ADRgYHh0-U8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

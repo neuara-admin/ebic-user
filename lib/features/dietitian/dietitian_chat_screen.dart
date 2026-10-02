@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dietitian_model.dart';
@@ -119,6 +120,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
   bool _isLoading = true;
   bool _isSending = false;
   Timer? _pollingTimer;
+  StreamSubscription<StandardSocketEnvelope>? _socketSub;
 
   List<ChatMessageItem> _messages = [];
 
@@ -150,11 +152,27 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
     _selectedPassId = widget.activePass?.id;
     _loadHealthPasses();
     _initChatSession();
+    _socketSub = RealtimeService().envelopes.listen((env) {
+      if (!mounted) return;
+      if (env.type == 'chat.message_received') {
+        final threadId = env.data['threadId']?.toString();
+        if (threadId != null && threadId == _threadId) {
+          _fetchMessages();
+        }
+      } else if (env.type == 'notification.created') {
+        final entityType = env.data['entityType']?.toString();
+        final entityId = env.data['entityId']?.toString();
+        if (entityType == 'CHAT_THREAD' && entityId == _threadId) {
+          _fetchMessages();
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _socketSub?.cancel();
     _messageController.dispose();
     _messageFocusNode.dispose();
     _scrollController.dispose();

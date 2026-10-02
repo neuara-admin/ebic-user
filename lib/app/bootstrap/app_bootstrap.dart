@@ -6,12 +6,15 @@ import '../../core/config/app_config.dart';
 import '../../core/config/app_environment.dart';
 import '../../core/config/feature_flag_service.dart';
 import '../../core/config/remote_config_service.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/analytics/crash_reporting_service.dart';
 import '../../core/lifecycle/app_lifecycle_manager.dart';
+import '../../core/notifications/device_registration_service.dart';
 import '../../core/realtime/realtime_notification_banner.dart';
 import '../../core/realtime/realtime_service.dart';
 import '../../core/theme/theme_controller.dart';
+import '../../firebase_options.dart';
 
 /// Deterministic Application Bootstrap sequence.
 /// Adheres strictly to Section 13 (Application Bootstrap):
@@ -32,6 +35,15 @@ class AppBootstrap {
   }) async {
     // 1. Initialize Flutter bindings
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Initialize Firebase Core
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (e) {
+      debugPrint('⚠️ [Firebase] initializeApp: $e');
+    }
 
     // Phones are portrait-only (like Swiggy / Uber); tablets may rotate — their
     // content is width-capped by ResponsiveAppFrame.
@@ -83,5 +95,6 @@ class AppBootstrap {
     //    notifications pop up as an in-app banner on any screen.
     RealtimeService().bindToSession();
     RealtimeNotificationBanner.start();
+    unawaited(DeviceRegistrationService().initialize());
   }
 }
