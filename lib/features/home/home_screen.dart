@@ -1103,18 +1103,22 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
 
+        final rawImg = map['imageUrl']?.toString() ?? '';
+        final rawVid = map['videoUrl']?.toString();
+
         return BannerMediaItem(
           id: map['id']?.toString() ?? 'banner',
           title: map['title']?.toString() ?? '',
           subtitle: map['subtitle']?.toString() ?? '',
           tag: map['tag']?.toString() ?? 'FEATURED',
           tagColor: tagColor,
-          imageUrl: map['imageUrl']?.toString() ?? '',
+          imageUrl: resolveBannerMediaUrl(rawImg) ?? rawImg,
           isVideo: map['isVideo'] == true,
-          videoUrl: map['videoUrl']?.toString(),
+          videoUrl: resolveBannerMediaUrl(rawVid) ?? rawVid,
           videoDuration: map['videoDuration']?.toString(),
-          autoPlay: map['autoPlay'] != false, // default true if not specified
-          isMuted: map['isMuted'] == true, // default false if not specified
+          autoPlay: map['autoPlay'] != false,
+          isMuted: map['isMuted'] != false,
+          showTextOverlay: map['showTextOverlay'] != false,
           targetRoute: map['targetRoute']?.toString(),
           ctaText: map['ctaText']?.toString(),
           routeArguments: map['routeArguments'] is Map<String, dynamic>
@@ -1142,6 +1146,12 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       return null;
     }
+  }
+
+  BannerCarouselSettings _parseBannerSettings() {
+    final raw = (_homeData?['banner_settings'] ?? _homeData?['bannerSettings'])
+        as Map<String, dynamic>?;
+    return BannerCarouselSettings.fromMap(raw);
   }
 
   @override
@@ -1362,7 +1372,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_parseBanners() case final banners?
                       when banners.isNotEmpty) ...[
                     RepaintBoundary(
-                      child: AutoScrollBannerCarousel(banners: banners),
+                      child: AutoScrollBannerCarousel(
+                        banners: banners,
+                        settings: _parseBannerSettings(),
+                      ),
                     ),
                     const SizedBox(height: 18),
                   ],
@@ -1980,32 +1993,39 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primarySubtle,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.bolt_rounded, size: 14, color: AppColors.primaryDark),
-                        SizedBox(width: 4),
-                        Text(
-                          'ON-DEMAND CHEF DISPATCH',
-                          style: TextStyle(
-                            color: AppColors.primaryDark,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySubtle,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.bolt_rounded, size: 14, color: AppColors.primaryDark),
+                          SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'ON-DEMAND CHEF DISPATCH',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppColors.primaryDark,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
@@ -2051,12 +2071,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 14),
               // Feature highlights row
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
                 children: [
                   _buildHeroChip(Icons.cleaning_services_rounded, 'Zero Cleanup'),
-                  const SizedBox(width: 8),
                   _buildHeroChip(Icons.eco_rounded, 'Fresh Produce'),
-                  const SizedBox(width: 8),
                   _buildHeroChip(Icons.verified_rounded, 'Verified Chefs'),
                 ],
               ),
@@ -2760,33 +2780,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                    ),
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.verified_rounded,
-                      color: Color(0xFF6EE7B7),
-                      size: 13,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      cleanDr,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.verified_rounded,
+                        color: Color(0xFF6EE7B7),
+                        size: 13,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          cleanDr,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -5238,10 +5264,10 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Text(
             '${pass.planName} Expired',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: AppColors.slate900,
+              color: Theme.of(context).brightness == Brightness.dark ? Colors.white : AppColors.slate900,
             ),
           ),
           const SizedBox(height: 4),
@@ -5860,21 +5886,21 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Connection Issue',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: AppColors.slate900,
+                color: Theme.of(context).brightness == Brightness.dark ? Colors.white : AppColors.slate900,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _networkErrorMessage!,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppColors.slate600,
+                color: Theme.of(context).brightness == Brightness.dark ? AppColors.slate400 : AppColors.slate600,
                 height: 1.4,
               ),
             ),

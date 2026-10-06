@@ -90,14 +90,16 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? AppColors.slate950 : Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: Navigator.canPop(context)
             ? IconButton(
-                icon: const Icon(Icons.close_rounded, color: AppColors.slate700),
+                icon: Icon(Icons.close_rounded, color: isDark ? Colors.white : AppColors.slate700),
                 onPressed: () => Navigator.pop(context),
               )
             : null,
@@ -121,14 +123,14 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
                         height: 104,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFFFFFBEB), // amber-50
+                          color: isDark ? const Color(0xFF451A03) : const Color(0xFFFFFBEB), // amber-950 / amber-50
                           border: Border.all(
-                            color: const Color(0xFFFDE68A), // amber-200
+                            color: isDark ? const Color(0xFF92400E) : const Color(0xFFFDE68A), // amber-800 / amber-200
                             width: 1.5,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                              color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.20 : 0.12),
                               blurRadius: 24,
                               offset: const Offset(0, 8),
                             ),
@@ -137,7 +139,7 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
                         child: const Icon(
                           Icons.wifi_off_rounded,
                           size: 46,
-                          color: Color(0xFFD97706), // amber-600
+                          color: Color(0xFFF59E0B), // amber-500
                         ),
                       ),
                     );
@@ -146,13 +148,13 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
                 const SizedBox(height: 28),
 
                 // Title
-                const Text(
+                Text(
                   'No Internet Connection',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.slate900,
+                    color: isDark ? Colors.white : AppColors.slate900,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -163,10 +165,10 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
                   widget.customMessage ??
                       'We could not establish a connection to EBIC servers. Please verify your mobile data or Wi-Fi connection.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14.5,
                     height: 1.45,
-                    color: AppColors.slate600,
+                    color: isDark ? AppColors.slate400 : AppColors.slate600,
                   ),
                 ),
 
@@ -175,9 +177,9 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEF2F2),
+                      color: isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFFECACA)),
+                      border: Border.all(color: isDark ? const Color(0xFF991B1B) : const Color(0xFFFECACA)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -187,9 +189,9 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
                         Flexible(
                           child: Text(
                             _statusNotice!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
-                              color: Color(0xFFB91C1C),
+                              color: isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -225,13 +227,13 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
                         (r) => false,
                       );
                     },
-                    icon: const Icon(Icons.offline_bolt_outlined, size: 18, color: AppColors.slate700),
-                    label: const Text(
+                    icon: Icon(Icons.offline_bolt_outlined, size: 18, color: isDark ? AppColors.slate300 : AppColors.slate700),
+                    label: Text(
                       'Browse Cached Data Offline',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.slate800,
+                        color: isDark ? Colors.white : AppColors.slate800,
                       ),
                     ),
                   ),

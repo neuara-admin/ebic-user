@@ -14,13 +14,15 @@ class NotFoundScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? AppColors.slate950 : Colors.white,
       appBar: AppBar(
         title: const Text('Page Not Found'),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.slate900,
+        backgroundColor: Colors.transparent,
+        foregroundColor: isDark ? Colors.white : AppColors.slate900,
       ),
       body: SafeArea(
         child: Center(
@@ -33,22 +35,23 @@ class NotFoundScreen extends StatelessWidget {
                   width: 84,
                   height: 84,
                   decoration: BoxDecoration(
-                    color: AppColors.slate100,
+                    color: isDark ? AppColors.slate900 : AppColors.slate100,
                     shape: BoxShape.circle,
+                    border: isDark ? Border.all(color: AppColors.slate800) : null,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.search_off_rounded,
-                    color: AppColors.slate500,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
                     size: 44,
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   "We couldn't find what you're looking for.",
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.slate900,
+                    color: isDark ? Colors.white : AppColors.slate900,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -56,9 +59,9 @@ class NotFoundScreen extends StatelessWidget {
                 Text(
                   message ??
                       'The link may be outdated, expired, or the resource has been removed.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: AppColors.slate500,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
                     height: 1.5,
                   ),
                   textAlign: TextAlign.center,

@@ -929,6 +929,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
     bool enabled = true,
   }) {
     final isSelected = _selectedMethod == key;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Opacity(
       opacity: enabled ? 1 : 0.55,
@@ -936,10 +937,14 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
         ignoring: !enabled,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isSelected
+                ? (isDark ? AppColors.primary.withOpacity(0.15) : AppColors.primarySubtle.withOpacity(0.35))
+                : (isDark ? AppColors.slate900 : Colors.white),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.slate200,
+              color: isSelected
+                  ? AppColors.primary
+                  : (isDark ? AppColors.slate800 : AppColors.slate200),
               width: isSelected ? 2 : 1,
             ),
             boxShadow: [
@@ -972,14 +977,14 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
                       decoration: BoxDecoration(
                         color: isSelected
                             ? AppColors.primarySubtle
-                            : AppColors.slate100,
+                            : (isDark ? AppColors.slate800 : AppColors.slate100),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
                         icon,
                         color: isSelected
                             ? AppColors.primary
-                            : AppColors.slate600,
+                            : (isDark ? AppColors.slate400 : AppColors.slate600),
                         size: 22,
                       ),
                     ),
@@ -994,8 +999,8 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
                               color: isSelected
-                                  ? AppColors.primaryDark
-                                  : AppColors.slate900,
+                                  ? (isDark ? AppColors.primaryLight : AppColors.primaryDark)
+                                  : (isDark ? Colors.white : AppColors.slate900),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -1004,7 +1009,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
                             style: TextStyle(
                               color: isWarning
                                   ? AppColors.danger
-                                  : AppColors.slate500,
+                                  : (isDark ? AppColors.slate400 : AppColors.slate500),
                               fontSize: 12,
                               fontWeight: isWarning
                                   ? FontWeight.w500

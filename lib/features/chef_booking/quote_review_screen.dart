@@ -1733,10 +1733,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (_isLoading && _quote == null) {
-      return const Scaffold(
-        backgroundColor: AppColors.slate50,
-        body: LoadingView(message: 'Calculating quote & chef schedule...'),
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: const LoadingView(message: 'Calculating quote & chef schedule...'),
       );
     }
 
@@ -1746,18 +1747,18 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         (widget.bookingConfig['allMembers'] as List<dynamic>?) ?? [];
 
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.slate900,
-        iconTheme: const IconThemeData(color: AppColors.slate900),
-        title: const Text(
+        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+        foregroundColor: isDark ? Colors.white : AppColors.slate900,
+        iconTheme: IconThemeData(color: isDark ? Colors.white : AppColors.slate900),
+        title: Text(
           'Review Booking',
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.bold,
-            color: AppColors.slate900,
+            color: isDark ? Colors.white : AppColors.slate900,
           ),
         ),
       ),
@@ -4437,6 +4438,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       decoration: BoxDecoration(
         color: AppColors.slate900,
         borderRadius: BorderRadius.circular(18),
+        border: Theme.of(context).brightness == Brightness.dark
+            ? Border.all(color: AppColors.slate700)
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.28),

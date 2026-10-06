@@ -401,11 +401,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
             return Container(
               height: MediaQuery.of(context).size.height * 0.78,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate900 : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: Column(
                 children: [
@@ -416,7 +417,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                       height: 4,
                       margin: const EdgeInsets.only(top: 12, bottom: 8),
                       decoration: BoxDecoration(
-                        color: AppColors.slate300,
+                        color: isDark ? AppColors.slate700 : AppColors.slate300,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -431,12 +432,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           'Filters & Dietary Preferences',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
-                            color: AppColors.slate900,
+                            color: isDark ? Colors.white : AppColors.slate900,
                           ),
                         ),
                         TextButton(
@@ -463,12 +464,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                       padding: const EdgeInsets.all(20),
                       children: [
                         // Section 1: Dietary Preference
-                        const Text(
+                        Text(
                           'Dietary Preference',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: AppColors.slate900,
+                            color: isDark ? Colors.white : AppColors.slate900,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -513,12 +514,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         const SizedBox(height: 20),
 
                         // Section 2: Sort By
-                        const Text(
+                        Text(
                           'Sort By',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: AppColors.slate900,
+                            color: isDark ? Colors.white : AppColors.slate900,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -563,12 +564,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         const SizedBox(height: 20),
 
                         // Section 3: Cooking Time
-                        const Text(
+                        Text(
                           'Maximum Cooking Time',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: AppColors.slate900,
+                            color: isDark ? Colors.white : AppColors.slate900,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -604,12 +605,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                         const SizedBox(height: 20),
 
                         // Section 4: Calories
-                        const Text(
+                        Text(
                           'Calorie Intake',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: AppColors.slate900,
+                            color: isDark ? Colors.white : AppColors.slate900,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -646,12 +647,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
                         // Section 5: Cuisines
                         if (_cuisineOptions.isNotEmpty) ...[
-                          const Text(
+                          Text(
                             'Cuisines',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
-                              color: AppColors.slate900,
+                              color: isDark ? Colors.white : AppColors.slate900,
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -684,12 +685,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
                         // Section 6: Dietary tags (curated, from backend)
                         if (_dietaryTagOptions.isNotEmpty) ...[
-                          const Text(
+                          Text(
                             'Dietary Tags',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
-                              color: AppColors.slate900,
+                              color: isDark ? Colors.white : AppColors.slate900,
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -718,12 +719,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
                         // Section 7: Allergen exclusion
                         if (_allergenOptions.isNotEmpty) ...[
-                          const Text(
+                          Text(
                             'Exclude Allergens',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
-                              color: AppColors.slate900,
+                              color: isDark ? Colors.white : AppColors.slate900,
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -763,10 +764,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                       horizontal: 20,
                       vertical: 14,
                     ),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.slate900 : Colors.white,
                       border: Border(
-                        top: BorderSide(color: AppColors.slate200),
+                        top: BorderSide(
+                          color: isDark ? AppColors.slate800 : AppColors.slate200,
+                        ),
                       ),
                     ),
                     child: EbicButton(
@@ -792,6 +795,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     bool isSelected,
     VoidCallback onTap,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -803,10 +807,14 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primarySubtle : Colors.white,
+            color: isSelected
+                ? AppColors.primarySubtle
+                : (isDark ? AppColors.slate800 : Colors.white),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.slate300,
+              color: isSelected
+                  ? AppColors.primary
+                  : (isDark ? AppColors.slate700 : AppColors.slate300),
               width: isSelected ? 1.5 : 1,
             ),
           ),
@@ -815,7 +823,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              color: isSelected ? AppColors.primaryDark : AppColors.slate800,
+              color: isSelected
+                  ? AppColors.primaryDark
+                  : (isDark ? Colors.white : AppColors.slate800),
             ),
           ),
         ),
@@ -825,29 +835,30 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.slate900,
-        iconTheme: const IconThemeData(color: AppColors.slate900),
+        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+        foregroundColor: isDark ? Colors.white : AppColors.slate900,
+        iconTheme: IconThemeData(color: isDark ? Colors.white : AppColors.slate900),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
+          children: [
             Text(
               "Chef's Menu",
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
-                color: AppColors.slate900,
+                color: isDark ? Colors.white : AppColors.slate900,
               ),
             ),
             Text(
               'Certified Live Home Cooking in Your Kitchen',
               style: TextStyle(
                 fontSize: 11,
-                color: AppColors.slate500,
+                color: isDark ? AppColors.slate400 : AppColors.slate500,
                 fontWeight: FontWeight.normal,
               ),
             ),
@@ -876,7 +887,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   : Icons.search_rounded,
               color: (_isSearchExpanded || _searchQuery.isNotEmpty)
                   ? AppColors.primary
-                  : AppColors.slate700,
+                  : (isDark ? AppColors.slate300 : AppColors.slate700),
             ),
             tooltip: 'Search Dishes',
             onPressed: () {
@@ -898,7 +909,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 Icons.tune_rounded,
                 color: _activeFilterCount > 0
                     ? AppColors.primary
-                    : AppColors.slate700,
+                    : (isDark ? AppColors.slate300 : AppColors.slate700),
               ),
             ),
             tooltip: 'Filters',
@@ -1338,24 +1349,34 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             child: Container(
               height: 42,
               decoration: BoxDecoration(
-                color: AppColors.slate100,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? AppColors.slate900
+                    : AppColors.slate100,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.primary.withOpacity(0.35)),
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? AppColors.slate700
+                      : AppColors.primary.withOpacity(0.35),
+                ),
               ),
               child: TextField(
                 controller: _searchController,
                 autofocus: _isSearchExpanded && _searchQuery.isEmpty,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.slate900,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : AppColors.slate900,
                   fontWeight: FontWeight.w500,
                 ),
                 onChanged: _onSearchChanged,
                 decoration: InputDecoration(
                   hintText: 'Search dishes, cuisines, ingredients...',
-                  hintStyle: const TextStyle(
+                  hintStyle: TextStyle(
                     fontSize: 12.5,
-                    color: AppColors.slate500,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.slate400
+                        : AppColors.slate500,
                   ),
                   prefixIcon: const Icon(
                     Icons.search_rounded,
@@ -1498,6 +1519,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   }
 
   Widget _buildDishCard(DishModel dish) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final activeMemberId = _selectedMember?.id ?? 'self';
     final activeMemberName = _selectedMember?.name ?? 'Self';
     final count = _cart.getServingsForMember(activeMemberId, dish.id);
@@ -1544,15 +1566,15 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.slate100,
+                                color: isDark ? AppColors.slate800 : AppColors.slate100,
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 dish.cuisine!,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.slate700,
+                                  color: isDark ? AppColors.slate300 : AppColors.slate700,
                                 ),
                               ),
                             ),
@@ -1582,18 +1604,18 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
                       Text(
                         dish.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
-                          color: AppColors.slate900,
+                          color: isDark ? Colors.white : AppColors.slate900,
                         ),
                       ),
                       if (dish.description != null) ...[
                         const SizedBox(height: 3),
                         Text(
                           dish.description!,
-                          style: const TextStyle(
-                            color: AppColors.slate600,
+                          style: TextStyle(
+                            color: isDark ? AppColors.slate400 : AppColors.slate600,
                             fontSize: 12,
                             height: 1.3,
                           ),
@@ -1609,7 +1631,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           ),
 
           const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.slate200),
+          Divider(height: 1, color: isDark ? AppColors.slate800 : AppColors.slate200),
           const SizedBox(height: 10),
 
           // Bottom metrics & Add/Quantity Stepper
@@ -1625,17 +1647,17 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.timer_outlined,
                           size: 14,
-                          color: AppColors.slate600,
+                          color: isDark ? AppColors.slate400 : AppColors.slate600,
                         ),
                         const SizedBox(width: 3),
                         Text(
                           '~${dish.baseCookTimeMin}m',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.slate800,
+                            color: isDark ? AppColors.slate300 : AppColors.slate800,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1837,6 +1859,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       decoration: BoxDecoration(
         color: AppColors.slate900,
         borderRadius: BorderRadius.circular(18),
+        border: Theme.of(context).brightness == Brightness.dark
+            ? Border.all(color: AppColors.slate700)
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.28),

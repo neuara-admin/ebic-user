@@ -293,6 +293,8 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
             });
           }
 
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
           return Material(
             color: Colors.transparent,
             child: Container(
@@ -303,9 +305,9 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                 right: 16,
                 bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
               ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate900 : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: Column(
                 children: [
@@ -316,7 +318,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: AppColors.slate300,
+                        color: isDark ? AppColors.slate700 : AppColors.slate300,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -330,11 +332,18 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('#$ticketNumber', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text(
+                              '#$ticketNumber',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isDark ? Colors.white : AppColors.slate900,
+                              ),
+                            ),
                             const SizedBox(height: 2),
                             Text(
                               ticket['subject'] ?? '',
-                              style: const TextStyle(fontSize: 12, color: AppColors.slate600),
+                              style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate400 : AppColors.slate600),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -345,7 +354,10 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                       Row(
                         children: [
                           StatusBadge(status: status),
-                          IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                          IconButton(
+                            icon: Icon(Icons.close, color: isDark ? Colors.white : AppColors.slate700),
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
                         ],
                       ),
                     ],
@@ -388,7 +400,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                       constraints: BoxConstraints(maxWidth: MediaQuery.of(ctx).size.width * 0.75),
                                       decoration: BoxDecoration(
-                                        color: isMe ? AppColors.primary : AppColors.slate100,
+                                        color: isMe ? AppColors.primary : (isDark ? AppColors.slate800 : AppColors.slate100),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Column(
@@ -399,7 +411,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                                             style: TextStyle(
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
-                                              color: isMe ? Colors.white70 : AppColors.slate500,
+                                              color: isMe ? Colors.white70 : (isDark ? AppColors.slate400 : AppColors.slate500),
                                             ),
                                           ),
                                           const SizedBox(height: 4),
@@ -407,7 +419,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                                             (m['message'] ?? '').toString(),
                                             style: TextStyle(
                                               fontSize: 13,
-                                              color: isMe ? Colors.white : AppColors.slate900,
+                                              color: isMe ? Colors.white : (isDark ? Colors.white : AppColors.slate900),
                                             ),
                                           ),
                                         ],
@@ -423,17 +435,17 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.slate100,
+                        color: isDark ? AppColors.slate800 : AppColors.slate100,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         children: [
                           const Icon(Icons.lock_outline, size: 18, color: AppColors.slate500),
                           const SizedBox(width: 8),
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'This ticket is closed.',
-                              style: TextStyle(fontSize: 12, color: AppColors.slate600),
+                              style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate400 : AppColors.slate600),
                             ),
                           ),
                           TextButton(
@@ -462,10 +474,21 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                         Expanded(
                           child: TextField(
                             controller: msgCtrl,
+                            style: TextStyle(color: isDark ? Colors.white : AppColors.slate900),
                             decoration: InputDecoration(
                               hintText: 'Type your message...',
+                              hintStyle: TextStyle(color: isDark ? AppColors.slate500 : AppColors.slate400),
+                              filled: true,
+                              fillColor: isDark ? AppColors.slate800 : Colors.white,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+                              ),
                             ),
                           ),
                         ),
@@ -525,6 +548,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final filteredFaqs = _articles.where((a) {
       final matchesSearch = _faqSearch.isEmpty ||
           (a['title'] ?? '').toString().toLowerCase().contains(_faqSearch.toLowerCase()) ||
@@ -535,12 +559,13 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
     }).toList();
 
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Help & Support'),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppColors.primaryDark,
+          labelColor: isDark ? AppColors.primaryLight : AppColors.primaryDark,
+          unselectedLabelColor: isDark ? AppColors.slate400 : AppColors.slate500,
           indicatorColor: AppColors.primary,
           tabs: const [
             Tab(text: 'FAQs & Guides'),
@@ -570,13 +595,23 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                         child: const Icon(Icons.headset_mic_rounded, color: AppColors.primary, size: 28),
                       ),
                       const SizedBox(width: 14),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('24/7 Concierge Support', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            SizedBox(height: 2),
-                            Text('Dedicated customer support across orders, diet plans & health pass.', style: TextStyle(color: AppColors.slate500, fontSize: 11)),
+                            Text(
+                              '24/7 Concierge Support',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: isDark ? Colors.white : AppColors.slate900,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Dedicated customer support across orders, diet plans & health pass.',
+                              style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500, fontSize: 11),
+                            ),
                           ],
                         ),
                       ),
@@ -588,15 +623,21 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                 // Section 61: Search Input
                 TextField(
                   onChanged: (v) => setState(() => _faqSearch = v.trim()),
+                  style: TextStyle(color: isDark ? Colors.white : AppColors.slate900),
                   decoration: InputDecoration(
                     hintText: 'Search help topics...',
-                    prefixIcon: const Icon(Icons.search, color: AppColors.slate400),
+                    hintStyle: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500),
+                    prefixIcon: Icon(Icons.search, color: isDark ? AppColors.slate400 : AppColors.slate400),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: isDark ? AppColors.slate900 : Colors.white,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.slate200),
+                      borderSide: BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
                     ),
                   ),
                 ),
@@ -643,7 +684,14 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                 ),
                 const SizedBox(height: 16),
 
-                const Text('Frequently Asked Questions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.slate900)),
+                Text(
+                  'Frequently Asked Questions',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : AppColors.slate900,
+                  ),
+                ),
                 const SizedBox(height: 12),
 
                 if (_isLoadingArticles)
@@ -652,7 +700,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
-                      child: Text('No articles found matching "$_faqSearch"', style: TextStyle(color: AppColors.slate500)),
+                      child: Text('No articles found matching "$_faqSearch"', style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500)),
                     ),
                   )
                 else
@@ -662,14 +710,16 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                           child: ExpansionTile(
                             tilePadding: EdgeInsets.zero,
                             childrenPadding: const EdgeInsets.only(top: 8, bottom: 4),
+                            iconColor: isDark ? AppColors.slate300 : AppColors.slate700,
+                            collapsedIconColor: isDark ? AppColors.slate400 : AppColors.slate500,
                             title: Text(
                               (f['title'] ?? '').toString(),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.slate900),
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : AppColors.slate900),
                             ),
                             children: [
                               Text(
                                 (f['content'] ?? '').toString(),
-                                style: const TextStyle(fontSize: 12, color: AppColors.slate600, height: 1.4),
+                                style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate300 : AppColors.slate600, height: 1.4),
                               ),
                             ],
                           ),
@@ -687,11 +737,11 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.inbox_outlined, size: 56, color: AppColors.slate300),
+                          Icon(Icons.inbox_outlined, size: 56, color: isDark ? AppColors.slate700 : AppColors.slate300),
                           const SizedBox(height: 12),
-                          const Text('No support tickets raised', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text('No support tickets raised', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.white : AppColors.slate900)),
                           const SizedBox(height: 4),
-                          const Text('If you have any issues, tap below to raise a ticket.', style: TextStyle(color: AppColors.slate500, fontSize: 12)),
+                          Text('If you have any issues, tap below to raise a ticket.', style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500, fontSize: 12)),
                           const SizedBox(height: 20),
                           EbicButton(
                             label: 'Raise Ticket',
@@ -721,7 +771,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                                     Expanded(
                                       child: Text(
                                         ticketNum.isNotEmpty ? '#$ticketNum' : (t['category'] ?? 'SUPPORT'),
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isDark ? AppColors.primaryLight : AppColors.primaryDark),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
@@ -730,11 +780,14 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                Text(t['subject'] ?? 'Ticket', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                Text(
+                                  t['subject'] ?? 'Ticket',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : AppColors.slate900),
+                                ),
                                 const SizedBox(height: 4),
                                 Text(
                                   t['description'] ?? t['message'] ?? '',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.slate600),
+                                  style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate400 : AppColors.slate600),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),

@@ -93,13 +93,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.slate900, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : AppColors.slate900, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -142,19 +144,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Sign In with Phone',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.slate900,
+                  color: isDark ? Colors.white : AppColors.slate900,
                   letterSpacing: -0.5,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'We will send a 6-digit OTP verification code to your mobile number.',
-                style: TextStyle(fontSize: 14, color: AppColors.slate500, height: 1.4),
+                style: TextStyle(fontSize: 14, color: isDark ? AppColors.slate400 : AppColors.slate500, height: 1.4),
               ),
               const SizedBox(height: 28),
 
@@ -184,15 +186,19 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
 
               // Mobile Number Input
-              const Text(
+              Text(
                 'Mobile Number',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.slate800),
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: isDark ? AppColors.slate200 : AppColors.slate800),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
                 maxLength: 10,
+                style: TextStyle(
+                  color: isDark ? Colors.white : AppColors.slate900,
+                  fontWeight: FontWeight.w600,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(10),
@@ -200,22 +206,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: InputDecoration(
                   prefixIcon: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                    child: const Text(
+                    child: Text(
                       '+91',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate800),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? AppColors.slate300 : AppColors.slate800),
                     ),
                   ),
                   hintText: '9876543210',
+                  hintStyle: TextStyle(color: isDark ? AppColors.slate500 : AppColors.slate400),
                   counterText: '',
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: isDark ? AppColors.slate900 : Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.slate200),
+                    borderSide: BorderSide(color: isDark ? AppColors.slate800 : AppColors.slate200),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.slate200),
+                    borderSide: BorderSide(color: isDark ? AppColors.slate800 : AppColors.slate200),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -235,14 +242,14 @@ class _LoginScreenState extends State<LoginScreen> {
               Center(
                 child: GestureDetector(
                   onTap: () => Navigator.pushReplacementNamed(context, AppRoutes.register),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         "Don't have an account? ",
-                        style: TextStyle(color: AppColors.slate600, fontSize: 14),
+                        style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate600, fontSize: 14),
                       ),
-                      Text(
+                      const Text(
                         'Sign Up',
                         style: TextStyle(
                           color: AppColors.primary,
@@ -261,10 +268,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () {
                     Navigator.pushNamed(context, AppRoutes.accountRecovery);
                   },
-                  child: const Text(
+                  child: Text(
                     "Can't access your account? Account Recovery",
                     style: TextStyle(
-                      color: AppColors.slate500,
+                      color: isDark ? AppColors.slate400 : AppColors.slate500,
                       fontSize: 13,
                       decoration: TextDecoration.underline,
                     ),
@@ -277,11 +284,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () {
                     Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainShell, (route) => false);
                   },
-                  icon: const Icon(Icons.explore_outlined, size: 16, color: AppColors.slate600),
-                  label: const Text(
+                  icon: Icon(Icons.explore_outlined, size: 16, color: isDark ? AppColors.slate300 : AppColors.slate600),
+                  label: Text(
                     'Explore App as Guest',
                     style: TextStyle(
-                      color: AppColors.slate600,
+                      color: isDark ? AppColors.slate300 : AppColors.slate600,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),

@@ -228,13 +228,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.slate900, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : AppColors.slate900, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -265,16 +267,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               const SizedBox(height: 12),
               Text(
                 _getTitle(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.slate900,
+                  color: isDark ? Colors.white : AppColors.slate900,
                   letterSpacing: -0.5,
                 ),
               ),
               Text(
                 'Enter the 6-digit code sent to ${_maskPhoneNumber(widget.phone)}',
-                style: const TextStyle(fontSize: 14, color: AppColors.slate600, height: 1.4),
+                style: TextStyle(fontSize: 14, color: isDark ? AppColors.slate400 : AppColors.slate600, height: 1.4),
               ),
               const SizedBox(height: 24),
 
@@ -391,6 +393,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   Widget _buildPinCell(int index) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SizedBox(
       width: double.infinity,
       height: 56,
@@ -410,23 +414,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           focusNode: _focusNodes[index],
           keyboardType: TextInputType.number,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
-            color: AppColors.slate900,
+            color: isDark ? Colors.white : AppColors.slate900,
           ),
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: InputDecoration(
             counterText: '',
             contentPadding: EdgeInsets.zero,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: isDark ? AppColors.slate900 : Colors.white,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
                 color: _digitControllers[index].text.isNotEmpty
                     ? AppColors.primary
-                    : Colors.grey.shade300,
+                    : (isDark ? AppColors.slate800 : Colors.grey.shade300),
                 width: _digitControllers[index].text.isNotEmpty ? 1.5 : 1.0,
               ),
             ),

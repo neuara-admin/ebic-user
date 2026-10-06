@@ -19,8 +19,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Privacy & Health Data Consent'),
       ),
@@ -39,10 +41,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.primary.withOpacity(0.3)),
                 ),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    const Row(
                       children: [
                         Icon(Icons.shield_rounded, color: AppColors.primaryDark, size: 20),
                         SizedBox(width: 8),
@@ -52,10 +54,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                         )),
                       ],
                     ),
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
                     Text(
                       'Every household member’s diagnostic reports, consultation summaries, and vitals are individually encrypted. Data access requires explicit member-level consent.',
-                      style: TextStyle(fontSize: 12, color: AppColors.slate800, height: 1.4),
+                      style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate200 : AppColors.slate800, height: 1.4),
                     ),
                   ],
                 ),
@@ -63,7 +65,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
               const SizedBox(height: 24),
 
               // Consent Toggles (Section 61)
-              const Text('Consent & Data Sharing', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900)),
+              Text('Consent & Data Sharing', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : AppColors.slate900)),
               const SizedBox(height: 12),
 
               EbicCard(
@@ -110,7 +112,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
               const SizedBox(height: 24),
 
               // Rights & Data Portability
-              const Text('Data Subject Rights', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900)),
+              Text('Data Subject Rights', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : AppColors.slate900)),
               const SizedBox(height: 10),
 
               EbicCard(
@@ -147,7 +149,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
               const SizedBox(height: 24),
 
               // Module 2 Section 21 & 22: Account Lifecycle & Security
-              const Text('Account Lifecycle & Security', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900)),
+              Text('Account Lifecycle & Security', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : AppColors.slate900)),
               const SizedBox(height: 10),
 
               EbicCard(
@@ -155,7 +157,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                   children: [
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.devices_outlined, color: AppColors.slate700),
+                      leading: Icon(Icons.devices_outlined, color: isDark ? AppColors.slate300 : AppColors.slate700),
                       title: const Text('Log Out From All Devices', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                       subtitle: const Text('Revoke active sessions across all web and mobile devices', style: TextStyle(fontSize: 11)),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.slate400),

@@ -48,6 +48,8 @@ class _EbicButtonState extends State<EbicButton> {
     Color? bgColor;
     Gradient? gradient;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     switch (effectiveVariant) {
       case EbicButtonVariant.outline:
         textColor = widget.color ?? AppColors.primary;
@@ -56,9 +58,9 @@ class _EbicButtonState extends State<EbicButton> {
         gradient = null;
         break;
       case EbicButtonVariant.ghost:
-        textColor = widget.color ?? AppColors.slate700;
-        borderColor = AppColors.slate200;
-        bgColor = Colors.white;
+        textColor = widget.color ?? (isDark ? AppColors.slate200 : AppColors.slate700);
+        borderColor = isDark ? AppColors.slate800 : AppColors.slate200;
+        bgColor = isDark ? AppColors.slate900 : Colors.white;
         gradient = null;
         break;
       case EbicButtonVariant.danger:

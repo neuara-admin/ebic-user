@@ -265,17 +265,18 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
 
     final meal = _meal!;
     final occasionColor = _getOccasionColor(meal.occasion);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           meal.occasion.replaceAll('_', ' '),
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.slate900,
+        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+        foregroundColor: isDark ? Colors.white : AppColors.slate900,
         actions: [
           IconButton(
             icon: const Icon(Icons.feedback_outlined, size: 20),
@@ -292,9 +293,9 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isDark ? AppColors.slate900 : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.slate200),
+              border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.02),
@@ -353,10 +354,10 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                 const SizedBox(height: 10),
                 Text(
                   meal.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.slate900,
+                    color: isDark ? Colors.white : AppColors.slate900,
                     letterSpacing: -0.2,
                   ),
                 ),
@@ -364,9 +365,9 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                   const SizedBox(height: 6),
                   Text(
                     meal.description!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13.5,
-                      color: AppColors.slate600,
+                      color: isDark ? AppColors.slate400 : AppColors.slate600,
                       height: 1.4,
                     ),
                   ),
@@ -408,9 +409,9 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isDark ? AppColors.slate900 : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.slate200),
+              border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -418,9 +419,13 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Today\'s Adherence',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                      ),
                     ),
                     Text(
                       _adherenceStatus == 'CONFIRMED_CONSUMED'
@@ -431,7 +436,7 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                         fontWeight: FontWeight.bold,
                         color: _adherenceStatus == 'CONFIRMED_CONSUMED'
                             ? AppColors.successDark
-                            : (_adherenceStatus == 'SKIPPED' ? AppColors.danger : AppColors.slate500),
+                            : (_adherenceStatus == 'SKIPPED' ? AppColors.danger : (isDark ? AppColors.slate400 : AppColors.slate500)),
                       ),
                     ),
                   ],
@@ -443,12 +448,12 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           backgroundColor: _adherenceStatus == 'CONFIRMED_CONSUMED'
-                              ? const Color(0xFFF0FDF4)
-                              : Colors.white,
+                              ? (isDark ? const Color(0xFF14532D) : const Color(0xFFF0FDF4))
+                              : (isDark ? AppColors.slate800 : Colors.white),
                           side: BorderSide(
                             color: _adherenceStatus == 'CONFIRMED_CONSUMED'
                                 ? const Color(0xFF16A34A)
-                                : AppColors.slate300,
+                                : (isDark ? AppColors.slate700 : AppColors.slate300),
                             width: _adherenceStatus == 'CONFIRMED_CONSUMED' ? 1.5 : 1,
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -460,7 +465,7 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                           Icons.check_circle_rounded,
                           color: _adherenceStatus == 'CONFIRMED_CONSUMED'
                               ? const Color(0xFF16A34A)
-                              : AppColors.slate400,
+                              : (isDark ? AppColors.slate400 : AppColors.slate400),
                           size: 18,
                         ),
                         label: Text(
@@ -469,8 +474,8 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                               : 'I Ate This',
                           style: TextStyle(
                             color: _adherenceStatus == 'CONFIRMED_CONSUMED'
-                                ? const Color(0xFF166534)
-                                : AppColors.slate800,
+                                ? (isDark ? const Color(0xFF86EFAC) : const Color(0xFF166534))
+                                : (isDark ? Colors.white : AppColors.slate800),
                             fontWeight: FontWeight.bold,
                             fontSize: 12.5,
                           ),
@@ -483,12 +488,12 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           backgroundColor: _adherenceStatus == 'SKIPPED'
-                              ? const Color(0xFFFEF2F2)
-                              : Colors.white,
+                              ? (isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFEF2F2))
+                              : (isDark ? AppColors.slate800 : Colors.white),
                           side: BorderSide(
                             color: _adherenceStatus == 'SKIPPED'
                                 ? const Color(0xFFDC2626)
-                                : AppColors.slate300,
+                                : (isDark ? AppColors.slate700 : AppColors.slate300),
                             width: _adherenceStatus == 'SKIPPED' ? 1.5 : 1,
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -500,15 +505,15 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                           Icons.cancel_outlined,
                           color: _adherenceStatus == 'SKIPPED'
                               ? const Color(0xFFDC2626)
-                              : AppColors.slate400,
+                              : (isDark ? AppColors.slate400 : AppColors.slate400),
                           size: 18,
                         ),
                         label: Text(
                           _adherenceStatus == 'SKIPPED' ? 'Skipped' : 'Skip Meal',
                           style: TextStyle(
                             color: _adherenceStatus == 'SKIPPED'
-                                ? const Color(0xFF991B1B)
-                                : AppColors.slate800,
+                                ? (isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B))
+                                : (isDark ? Colors.white : AppColors.slate800),
                             fontWeight: FontWeight.bold,
                             fontSize: 12.5,
                           ),
@@ -528,9 +533,9 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: isDark ? AppColors.slate900 : Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.slate200),
+                border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,9 +543,13 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Meal Nutrition Target',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14.5,
+                          color: isDark ? Colors.white : AppColors.slate900,
+                        ),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -717,6 +726,7 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
 
   // Dish Card with Image, Video, Portions, and Ingredients
   Widget _buildDishItemCard(DietPlanDishItemModel dishItem) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isVeg = dishItem.dietaryTags.any(
       (t) => t.toLowerCase() == 'vegetarian' || t.toLowerCase() == 'vegan',
     );
@@ -724,9 +734,9 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.slate900 : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.slate200),
+        border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -771,10 +781,10 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                       children: [
                         Text(
                           dishItem.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.slate900,
+                            color: isDark ? Colors.white : AppColors.slate900,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,

@@ -121,8 +121,10 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Household & Members'),
       ),
@@ -147,22 +149,23 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(20),
-                      decoration: const BoxDecoration(
-                        color: AppColors.slate100,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.slate900 : AppColors.slate100,
                         shape: BoxShape.circle,
+                        border: isDark ? Border.all(color: AppColors.slate800) : null,
                       ),
-                      child: const Icon(Icons.people_outline_rounded, size: 48, color: AppColors.slate400),
+                      child: Icon(Icons.people_outline_rounded, size: 48, color: isDark ? AppColors.slate400 : AppColors.slate400),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'No household members yet',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.slate800),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : AppColors.slate800),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Add a household member to manage their EBIC services and health profile.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.slate500, fontSize: 13),
+                      style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500, fontSize: 13),
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
@@ -310,6 +313,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
   }
 
   Widget _buildMemberCard(HouseholdMemberModel m, bool isSelected) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return EbicCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,10 +348,10 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                         Flexible(
                           child: Text(
                             m.name,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 15,
-                              color: AppColors.slate900,
+                              color: isDark ? Colors.white : AppColors.slate900,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -357,12 +361,14 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: m.isSelf ? AppColors.emerald50 : AppColors.slate100,
+                            color: m.isSelf
+                                ? AppColors.emerald50
+                                : (isDark ? AppColors.slate800 : AppColors.slate100),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
                               color: m.isSelf
                                   ? AppColors.primary.withValues(alpha: 0.3)
-                                  : AppColors.slate300,
+                                  : (isDark ? AppColors.slate700 : AppColors.slate300),
                               width: 0.8,
                             ),
                           ),
@@ -371,7 +377,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                             style: TextStyle(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w700,
-                              color: m.isSelf ? AppColors.primaryDark : AppColors.slate600,
+                              color: m.isSelf ? AppColors.primaryDark : (isDark ? AppColors.slate300 : AppColors.slate600),
                             ),
                           ),
                         ),
@@ -389,7 +395,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
               ),
               // Action buttons
               IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.slate600),
+                icon: Icon(Icons.edit_outlined, size: 18, color: isDark ? AppColors.slate300 : AppColors.slate600),
                 tooltip: 'Edit Member & Health Vitals',
                 onPressed: () => _navigateToAddOrEditMember(m),
                 padding: const EdgeInsets.all(6),

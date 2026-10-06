@@ -152,8 +152,10 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Offers & Promotions'),
         actions: [
@@ -175,9 +177,9 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Coupon Code Input Section
-                const Text(
+                Text(
                   'Enter Coupon Code',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.slate900),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : AppColors.slate900),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -186,19 +188,24 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
                       child: TextField(
                         controller: _couponCtrl,
                         textCapitalization: TextCapitalization.characters,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : AppColors.slate900,
+                          fontWeight: FontWeight.bold,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'e.g. FIRSTCHEF',
+                          hintStyle: TextStyle(color: isDark ? AppColors.slate500 : AppColors.slate400),
                           prefixIcon: const Icon(Icons.confirmation_number_outlined, size: 20, color: AppColors.primary),
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: isDark ? AppColors.slate900 : Colors.white,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: AppColors.slate300),
+                            borderSide: BorderSide(color: isDark ? AppColors.slate800 : AppColors.slate300),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: AppColors.slate300),
+                            borderSide: BorderSide(color: isDark ? AppColors.slate800 : AppColors.slate300),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),

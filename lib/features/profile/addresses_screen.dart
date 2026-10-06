@@ -198,8 +198,10 @@ class _AddressesScreenState extends State<AddressesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(widget.isPicker ? 'Select Kitchen Address' : 'Saved Kitchen Addresses'),
       ),
@@ -215,22 +217,23 @@ class _AddressesScreenState extends State<AddressesScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(20),
-                          decoration: const BoxDecoration(
-                            color: AppColors.slate100,
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.slate900 : AppColors.slate100,
                             shape: BoxShape.circle,
+                            border: isDark ? Border.all(color: AppColors.slate800) : null,
                           ),
-                          child: const Icon(Icons.soup_kitchen_outlined, size: 48, color: AppColors.slate400),
+                          child: Icon(Icons.soup_kitchen_outlined, size: 48, color: isDark ? AppColors.slate400 : AppColors.slate400),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
+                        Text(
                           'No saved kitchen addresses',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.slate800),
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : AppColors.slate800),
                         ),
                         const SizedBox(height: 6),
-                        const Text(
+                        Text(
                           'Add your home or vacation kitchen address to check certified chef serviceability and book meals.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.slate500, fontSize: 13),
+                          style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500, fontSize: 13),
                         ),
                         const SizedBox(height: 24),
                         ElevatedButton.icon(
@@ -290,6 +293,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
   }
 
   Widget _buildAddressCard(AddressModel addr) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isRechecking = _recheckingAddressId == addr.id;
 
     return EbicCard(
@@ -326,7 +330,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
                         Flexible(
                           child: Text(
                             addr.kitchenLabelDisplayName,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.slate900),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : AppColors.slate900),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -339,18 +343,18 @@ class _AddressesScreenState extends State<AddressesScreen> {
                     const SizedBox(height: 4),
                     Text(
                       addr.formattedAddress,
-                      style: const TextStyle(fontSize: 13, color: AppColors.slate700, height: 1.3),
+                      style: TextStyle(fontSize: 13, color: isDark ? AppColors.slate300 : AppColors.slate700, height: 1.3),
                     ),
                     if (addr.recipientName != null && addr.recipientName!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.person_outline, size: 12, color: AppColors.slate500),
+                          Icon(Icons.person_outline, size: 12, color: isDark ? AppColors.slate400 : AppColors.slate500),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               'Contact: ${addr.recipientName} ${addr.phone != null ? "(${addr.phone})" : ""}',
-                              style: const TextStyle(fontSize: 11, color: AppColors.slate600),
+                              style: TextStyle(fontSize: 11, color: isDark ? AppColors.slate400 : AppColors.slate600),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -380,7 +384,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
               ),
               // Edit Address
               IconButton(
-                icon: const Icon(Icons.edit_outlined, color: AppColors.slate600, size: 18),
+                icon: Icon(Icons.edit_outlined, color: isDark ? AppColors.slate300 : AppColors.slate600, size: 18),
                 tooltip: 'Edit Kitchen',
                 onPressed: () async {
                   final updated = await Navigator.pushNamed(
@@ -393,7 +397,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
               ),
               // Delete Address
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: AppColors.slate400, size: 20),
+                icon: Icon(Icons.delete_outline, color: isDark ? AppColors.slate400 : AppColors.slate400, size: 20),
                 tooltip: 'Delete Kitchen',
                 onPressed: () => _deleteAddress(addr),
               ),
@@ -434,12 +438,12 @@ class _AddressesScreenState extends State<AddressesScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: AppColors.slate100,
+                      color: isDark ? AppColors.slate800 : AppColors.slate100,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Set as Primary',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate700),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isDark ? AppColors.slate300 : AppColors.slate700),
                     ),
                   ),
                 ),

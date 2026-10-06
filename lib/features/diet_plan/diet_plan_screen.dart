@@ -332,8 +332,9 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
 
   // 1. Redesigned Luxury Covered Member Selector
   Widget _buildMemberSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: Colors.white,
+      color: isDark ? AppColors.slate900 : Colors.white,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,13 +358,13 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Flexible(
+                    Flexible(
                       child: Text(
                         'Covered Family Member',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.slate800,
+                          color: isDark ? Colors.white : AppColors.slate800,
                           letterSpacing: 0.3,
                         ),
                         maxLines: 1,
@@ -377,9 +378,9 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                  color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -389,10 +390,10 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
                     const SizedBox(width: 4),
                     Text(
                       '${_householdMembers.length} Covered',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.slate700,
+                        color: isDark ? AppColors.slate300 : AppColors.slate700,
                       ),
                     ),
                   ],
@@ -426,13 +427,13 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
                           horizontal: 10, vertical: 7),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFFECFDF5)
-                            : const Color(0xFFF8FAFC),
+                            ? (isDark ? AppColors.primary.withOpacity(0.18) : const Color(0xFFECFDF5))
+                            : (isDark ? AppColors.slate800 : const Color(0xFFF8FAFC)),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isSelected
                               ? AppColors.primary
-                              : AppColors.slate200,
+                              : (isDark ? AppColors.slate700 : AppColors.slate200),
                           width: isSelected ? 1.5 : 1,
                         ),
                         boxShadow: isSelected
@@ -454,7 +455,7 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
                                 radius: 14,
                                 backgroundColor: isSelected
                                     ? AppColors.primary
-                                    : AppColors.slate300,
+                                    : (isDark ? AppColors.slate700 : AppColors.slate300),
                                 child: Text(
                                   initials,
                                   style: const TextStyle(
@@ -493,8 +494,8 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                   color: isSelected
-                                      ? AppColors.primaryDark
-                                      : AppColors.slate800,
+                                      ? (isDark ? AppColors.primaryLight : AppColors.primaryDark)
+                                      : (isDark ? Colors.white : AppColors.slate800),
                                 ),
                               ),
                               Text(

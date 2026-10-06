@@ -152,13 +152,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.slate900, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : AppColors.slate900, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -201,19 +203,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Create Your Account',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.slate900,
+                  color: isDark ? Colors.white : AppColors.slate900,
                   letterSpacing: -0.5,
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Enter your details to register and access personalized healthy chef bookings.',
-                style: TextStyle(fontSize: 14, color: AppColors.slate500, height: 1.4),
+                style: TextStyle(fontSize: 14, color: isDark ? AppColors.slate400 : AppColors.slate500, height: 1.4),
               ),
               const SizedBox(height: 24),
 
@@ -308,9 +310,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Expanded(
                     child: GestureDetector(
                       onTap: () => setState(() => _termsAccepted = !_termsAccepted),
-                      child: const Text(
+                      child: Text(
                         'I agree to the Terms of Service and Privacy Policy.',
-                        style: TextStyle(fontSize: 13, color: AppColors.slate600),
+                        style: TextStyle(fontSize: 13, color: isDark ? AppColors.slate400 : AppColors.slate600),
                       ),
                     ),
                   ),
@@ -331,10 +333,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: GestureDetector(
                   onTap: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
                   child: RichText(
-                    text: const TextSpan(
+                    text: TextSpan(
                       text: "Already have an account? ",
-                      style: TextStyle(color: AppColors.slate600, fontSize: 14),
-                      children: [
+                      style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate600, fontSize: 14),
+                      children: const [
                         TextSpan(
                           text: 'Log In',
                           style: TextStyle(
@@ -353,11 +355,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onPressed: () {
                     Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainShell, (route) => false);
                   },
-                  icon: const Icon(Icons.explore_outlined, size: 16, color: AppColors.slate600),
-                  label: const Text(
+                  icon: Icon(Icons.explore_outlined, size: 16, color: isDark ? AppColors.slate300 : AppColors.slate600),
+                  label: Text(
                     'Explore App as Guest',
                     style: TextStyle(
-                      color: AppColors.slate600,
+                      color: isDark ? AppColors.slate300 : AppColors.slate600,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -373,14 +375,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildFieldLabel(String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: AppColors.slate700,
+          color: isDark ? AppColors.slate200 : AppColors.slate700,
         ),
       ),
     );
@@ -391,22 +394,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required IconData prefixIcon,
     String? prefixText,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: AppColors.slate400, fontSize: 14),
-      prefixIcon: Icon(prefixIcon, color: AppColors.slate400, size: 20),
+      hintStyle: TextStyle(color: isDark ? AppColors.slate500 : AppColors.slate400, fontSize: 14),
+      prefixIcon: Icon(prefixIcon, color: isDark ? AppColors.slate400 : AppColors.slate400, size: 20),
       prefixText: prefixText,
-      prefixStyle: const TextStyle(
-        color: AppColors.slate900,
+      prefixStyle: TextStyle(
+        color: isDark ? Colors.white : AppColors.slate900,
         fontWeight: FontWeight.w600,
         fontSize: 14,
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: isDark ? AppColors.slate900 : Colors.white,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+        borderSide: BorderSide(color: isDark ? AppColors.slate800 : Colors.grey.shade300),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

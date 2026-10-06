@@ -79,14 +79,16 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
         ? 'We are upgrading our culinary & nutrition infrastructure to serve you better. We will be back online shortly.'
         : 'We encountered an unexpected server glitch. No data was lost. Our engineering team has been automatically alerted.';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? AppColors.slate950 : Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: Navigator.canPop(context)
             ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded, color: AppColors.slate700),
+                icon: Icon(Icons.arrow_back_rounded, color: isDark ? Colors.white : AppColors.slate700),
                 onPressed: () => Navigator.pop(context),
               )
             : null,
@@ -105,19 +107,19 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: widget.isMaintenance
-                        ? const Color(0xFFEFF6FF) // blue-50
-                        : const Color(0xFFFFF1F2), // rose-50
+                        ? (isDark ? const Color(0xFF1E3A8A).withOpacity(0.5) : const Color(0xFFEFF6FF)) // blue
+                        : (isDark ? const Color(0xFF4C0519).withOpacity(0.5) : const Color(0xFFFFF1F2)), // rose
                     border: Border.all(
                       color: widget.isMaintenance
-                          ? const Color(0xFFBFDBFE) // blue-200
-                          : const Color(0xFFFECDD3), // rose-200
+                          ? (isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE))
+                          : (isDark ? const Color(0xFFBE123C) : const Color(0xFFFECDD3)),
                       width: 1.5,
                     ),
                     boxShadow: [
                       BoxShadow(
                         color: widget.isMaintenance
-                            ? const Color(0xFF3B82F6).withValues(alpha: 0.12)
-                            : const Color(0xFFF43F5E).withValues(alpha: 0.12),
+                            ? const Color(0xFF3B82F6).withValues(alpha: isDark ? 0.25 : 0.12)
+                            : const Color(0xFFF43F5E).withValues(alpha: isDark ? 0.25 : 0.12),
                         blurRadius: 24,
                         offset: const Offset(0, 8),
                       ),
@@ -129,8 +131,8 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                         : Icons.cloud_off_rounded,
                     size: 46,
                     color: widget.isMaintenance
-                        ? const Color(0xFF2563EB)
-                        : const Color(0xFFE11D48),
+                        ? const Color(0xFF3B82F6)
+                        : const Color(0xFFF43F5E),
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -139,10 +141,10 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                 Text(
                   title,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 21,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.slate900,
+                    color: isDark ? Colors.white : AppColors.slate900,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -152,10 +154,10 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                 Text(
                   subtitle,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14.5,
                     height: 1.45,
-                    color: AppColors.slate600,
+                    color: isDark ? AppColors.slate400 : AppColors.slate600,
                   ),
                 ),
 
@@ -164,21 +166,21 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: isDark ? AppColors.slate900 : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.slate200),
+                      border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.timer_outlined, size: 18, color: AppColors.slate600),
+                        Icon(Icons.timer_outlined, size: 18, color: isDark ? AppColors.slate400 : AppColors.slate600),
                         const SizedBox(width: 8),
                         Text(
                           'Estimated completion: ${widget.estimatedDowntime}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.slate700,
+                            color: isDark ? AppColors.slate300 : AppColors.slate700,
                           ),
                         ),
                       ],
@@ -191,9 +193,9 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEF2F2),
+                      color: isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFFECACA)),
+                      border: Border.all(color: isDark ? const Color(0xFF991B1B) : const Color(0xFFFECACA)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -203,9 +205,9 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                         Flexible(
                           child: Text(
                             _statusError!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
-                              color: Color(0xFFB91C1C),
+                              color: isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -237,13 +239,13 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                       onPressed: () {
                         Navigator.pushNamed(context, AppRoutes.support);
                       },
-                      icon: const Icon(Icons.support_agent_rounded, size: 18, color: AppColors.slate700),
-                      label: const Text(
+                      icon: Icon(Icons.support_agent_rounded, size: 18, color: isDark ? AppColors.slate300 : AppColors.slate700),
+                      label: Text(
                         'Contact Support',
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.slate800,
+                          color: isDark ? Colors.white : AppColors.slate800,
                         ),
                       ),
                     ),
@@ -256,13 +258,13 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
                           (r) => false,
                         );
                       },
-                      icon: const Icon(Icons.home_outlined, size: 18, color: AppColors.slate700),
-                      label: const Text(
+                      icon: Icon(Icons.home_outlined, size: 18, color: isDark ? AppColors.slate300 : AppColors.slate700),
+                      label: Text(
                         'Back to Home',
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.slate800,
+                          color: isDark ? Colors.white : AppColors.slate800,
                         ),
                       ),
                     ),

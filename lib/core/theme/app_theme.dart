@@ -121,6 +121,31 @@ class AppTheme {
           color: AppColors.slate400,
         ),
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
+        modalBackgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        titleTextStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.slate900,
+        ),
+        contentTextStyle: GoogleFonts.inter(
+          fontSize: 14,
+          color: AppColors.slate700,
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.slate200,
+        thickness: 1,
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: Colors.white,
         selectedItemColor: AppColors.primary,
@@ -261,6 +286,14 @@ class AppTheme {
           color: AppColors.slate300,
         ),
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.slate900,
+        modalBackgroundColor: AppColors.slate900,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
       dividerTheme: const DividerThemeData(
         color: AppColors.slate800,
         thickness: 1,
@@ -274,4 +307,17 @@ class AppTheme {
       ),
     );
   }
+}
+
+/// Context extension for quick, theme-adaptive design tokens
+extension AppThemeContext on BuildContext {
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+  Color get textPrimary => isDark ? Colors.white : AppColors.slate900;
+  Color get textSecondary => isDark ? AppColors.slate300 : AppColors.slate700;
+  Color get textMuted => isDark ? AppColors.slate400 : AppColors.slate500;
+  Color get cardBg => isDark ? AppColors.slate900 : Colors.white;
+  Color get inputBg => isDark ? AppColors.slate900 : Colors.white;
+  Color get canvasBg => isDark ? AppColors.slate950 : AppColors.slate50;
+  Color get surfaceBorder => isDark ? const Color(0xFF1E293B) : AppColors.slate200;
+  Color get iconColor => isDark ? Colors.white : AppColors.slate900;
 }

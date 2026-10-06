@@ -82,12 +82,13 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final filteredLedger = _selectedFilter == 'ALL'
         ? _ledger
         : _ledger.where((tx) => tx['type'] == _selectedFilter).toList();
 
     return Scaffold(
-      backgroundColor: AppColors.slate50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('EBIC Credits'),
       ),
@@ -153,36 +154,36 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: isDark ? AppColors.slate900 : Colors.white,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.slate200),
+                          border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              children: const [
-                                Icon(Icons.info_outline, size: 18, color: AppColors.primary),
-                                SizedBox(width: 8),
+                              children: [
+                                const Icon(Icons.info_outline, size: 18, color: AppColors.primary),
+                                const SizedBox(width: 8),
                                 Text(
                                   'How your credits work',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.slate900,
+                                    color: isDark ? Colors.white : AppColors.slate900,
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               '• Earn credits through referrals, promotions, goodwill, and approved refunds.\n'
                               '• Use eligible EBIC credits toward EBIC services and purchases.\n'
                               '• Credits are closed-system platform benefits: non-transferable and non-withdrawable to bank accounts.\n'
                               '• Credits are held in an immutable double-entry ledger.',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.slate600,
+                                color: isDark ? AppColors.slate300 : AppColors.slate600,
                                 height: 1.5,
                               ),
                             ),
@@ -195,17 +196,17 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
+                          Text(
                             'Recent Activity',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
-                              color: AppColors.slate900,
+                              color: isDark ? Colors.white : AppColors.slate900,
                             ),
                           ),
                           Text(
                             '${_ledger.length} items',
-                            style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                            style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate400 : AppColors.slate500),
                           ),
                         ],
                       ),
@@ -228,26 +229,26 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: isDark ? AppColors.slate900 : Colors.white,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.slate200),
+                            border: Border.all(color: isDark ? AppColors.slate800 : AppColors.slate200),
                           ),
                           child: Column(
-                            children: const [
-                              Icon(Icons.receipt_long_outlined, size: 40, color: AppColors.slate300),
-                              SizedBox(height: 10),
+                            children: [
+                              Icon(Icons.receipt_long_outlined, size: 40, color: isDark ? AppColors.slate600 : AppColors.slate300),
+                              const SizedBox(height: 10),
                               Text(
                                 'No credit activity yet',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.slate700,
+                                  color: isDark ? Colors.white : AppColors.slate700,
                                 ),
                               ),
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
                               Text(
                                 'Refer friends, join promotional campaigns, or receive service recovery credits to see them here.',
-                                style: TextStyle(fontSize: 12, color: AppColors.slate500),
+                                style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate400 : AppColors.slate500),
                                 textAlign: TextAlign.center,
                               ),
                             ],
@@ -292,23 +293,23 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
                                         children: [
                                           Text(
                                             tx['reason'] ?? 'Transaction',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 13,
-                                              color: AppColors.slate900,
+                                              color: isDark ? Colors.white : AppColors.slate900,
                                             ),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
                                             '${tx['date']}${tx['expiry'] != null && tx['expiry'] != 'No Expiry' ? ' • Expiry: ${tx['expiry']}' : ''}',
-                                            style: const TextStyle(color: AppColors.slate500, fontSize: 11),
+                                            style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500, fontSize: 11),
                                           ),
                                           if (balanceAfter != null) ...[
                                             const SizedBox(height: 2),
                                             Text(
                                               'Balance: ₹${balanceAfter.toStringAsFixed(0)}',
-                                              style: const TextStyle(
-                                                color: AppColors.slate400,
+                                              style: TextStyle(
+                                                color: isDark ? AppColors.slate400 : AppColors.slate400,
                                                 fontSize: 10.5,
                                                 fontWeight: FontWeight.w500,
                                               ),
@@ -325,14 +326,14 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 14,
-                                            color: isCredit ? AppColors.emerald700 : AppColors.slate900,
+                                            color: isCredit ? (isDark ? AppColors.emerald400 : AppColors.emerald700) : (isDark ? Colors.white : AppColors.slate900),
                                           ),
                                         ),
                                         const SizedBox(height: 2),
-                                        const Icon(
+                                        Icon(
                                           Icons.chevron_right,
                                           size: 16,
-                                          color: AppColors.slate400,
+                                          color: isDark ? AppColors.slate500 : AppColors.slate400,
                                         ),
                                       ],
                                     ),
@@ -351,6 +352,7 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
   }
 
   Widget _buildFilterChip(String key, String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSelected = _selectedFilter == key;
     return InkWell(
       onTap: () => setState(() => _selectedFilter = key),
@@ -359,7 +361,7 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.slate100,
+          color: isSelected ? AppColors.primary : (isDark ? AppColors.slate800 : AppColors.slate100),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -367,7 +369,7 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : AppColors.slate700,
+            color: isSelected ? Colors.white : (isDark ? AppColors.slate300 : AppColors.slate700),
           ),
         ),
       ),
