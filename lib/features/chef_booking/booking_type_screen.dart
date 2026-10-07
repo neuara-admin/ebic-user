@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/remote_config_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -845,7 +846,7 @@ class _ChefVideoModalState extends State<_ChefVideoModal> {
 
   Future<void> _initVideo() async {
     try {
-      final uri = Uri.parse(widget.videoUrl);
+      final uri = Uri.parse(AppConfig.resolveMediaUrl(widget.videoUrl) ?? widget.videoUrl);
       final controller = VideoPlayerController.networkUrl(uri);
       _controller = controller;
       await controller.initialize();

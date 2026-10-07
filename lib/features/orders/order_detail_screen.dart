@@ -772,7 +772,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Image.network(
-                      urls[i],
+                      AppConfig.resolveMediaUrl(urls[i]) ?? urls[i],
                       width: 96,
                       height: 96,
                       fit: BoxFit.cover,
@@ -2072,7 +2072,7 @@ class _CompletionPhotoViewerState extends State<_CompletionPhotoViewer> {
             child: Hero(
               tag: 'completion-photo-${widget.urls[i]}',
               child: Image.network(
-                widget.urls[i],
+                AppConfig.resolveMediaUrl(widget.urls[i]) ?? widget.urls[i],
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) =>
                     const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),

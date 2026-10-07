@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
 
 class DishVideoModal extends StatefulWidget {
@@ -39,7 +40,7 @@ class _DishVideoModalState extends State<DishVideoModal> {
 
   Future<void> _initVideo() async {
     try {
-      final uri = Uri.parse(widget.videoUrl);
+      final uri = Uri.parse(AppConfig.resolveMediaUrl(widget.videoUrl) ?? widget.videoUrl);
       final controller = VideoPlayerController.networkUrl(uri);
       _controller = controller;
       await controller.initialize();

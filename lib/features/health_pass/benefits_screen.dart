@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/auth/session_manager.dart';
+import '../../core/config/app_config.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/health_pass_model.dart';
@@ -140,7 +141,7 @@ class _HealthPassBenefitsScreenState extends State<HealthPassBenefitsScreen> {
                       ),
                     )
                   : Image.network(
-                      url,
+                      AppConfig.resolveMediaUrl(url) ?? url,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const Padding(
                         padding: EdgeInsets.all(32),
@@ -423,7 +424,7 @@ class _HealthPassBenefitsScreenState extends State<HealthPassBenefitsScreen> {
                             )
                           else
                             Image.network(
-                              slide.url,
+                              AppConfig.resolveMediaUrl(slide.url) ?? slide.url,
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) => Container(
                                 color: isDark ? AppColors.slate800 : AppColors.slate200,
@@ -706,7 +707,7 @@ class _AutoPlayVideoWidgetState extends State<_AutoPlayVideoWidget> {
 
   Future<void> _initVideo() async {
     try {
-      final uri = Uri.parse(widget.videoUrl);
+      final uri = Uri.parse(AppConfig.resolveMediaUrl(widget.videoUrl) ?? widget.videoUrl);
       final controller = VideoPlayerController.networkUrl(uri);
       _controller = controller;
       await controller.initialize();

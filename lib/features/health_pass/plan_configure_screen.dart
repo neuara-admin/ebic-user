@@ -246,7 +246,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
                                   child: Stack(
                                     children: [
                                       Image.network(
-                                        _plan!.imageUrl ?? _plan!.images.first.url,
+                                        AppConfig.resolveMediaUrl(_plan!.imageUrl ?? _plan!.images.first.url)!,
                                         height: 125,
                                         width: double.infinity,
                                         fit: BoxFit.cover,

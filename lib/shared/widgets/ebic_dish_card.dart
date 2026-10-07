@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
 
 /// Pre-styled bespoke menu/catalogue dish card with cook time, macros, and price.
@@ -113,7 +114,7 @@ class _EBICDishCardState extends State<EBICDishCard> {
                       ),
                       child: widget.imageUrl != null && widget.imageUrl!.isNotEmpty
                           ? Image.network(
-                              widget.imageUrl!,
+                              AppConfig.resolveMediaUrl(widget.imageUrl) ?? widget.imageUrl!,
                               width: 78,
                               height: 78,
                               fit: BoxFit.cover,

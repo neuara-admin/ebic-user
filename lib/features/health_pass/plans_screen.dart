@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/auth/session_manager.dart';
+import '../../core/config/app_config.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/health_pass_model.dart';
@@ -156,7 +157,7 @@ class _HealthPassPlansScreenState extends State<HealthPassPlansScreen> {
                 child: Stack(
                   children: [
                     Image.network(
-                      plan.imageUrl ?? plan.images.first.url,
+                      AppConfig.resolveMediaUrl(plan.imageUrl ?? plan.images.first.url)!,
                       height: 140,
                       width: double.infinity,
                       fit: BoxFit.cover,

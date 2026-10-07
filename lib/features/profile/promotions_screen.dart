@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
 
@@ -459,7 +460,7 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 child: Image.network(
-                  bannerImageUrl,
+                  AppConfig.resolveMediaUrl(bannerImageUrl) ?? bannerImageUrl,
                   height: 120,
                   width: double.infinity,
                   fit: BoxFit.cover,
