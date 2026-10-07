@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -1450,7 +1451,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
                     )
                   else if (hasRemoteUrl)
                     Image.network(
-                      rawUrl,
+                      AppConfig.resolveMediaUrl(rawUrl) ?? rawUrl,
                       width: double.infinity,
                       height: 145,
                       fit: BoxFit.cover,
@@ -1677,7 +1678,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
                       : (hasLocal
                           ? Image.file(File(cachedPath!), fit: BoxFit.contain)
                           : (hasRemote
-                              ? Image.network(rawUrl, fit: BoxFit.contain)
+                              ? Image.network(AppConfig.resolveMediaUrl(rawUrl) ?? rawUrl, fit: BoxFit.contain)
                               : _buildImagePlaceholder(attName, true))),
                 ),
               ),

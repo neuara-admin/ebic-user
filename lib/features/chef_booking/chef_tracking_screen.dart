@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/order_model.dart';
@@ -2094,7 +2095,7 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
                           itemBuilder: (ctx, idx) => ClipRRect(
                             borderRadius: BorderRadius.circular(10),
                             child: Image.network(
-                              order.completionPhotos[idx],
+                              AppConfig.resolveMediaUrl(order.completionPhotos[idx]) ?? order.completionPhotos[idx],
                               width: 110,
                               height: 90,
                               fit: BoxFit.cover,

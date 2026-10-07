@@ -5679,8 +5679,9 @@ class _HomeScreenState extends State<HomeScreen> {
               CircleAvatar(
                 radius: 24,
                 backgroundColor: AppColors.primary.withOpacity(0.12),
-                backgroundImage: consultation.dietitianPhotoUrl != null
-                    ? NetworkImage(consultation.dietitianPhotoUrl!)
+                backgroundImage: consultation.dietitianPhotoUrl != null &&
+                        AppConfig.resolveMediaUrl(consultation.dietitianPhotoUrl) != null
+                    ? NetworkImage(AppConfig.resolveMediaUrl(consultation.dietitianPhotoUrl)!)
                     : null,
                 onBackgroundImageError: consultation.dietitianPhotoUrl != null
                     ? (_, __) {}

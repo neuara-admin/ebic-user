@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dietitian_model.dart';
@@ -937,7 +938,9 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
               CircleAvatar(
                 radius: 22,
                 backgroundColor: AppColors.primaryLight.withOpacity(0.3),
-                backgroundImage: d.photoUrl != null ? NetworkImage(d.photoUrl!) : null,
+                backgroundImage: d.photoUrl != null && AppConfig.resolveMediaUrl(d.photoUrl) != null
+                    ? NetworkImage(AppConfig.resolveMediaUrl(d.photoUrl)!)
+                    : null,
                 onBackgroundImageError: d.photoUrl != null ? (_, __) {} : null,
                 child: d.photoUrl == null ? const Icon(Icons.person, color: AppColors.primary, size: 24) : null,
               ),
@@ -1203,7 +1206,9 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: AppColors.primaryLight.withOpacity(0.3),
-                  backgroundImage: d.photoUrl != null ? NetworkImage(d.photoUrl!) : null,
+                  backgroundImage: d.photoUrl != null && AppConfig.resolveMediaUrl(d.photoUrl) != null
+                      ? NetworkImage(AppConfig.resolveMediaUrl(d.photoUrl)!)
+                      : null,
                   onBackgroundImageError: d.photoUrl != null ? (_, __) {} : null,
                   child: d.photoUrl == null ? const Icon(Icons.person, color: AppColors.primary, size: 22) : null,
                 ),

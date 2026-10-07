@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -477,7 +478,9 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
             radius: 30,
             backgroundColor: AppColors.primary.withOpacity(0.12),
             backgroundImage:
-                c.dietitianPhotoUrl != null ? NetworkImage(c.dietitianPhotoUrl!) : null,
+                c.dietitianPhotoUrl != null && AppConfig.resolveMediaUrl(c.dietitianPhotoUrl) != null
+                    ? NetworkImage(AppConfig.resolveMediaUrl(c.dietitianPhotoUrl)!)
+                    : null,
             onBackgroundImageError: c.dietitianPhotoUrl != null ? (_, __) {} : null,
             child: c.dietitianPhotoUrl == null
                 ? const Icon(Icons.person, color: AppColors.primary, size: 34)

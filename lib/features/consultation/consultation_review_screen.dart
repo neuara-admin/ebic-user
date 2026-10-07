@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/config/app_config.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dietitian_model.dart';
@@ -387,8 +388,8 @@ class _ConsultationReviewScreenState extends State<ConsultationReviewScreen> {
                               CircleAvatar(
                                 radius: 24,
                                 backgroundColor: AppColors.primary.withOpacity(0.12),
-                                backgroundImage: _dietitian.photoUrl != null
-                                    ? NetworkImage(_dietitian.photoUrl!)
+                                backgroundImage: _dietitian.photoUrl != null && AppConfig.resolveMediaUrl(_dietitian.photoUrl) != null
+                                    ? NetworkImage(AppConfig.resolveMediaUrl(_dietitian.photoUrl)!)
                                     : null,
                                  onBackgroundImageError: _dietitian.photoUrl != null ? (_, __) {} : null,
                                 child: _dietitian.photoUrl == null

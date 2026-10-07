@@ -7,6 +7,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/auth/session_manager.dart';
 import '../../core/realtime/realtime_service.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/remote_config_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -936,7 +937,10 @@ class _HealthPassScreenState extends State<HealthPassScreen> {
               CircleAvatar(
                 radius: 24,
                 backgroundColor: AppColors.primarySubtle,
-                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                backgroundImage: photoUrl != null && AppConfig.resolveMediaUrl(photoUrl) != null
+                    ? NetworkImage(AppConfig.resolveMediaUrl(photoUrl)!)
+                    : null,
+                onBackgroundImageError: photoUrl != null ? (_, __) {} : null,
                 child: photoUrl == null ? const Icon(Icons.person, color: AppColors.primary, size: 24) : null,
               ),
               const SizedBox(width: 12),

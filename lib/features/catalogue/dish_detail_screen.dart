@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/auth/session_manager.dart';
+import '../../core/config/app_config.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dish_model.dart';
@@ -346,7 +347,7 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Image.network(
-                        images[idx],
+                        AppConfig.resolveMediaUrl(images[idx]) ?? images[idx],
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
                           color: AppColors.slate200,
