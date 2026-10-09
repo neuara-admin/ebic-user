@@ -25,6 +25,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isSubmitting = false;
   String? _errorMessage;
   bool _termsAccepted = true;
+  bool _hasCheckedArgs = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasCheckedArgs) {
+      _hasCheckedArgs = true;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map) {
+        final prefill = args['prefillPhone'] as String?;
+        if (prefill != null && prefill.isNotEmpty) {
+          final digits = prefill.replaceAll(RegExp(r'\D'), '');
+          _phoneController.text = digits.length >= 10 ? digits.substring(digits.length - 10) : digits;
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {

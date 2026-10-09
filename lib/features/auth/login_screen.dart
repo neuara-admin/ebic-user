@@ -77,6 +77,29 @@ class _LoginScreenState extends State<LoginScreen> {
         },
       );
     } else {
+      final isNotFound = res.error?.code == 'ACCOUNT_NOT_FOUND' ||
+          res.error?.code == 'RESOURCE_NOT_FOUND' ||
+          res.error?.code == 'HTTP_404' ||
+          res.error?.code == 'USER_NOT_FOUND' ||
+          (res.error?.message?.toLowerCase().contains('no account') ?? false) ||
+          (res.error?.message?.toLowerCase().contains('register first') ?? false);
+
+      if (isNotFound) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No account found with this number. Please register first.'),
+            backgroundColor: AppColors.primaryDark,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Navigator.pushReplacementNamed(
+          context,
+          AppRoutes.register,
+          arguments: {'prefillPhone': cleanPhone},
+        );
+        return;
+      }
+
       setState(() {
         if (res.error?.code == 'RATE_LIMITED' || res.error?.code == '429') {
           _errorMessage = 'Too many requests. Please wait a minute before requesting another code.';

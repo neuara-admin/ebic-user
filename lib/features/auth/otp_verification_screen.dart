@@ -111,12 +111,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     );
 
     if (!mounted) return;
-    setState(() => _isLoading = false);
 
     if (res.success) {
-      // Clear OTP immediately after verification (Section 17)
-      for (final controller in _digitControllers) {
-        controller.clear();
+      final isNewUser = res.data?['isNewUser'] == true;
+      if (widget.purpose == 'LOGIN' && isNewUser) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No account found with this number. Please register to continue.'),
+            backgroundColor: AppColors.primaryDark,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Navigator.pushReplacementNamed(
+          context,
+          AppRoutes.register,
+          arguments: {'prefillPhone': widget.phone},
+        );
+        return;
       }
 
       if (widget.purpose == 'PASSWORD_RESET') {
@@ -148,7 +159,31 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         }
       }
     } else {
+      final isNotFound = res.error?.code == 'ACCOUNT_NOT_FOUND' ||
+          res.error?.code == 'RESOURCE_NOT_FOUND' ||
+          res.error?.code == 'HTTP_404' ||
+          res.error?.code == 'USER_NOT_FOUND' ||
+          (res.error?.message?.toLowerCase().contains('no account') ?? false) ||
+          (res.error?.message?.toLowerCase().contains('register first') ?? false);
+
+      if (isNotFound) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No account found with this number. Please register first.'),
+            backgroundColor: AppColors.primaryDark,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Navigator.pushReplacementNamed(
+          context,
+          AppRoutes.register,
+          arguments: {'prefillPhone': widget.phone},
+        );
+        return;
+      }
+
       setState(() {
+        _isLoading = false;
         if (res.error?.code == 'AUTH_OTP_EXPIRED') {
           _errorMessage = 'This verification code has expired. Please request a new OTP.';
         } else if (res.error?.code == 'AUTH_OTP_LIMIT') {
