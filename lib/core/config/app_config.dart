@@ -17,7 +17,10 @@ class AppConfig {
   // For Web / Windows / Desktop / iOS: localhost:3000
   // In release mode without an override: https://api.ebic.in/v1
   static String get defaultBaseUrl {
-    if (_apiBaseUrlOverride.isNotEmpty) return _apiBaseUrlOverride;
+    if (_apiBaseUrlOverride.isNotEmpty) {
+      final trimmed = _apiBaseUrlOverride.trim().replaceAll(RegExp(r'/+$'), '');
+      return trimmed.endsWith('/v1') ? trimmed : '$trimmed/v1';
+    }
     if (kReleaseMode) return prodApiBaseUrl;
     if (kIsWeb) return 'http://localhost:3000/v1';
     switch (defaultTargetPlatform) {

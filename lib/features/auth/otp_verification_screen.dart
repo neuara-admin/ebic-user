@@ -50,8 +50,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.initState();
     _startTimer();
 
-    // In dev mode, auto-fill dev OTP if present
-    if (kDebugMode && widget.devCode != null && widget.devCode!.length == 6) {
+    // Auto-fill dev/dummy OTP if returned by backend (for testing APKs without real SMS)
+    if (widget.devCode != null && widget.devCode!.length == 6) {
       for (int i = 0; i < 6; i++) {
         _digitControllers[i].text = widget.devCode![i];
       }
@@ -320,6 +320,28 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         ),
                 ),
               ),
+              if (widget.devCode != null) ...[
+                const SizedBox(height: 12),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      for (int i = 0; i < 6 && i < widget.devCode!.length; i++) {
+                        _digitControllers[i].text = widget.devCode![i];
+                      }
+                      _handleVerify();
+                    },
+                    icon: const Icon(Icons.flash_on_rounded, size: 16, color: AppColors.primary),
+                    label: Text(
+                      'Autofill dummy OTP (${widget.devCode})',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
 
               // Change Phone Button
