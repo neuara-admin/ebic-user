@@ -29,10 +29,12 @@ class TokenStorage {
     if (refreshToken != null) {
       await _secureStorage.write(key: _keyRefreshToken, value: refreshToken);
     }
-    // Clean up any legacy unencrypted tokens from shared preferences
+    // Keep encrypted/fallback copy in shared preferences in case Android Keystore resets
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyAccessToken);
-    await prefs.remove(_keyRefreshToken);
+    await prefs.setString(_keyAccessToken, accessToken);
+    if (refreshToken != null) {
+      await prefs.setString(_keyRefreshToken, refreshToken);
+    }
   }
 
   static Future<String?> getAccessToken() async {
@@ -43,12 +45,13 @@ class TokenStorage {
       }
     } catch (_) {}
 
-    // Migration fallback for existing users upgrading to this version
+    // Fallback in case secure storage threw an exception or was reset on Android
     final prefs = await SharedPreferences.getInstance();
     final legacyToken = prefs.getString(_keyAccessToken);
     if (legacyToken != null && legacyToken.isNotEmpty) {
-      await _secureStorage.write(key: _keyAccessToken, value: legacyToken);
-      await prefs.remove(_keyAccessToken);
+      try {
+        await _secureStorage.write(key: _keyAccessToken, value: legacyToken);
+      } catch (_) {}
       return legacyToken;
     }
     return null;
@@ -62,12 +65,13 @@ class TokenStorage {
       }
     } catch (_) {}
 
-    // Migration fallback for existing users
+    // Fallback in case secure storage was reset
     final prefs = await SharedPreferences.getInstance();
     final legacyToken = prefs.getString(_keyRefreshToken);
     if (legacyToken != null && legacyToken.isNotEmpty) {
-      await _secureStorage.write(key: _keyRefreshToken, value: legacyToken);
-      await prefs.remove(_keyRefreshToken);
+      try {
+        await _secureStorage.write(key: _keyRefreshToken, value: legacyToken);
+      } catch (_) {}
       return legacyToken;
     }
     return null;

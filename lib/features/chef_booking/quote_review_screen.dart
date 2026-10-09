@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/auth/session_manager.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/address_model.dart';
@@ -210,13 +211,18 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           (a) => a.isDefault,
           orElse: () => addresses.first,
         );
+        final configAddrId = widget.bookingConfig['addressId']?.toString() ??
+            widget.bookingConfig['address']?['id']?.toString();
+        AddressModel? matchedAddr;
+        if (configAddrId != null && configAddrId.isNotEmpty) {
+          final found = addresses.where((a) => a.id == configAddrId);
+          if (found.isNotEmpty) matchedAddr = found.first;
+        }
+        final chosenAddr = matchedAddr ?? defaultAddr;
         if (mounted) {
           setState(() {
-            _selectedAddress ??= defaultAddr;
-            if (_currentAddressLine.isEmpty ||
-                _currentAddressLine == 'Default Residence Kitchen') {
-              _currentAddressLine = defaultAddr.formattedAddress;
-            }
+            _selectedAddress = chosenAddr;
+            _currentAddressLine = chosenAddr.formattedAddress;
           });
         }
       }
@@ -282,8 +288,10 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   String? get _resolvedAddressId {
-    final id = _selectedAddress?.id ??
-        widget.bookingConfig['addressId'] ??
+    if (_selectedAddress != null && _selectedAddress!.id.isNotEmpty) {
+      return _selectedAddress!.id;
+    }
+    final id = widget.bookingConfig['addressId'] ??
         widget.bookingConfig['address']?['id'];
     final s = id?.toString();
     return (s == null || s.isEmpty) ? null : s;
@@ -896,9 +904,15 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       } else {
         // Prices come only from the backend pricing engine — never estimated here.
         _quote = null;
-        _errorMessage = quoteRes.error?.message ??
-            quoteRes.message ??
-            'Unable to calculate a quote right now. Please try again.';
+        if (quoteRes.error?.code == 'FORBIDDEN' ||
+            quoteRes.error?.code == 'HTTP_403' ||
+            (quoteRes.error?.message?.toLowerCase().contains('permission') ?? false)) {
+          _errorMessage = 'Only registered customer accounts can book chef visits. If you are signed in with a partner or chef account, please sign in with a registered customer account.';
+        } else {
+          _errorMessage = quoteRes.error?.message ??
+              quoteRes.message ??
+              'Unable to calculate a quote right now. Please try again.';
+        }
       }
     } catch (e) {
       _quote = null;
@@ -1533,7 +1547,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       final orderRes = await _api.post<Map<String, dynamic>>(
         ApiEndpoints.orders,
         body: {
-          'addressId': args['addressId'].toString(),
+          'addressId': (_resolvedAddressId ?? args['addressId']).toString(),
           'bookingOption': _normalizeBookingOption(args['bookingOption'].toString()),
           'memberIds': args['memberIds'],
           'quoteId': args['quoteId'],
@@ -1684,10 +1698,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
     final checkoutArgs = <String, dynamic>{
         ...widget.bookingConfig,
-        'addressId':
-            _selectedAddress?.id ??
-            widget.bookingConfig['addressId'] ??
-            widget.bookingConfig['address']?['id'],
+        'addressId': resolvedAddressId,
         'memberId': _currentMemberId,
         'memberName': _currentMemberName,
         'memberIds': memberIds.isNotEmpty
@@ -1797,6 +1808,36 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                               ),
                             ),
                           ),
+                          if (_errorMessage!.contains('customer account') ||
+                              _errorMessage!.contains('permission')) ...[
+                            const SizedBox(width: 8),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                visualDensity: VisualDensity.compact,
+                                backgroundColor: Colors.white,
+                                side: BorderSide(color: Colors.red.shade300),
+                              ),
+                              onPressed: () async {
+                                await SessionManager().logout();
+                                if (mounted) {
+                                  Navigator.pushNamedAndRemoveUntil(
+                                    context,
+                                    AppRoutes.login,
+                                    (route) => false,
+                                  );
+                                }
+                              },
+                              child: const Text(
+                                'Sign In',
+                                style: TextStyle(
+                                  color: AppColors.danger,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

@@ -75,9 +75,17 @@ class SessionManager extends ChangeNotifier {
           _status = AuthSessionStatus.restricted;
           _sessionMessage = res.error?.message ?? 'Your account is currently restricted.';
         } else if (res.error?.code == 'NETWORK_ERROR' ||
+                   res.error?.code == 'NETWORK_TIMEOUT' ||
+                   res.error?.code == 'SERVER_UNREACHABLE' ||
+                   res.error?.code == 'RATE_LIMITED' ||
                    res.error?.code == 'CLIENT_ERROR' ||
-                   res.error?.code == 'SERVER_ERROR') {
-          // Section 69: Network transient error must not purge authenticated session
+                   res.error?.code == 'SERVER_ERROR' ||
+                   (res.error?.code != 'SESSION_EXPIRED' &&
+                    res.error?.code != 'HTTP_401' &&
+                    res.error?.code != 'HTTP_403' &&
+                    res.error?.code != 'UNAUTHORIZED' &&
+                    res.error?.code != 'FORBIDDEN')) {
+          // Section 69: Network transient error or non-auth failure must not purge authenticated session
           final cachedId = await TokenStorage.getUserId();
           final cachedPhone = await TokenStorage.getUserPhone();
           if (cachedId != null || await TokenStorage.hasSession()) {
