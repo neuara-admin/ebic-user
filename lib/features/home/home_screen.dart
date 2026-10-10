@@ -2110,7 +2110,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           Navigator.pushNamed(context, AppRoutes.login);
                           return;
                         }
-                        Navigator.pushNamed(context, AppRoutes.bookChef);
+                        if (_healthPass == null) {
+                          Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
+                        } else {
+                          Navigator.pushNamed(context, AppRoutes.bookChef);
+                        }
                       },
                     ),
                   ),
@@ -3058,6 +3062,8 @@ class _HomeScreenState extends State<HomeScreen> {
           }
           if (_healthPassStage == HealthPassStage.mealsAssigned) {
             Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
+          } else if (_healthPass == null) {
+            Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
           } else {
             Navigator.pushNamed(context, AppRoutes.bookChef);
           }

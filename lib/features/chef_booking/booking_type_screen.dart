@@ -21,6 +21,8 @@ class BookingTypeScreen extends StatefulWidget {
 class _BookingTypeScreenState extends State<BookingTypeScreen> {
   bool _isCheckingPass = true;
   ActiveHealthPassModel? _activePass;
+  String? _passNoticeMessage;
+  bool _isPassExpired = false;
 
   /// Preview video configured in admin settings (Customer App); null hides it.
   String? get _videoTeaserUrl => RemoteConfigService().chefBookingVideoUrl;
@@ -31,9 +33,11 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
     _checkHealthPassAccess();
   }
 
-  /// Authoritative Health Pass verification:
-  /// Customers without an active Health Pass (or with an expired pass)
-  /// are automatically redirected to browse the recipe menu.
+  /// Health Pass verification:
+  /// - Customers without a Health Pass directly book items from the catalogue
+  ///   without needing the "Cook My Diet Plan" selector.
+  /// - Customers holding a Health Pass that is not active yet (or expired)
+  ///   are shown an informative notice explaining their pass status.
   Future<void> _checkHealthPassAccess() async {
     setState(() => _isCheckingPass = true);
     try {
@@ -42,8 +46,27 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
 
       if (!mounted) return;
 
-      if (!hasActivePass) {
+      // Customer without a Health Pass:
+      // Directly redirect to items catalogue without any error snackbar.
+      if (pass == null) {
         Navigator.pushReplacementNamed(context, AppRoutes.bookChefCatalogue);
+        return;
+      }
+
+      // Customer has a Health Pass but it is not active yet (or expired):
+      // Keep them on selector screen and show the notice.
+      if (!hasActivePass) {
+        final isExpired = pass.isExpired;
+        final message = isExpired
+            ? 'Your Health Pass has expired. An active Health Pass is required to book in-home chefs with pass benefits.'
+            : 'Your Health Pass is not active yet. An active Health Pass is required to book in-home chefs with pass benefits.';
+
+        setState(() {
+          _activePass = null;
+          _passNoticeMessage = message;
+          _isPassExpired = isExpired;
+          _isCheckingPass = false;
+        });
 
         final messenger = ScaffoldMessenger.of(context);
         messenger.clearSnackBars();
@@ -55,9 +78,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    pass != null && pass.isExpired
-                        ? 'Your Health Pass has expired. Renew your pass to book private chefs.'
-                        : 'An active Health Pass is required to book in-home chefs.',
+                    message,
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
@@ -66,7 +87,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
             backgroundColor: const Color(0xFF0F172A),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 4),
           ),
         );
         return;
@@ -74,11 +95,13 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
 
       setState(() {
         _activePass = pass;
+        _passNoticeMessage = null;
+        _isPassExpired = false;
         _isCheckingPass = false;
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _isCheckingPass = false);
+        Navigator.pushReplacementNamed(context, AppRoutes.bookChefCatalogue);
       }
     }
   }
@@ -237,7 +260,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
               CircularProgressIndicator(color: AppColors.primary),
               SizedBox(height: 16),
               Text(
-                'Checking Health Pass membership...',
+                'Loading booking options...',
                 style: TextStyle(color: AppColors.slate600, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ],
@@ -266,9 +289,19 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Compact Health Pass Quota Banner
+              // 1. Compact Health Pass Quota Banner (active pass)
               if (_activePass != null) ...[
                 _buildCompactQuotaBanner(_activePass!, isDark),
+                const SizedBox(height: 14),
+              ],
+
+              // 1b. Inactive / Expired Pass Notice (only if customer has a pass that is not active yet)
+              if (_passNoticeMessage != null) ...[
+                _buildInactivePassNoticeBanner(
+                  message: _passNoticeMessage!,
+                  isDark: isDark,
+                  isExpired: _isPassExpired,
+                ),
                 const SizedBox(height: 14),
               ],
 
@@ -390,6 +423,82 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
                 fontSize: 9.5,
                 letterSpacing: 0.4,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInactivePassNoticeBanner({
+    required String message,
+    required bool isDark,
+    required bool isExpired,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2C1E07) : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? const Color(0xFFB45309).withOpacity(0.5) : const Color(0xFFFDE68A),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: const Color(0xFFD97706).withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 16),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isExpired ? 'Health Pass Expired' : 'Health Pass Not Active Yet',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.slate300 : const Color(0xFF78350F),
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.healthPass),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        isExpired ? 'Renew Health Pass' : 'View Pass Status',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFD97706),
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_forward_rounded, color: Color(0xFFD97706), size: 12),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
