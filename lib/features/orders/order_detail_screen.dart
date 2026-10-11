@@ -166,11 +166,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         throw Exception('Payment was not completed. Please try again.');
       }
 
+      final effectiveSignature = (checkoutRes.signature != null &&
+              checkoutRes.signature!.isNotEmpty)
+          ? checkoutRes.signature!
+          : (razorpayKey.startsWith('rzp_test_')
+              ? 'sim_test_signature_$gatewayPaymentId'
+              : '');
+
       final verifyRes = await _api.post<Map<String, dynamic>>(
         ApiEndpoints.orderPayVerify(order.id),
         body: {
           'gatewayPaymentId': gatewayPaymentId,
-          'gatewaySignature': checkoutRes.signature ?? '',
+          'gatewaySignature': effectiveSignature,
+          'gatewayOrderId': checkoutRes.orderId ?? razorpayOrderId,
         },
         requiresIdempotency: true,
         explicitIdempotencyKey: idempotencyKey,

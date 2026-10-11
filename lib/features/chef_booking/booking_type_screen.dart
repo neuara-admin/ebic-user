@@ -47,14 +47,11 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
       if (!mounted) return;
 
       // Customer without a Health Pass:
-      // Allow them to view booking types without auto-redirecting.
+      // Directly forward to the Chef Catalogue since they have no diet plan to cook.
       if (pass == null) {
-        setState(() {
-          _activePass = null;
-          _passNoticeMessage = null;
-          _isPassExpired = false;
-          _isCheckingPass = false;
-        });
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, AppRoutes.bookChefCatalogue);
+        }
         return;
       }
 

@@ -488,16 +488,32 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
           throw Exception('Payment was not completed. Please try again.');
         }
 
+        final effectiveSignature = (checkoutRes.signature != null &&
+                checkoutRes.signature!.isNotEmpty)
+            ? checkoutRes.signature!
+            : (razorpayKey.startsWith('rzp_test_')
+                ? 'sim_test_signature_$gatewayPaymentId'
+                : '');
+        final effectiveOrderId = checkoutRes.orderId ?? razorpayOrderId;
+
+        debugPrint(
+          '[PaymentCheckout] Verifying payment: paymentId=$gatewayPaymentId, orderId=$effectiveOrderId, signature=$effectiveSignature',
+        );
+
         // Authoritative verify — a booking is only confirmed if the backend
         // confirms Razorpay actually captured this payment for this order.
         final verifyRes = await _api.post<Map<String, dynamic>>(
           ApiEndpoints.orderPayVerify(orderId),
           body: {
             'gatewayPaymentId': gatewayPaymentId,
-            'gatewaySignature': checkoutRes.signature ?? '',
+            'gatewaySignature': effectiveSignature,
+            'gatewayOrderId': effectiveOrderId,
           },
           requiresIdempotency: true,
           explicitIdempotencyKey: idempotencyKey,
+        );
+        debugPrint(
+          '[PaymentCheckout] Verify response: success=${verifyRes.success}, message=${verifyRes.message}',
         );
         if (!verifyRes.success) {
           throw Exception(

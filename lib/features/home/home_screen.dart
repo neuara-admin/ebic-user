@@ -26,7 +26,6 @@ import 'widgets/auto_scroll_banner_carousel.dart';
 import 'widgets/health_journey_banner.dart';
 import '../dietitian/dietitian_profile_screen.dart';
 import '../../shared/models/dietitian_model.dart';
-import '../health/presentation/widgets/provenance_badge.dart';
 
 class HomeScreen extends StatefulWidget {
   final Function(int tabIndex)? onNavigateTab;
@@ -83,7 +82,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Local state for hydration quick-log and vitals
   double _loggedWaterLiters = 0.0;
-  static const double _targetWaterLiters = 3.0;
   double? _customLoggedWeight;
   double? _customLoggedHeight;
 
@@ -503,6 +501,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _hasActiveHealthPass =>
       _healthPass != null && _healthPass!.isActive && !_healthPass!.isExpired;
 
+  bool get _hasTodayPrescribedMeals {
+    if (!_hasActiveHealthPass) return false;
+    final todayPlanData =
+        _todayMeal ?? (_homeData?['today_plan'] as Map<String, dynamic>?);
+    final rawMeals = (todayPlanData?['meals'] as List<dynamic>?) ?? [];
+    final hasPlan = todayPlanData?['hasPlan'] == true || rawMeals.isNotEmpty;
+    return hasPlan && rawMeals.isNotEmpty;
+  }
+
   /// Evaluates exact Health Pass journey stage
   HealthPassStage get _healthPassStage {
     if (!_hasActiveHealthPass) {
@@ -546,41 +553,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good evening';
   }
 
-  Future<void> _quickLogWater() async {
-    HapticFeedback.lightImpact();
-    if (!SessionManager().isAuthenticated) {
-      Navigator.pushNamed(context, AppRoutes.login);
-      return;
-    }
-    final newWater = (_loggedWaterLiters + 0.25).clamp(0.0, 6.0);
-    setState(() {
-      _loggedWaterLiters = newWater;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '+250ml logged! Current total: ${_loggedWaterLiters.toStringAsFixed(2)}L 💧',
-        ),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    // Persist to backend so Health Dashboard, Dietitian, and future sessions stay updated!
-    try {
-      await _api.post<dynamic>(
-        ApiEndpoints.healthMetrics,
-        body: {
-          'metricType': 'WATER',
-          'value': newWater,
-          'unit': 'L',
-          'recordedAt': DateTime.now().toUtc().toIso8601String(),
-          'source': 'MANUAL',
-        },
-        requiresAuth: true,
-      );
-    } catch (_) {}
-  }
 
   ({String category, Color color, Color bgColor, String description})
       _getBmiClassification(double bmi) {
@@ -1388,13 +1360,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 18),
                   ],
 
-                  // 4. Primary State-Driven Action Card (Active Chef Order OR On-Demand Chef Promo)
-                  if (_activeOrder != null || _healthPassStage == HealthPassStage.noPass) ...[
-                    _buildActiveServiceCard(),
-                    const SizedBox(height: 16),
-                  ],
+                  // 4. Primary State-Driven Action Card (Active Chef Order OR Private Chef in Your Kitchen)
+                  _buildActiveServiceCard(),
+                  const SizedBox(height: 16),
 
-                  // 5. Clinical Health Journey Stepper (Only for Health Pass members)
+
+                  // 5. Health Pass Section (Placed directly below Private Chef section)
+                  _buildHealthPassSection(),
+                  const SizedBox(height: 16),
+
+                  // 6. In-Depth Health Progress & Vitals Section
+                  _buildHealthSnapshotCard(),
+                  const SizedBox(height: 16),
+
+                  // 7. Clinical Health Journey Stepper (Only for Health Pass members)
                   if (_healthPassStage != HealthPassStage.noPass) ...[
                     HealthJourneyStepper(
                       currentStage: _healthPassStage,
@@ -1409,53 +1388,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 16),
                   ],
 
-                  // 3. Bento Quick Actions Row
-                  _buildQuickActionsRow(),
-                  const SizedBox(height: 16),
-
-                  // 4. Bento Grid Row 1: Nutrition Plan & Live Hydration/Activity
-                  Row(
-                    children: [
-                      Expanded(child: _buildBentoNutritionTile(isDark)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildBentoHydrationTile(isDark)),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // 5. Bento Grid Row 2: Clinical Dietitian & Health Vault
-                  Row(
-                    children: [
-                      Expanded(child: _buildBentoDietitianTile(isDark)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildBentoHealthVaultTile(isDark)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 6. Assigned Dietitian Card (when detailed consultation is completed)
+                  // 8. Assigned Dietitian Card (when detailed consultation is completed)
                   if (_completedConsultation != null) ...[
                     _buildAssignedDietitianCard(_completedConsultation!),
                     const SizedBox(height: 16),
                   ],
 
-                  // 7. Today's Detailed Meal Schedule (if member has active Health Pass)
-                  if (_hasActiveHealthPass) ...[
+                  // 9. Today's Detailed Meal Schedule (only if meal plan is assigned and has meals for today)
+                  if (_hasTodayPrescribedMeals) ...[
                     _buildTodayPlanCard(),
                     const SizedBox(height: 16),
                   ],
 
-                  // 8. In-Depth Health & Vitals Snapshot
-                  if (SessionManager().isAuthenticated) ...[
-                    _buildHealthSnapshotCard(),
-                    const SizedBox(height: 16),
-                  ],
 
-                  // 9. Health Pass Section (Active Membership, Expired Renewal, or Showcase)
-                  _buildHealthPassSection(),
+                  // 11. Bento Quick Actions Row (Placed below cards of clinical nutrition)
+                  _buildQuickActionsRow(),
                   const SizedBox(height: 16),
 
-                  // 10. Contextual Refer & Earn Card (Section 5 & 6)
+                  // 12. Contextual Refer & Earn Card (Section 5 & 6)
                   _buildContextualReferralCard(),
                   const SizedBox(height: 16),
 
@@ -1713,11 +1663,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildLiveChefOrderCard(_activeOrder!);
     }
 
-    // B. No Active Chef Booking: Display Journey Stage Card
-    if (_healthPassStage != HealthPassStage.noPass) {
-      return const SizedBox.shrink();
-    }
-    return _buildJourneyStageHeroCard(_healthPassStage);
+    // B. No Active Chef Booking: Display Private Chef Hero Card
+    return _buildPrivateChefHeroCard();
   }
 
   Widget _buildLiveChefOrderCard(OrderModel order) {
@@ -1975,7 +1922,429 @@ class _HomeScreenState extends State<HomeScreen> {
             child: EbicButton(
               label: 'Book Chef Again',
               icon: Icons.refresh_rounded,
-              onPressed: () => Navigator.pushNamed(context, AppRoutes.bookChef),
+              onPressed: () => _handleBookChefTap(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleBookChefTap(BuildContext context) {
+    HapticFeedback.lightImpact();
+    if (!SessionManager().isAuthenticated) {
+      Navigator.pushNamed(context, AppRoutes.login);
+      return;
+    }
+    final hasActivePass = _healthPass != null && _healthPass!.isActive && !_healthPass!.isExpired;
+    if (_healthPassStage == HealthPassStage.mealsAssigned) {
+      Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
+    } else if (!hasActivePass) {
+      // Without an active Health Pass, directly open Chef Recipe Catalogue for instant booking
+      Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
+    } else {
+      // With an active Health Pass, open selector (Cook Diet Plan vs A La Carte)
+      Navigator.pushNamed(context, AppRoutes.bookChef);
+    }
+  }
+
+  Widget _buildBespokeFeatureTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 0.8,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 14, color: iconColor),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.65),
+              fontSize: 9.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrivateChefHeroCard() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF091411), // Deep dark obsidian emerald
+            Color(0xFF0D251D), // Rich forest emerald
+            Color(0xFF041913), // Deep ground
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: const Color(0xFF10B981).withValues(alpha: 0.32),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF10B981).withValues(alpha: 0.12),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // 1. Atmospheric Ambient Radial Glow on Top-Right
+          Positioned(
+            top: -50,
+            right: -40,
+            child: Container(
+              width: 190,
+              height: 190,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF10B981).withValues(alpha: 0.22),
+                    const Color(0xFF059669).withValues(alpha: 0.08),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 2. Artistic Culinary Toque Watermark
+          Positioned(
+            right: -14,
+            top: 26,
+            child: Opacity(
+              opacity: 0.05,
+              child: const Icon(
+                Icons.soup_kitchen_rounded,
+                size: 155,
+                color: Colors.white,
+              ),
+            ),
+          ),
+
+          // 3. Card Content
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Header Row with Live Status & Arrival Time (Flexible to prevent horizontal overflow)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Live On-Demand Dispatch Pill
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF064E3B).withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF34D399),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF34D399).withValues(alpha: 0.8),
+                                    blurRadius: 6,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            const Flexible(
+                              child: Text(
+                                'ON-DEMAND DISPATCH',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Color(0xFFA7F3D0),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // ETA Pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.bolt_rounded,
+                            size: 13,
+                            color: Color(0xFFFBBF24),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            '~20 mins arrival',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Editorial Headline
+                const Text(
+                  'Private Chef in Your Kitchen',
+                  style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Evocative Subtitle
+                Text(
+                  'Five-star executive chefs arrive at your doorstep with fresh produce, cook live in your kitchen, and leave it sparkling clean.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 3-Pillar Micro-Bento Features Grid
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildBespokeFeatureTile(
+                        icon: Icons.local_fire_department_rounded,
+                        iconColor: const Color(0xFFF59E0B),
+                        title: 'Live Cooked',
+                        subtitle: 'Hot & fresh',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildBespokeFeatureTile(
+                        icon: Icons.cleaning_services_rounded,
+                        iconColor: const Color(0xFF10B981),
+                        title: 'Zero Cleanup',
+                        subtitle: 'Spotless',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildBespokeFeatureTile(
+                        icon: Icons.verified_user_rounded,
+                        iconColor: const Color(0xFF38BDF8),
+                        title: 'Verified Chefs',
+                        subtitle: 'Top certified',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Trust & Pricing Micro-Strip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // Star Rating
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.star_rounded, size: 13, color: Color(0xFFFBBF24)),
+                            SizedBox(width: 3),
+                            Text(
+                              '4.9',
+                              style: TextStyle(
+                                color: Color(0xFFFDE68A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Over 5,000+ meals cooked • Sanitized kits',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.72),
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'From ₹299',
+                        style: TextStyle(
+                          color: Color(0xFF34D399),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Single Primary Action: Book a Private Chef
+                SizedBox(
+                  width: double.infinity,
+                  child: GestureDetector(
+                    onTap: () => _handleBookChefTap(context),
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF059669), Color(0xFF10B981)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.soup_kitchen_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Book a Private Chef',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          SizedBox(width: 6),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: Colors.white70,
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1984,1085 +2353,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Journey Stage Card when there is NO active chef order
-  Widget _buildJourneyStageHeroCard(HealthPassStage stage) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    switch (stage) {
-      // 1. Without Health Pass
-      case HealthPassStage.noPass:
-        return Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF064E3B)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: const Color(0xFF10B981).withValues(alpha: 0.25),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF064E3B).withValues(alpha: 0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primarySubtle,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.bolt_rounded, size: 14, color: AppColors.primaryDark),
-                          SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              'ON-DEMAND CHEF DISPATCH',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: AppColors.primaryDark,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.timer_outlined, size: 12, color: Colors.white70),
-                        SizedBox(width: 4),
-                        Text(
-                          '~20 mins arrival',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Private Chef in Your Kitchen',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Executive chef cooks live in your kitchen.',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 14),
-              // Feature highlights row
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  _buildHeroChip(Icons.cleaning_services_rounded, 'Zero Cleanup'),
-                  _buildHeroChip(Icons.eco_rounded, 'Fresh Produce'),
-                  _buildHeroChip(Icons.verified_rounded, 'Verified Chefs'),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 5,
-                    child: EbicButton(
-                      label: 'Book a Chef',
-                      icon: Icons.soup_kitchen_rounded,
-                      variant: EbicButtonVariant.primary,
-                      onPressed: () {
-                        HapticFeedback.lightImpact();
-                        if (!SessionManager().isAuthenticated) {
-                          Navigator.pushNamed(context, AppRoutes.login);
-                          return;
-                        }
-                        if (_healthPassStage == HealthPassStage.mealsAssigned) {
-                          Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
-                        } else {
-                          Navigator.pushNamed(context, AppRoutes.bookChef);
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 5,
-                    child: EbicButton(
-                      label: 'Browse Chef Menu',
-                      icon: Icons.restaurant_menu_rounded,
-                      variant: EbicButtonVariant.outline,
-                      color: Colors.white,
-                      onPressed: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.pushNamed(
-                          context,
-                          AppRoutes.bookChefCatalogue,
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-
-      // 2. Health Pass Owned, Kickoff Consultation Needed
-      case HealthPassStage.kickoffNeeded:
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF064E3B), Color(0xFF047857)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'STEP 1: KICKOFF CALL',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                  const Text(
-                    'Activate Pass ⏳',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Schedule Clinical Kickoff Call',
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Book your 1-on-1 session to activate your plan.',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 16),
-              EbicButton(
-                label: 'Schedule Kickoff Consultation',
-                icon: Icons.calendar_today_rounded,
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.consultationBook,
-                ).then((_) => _loadHomeData()),
-              ),
-            ],
-          ),
-        );
-
-      // 3. Consultation Scheduled & Upcoming
-      case HealthPassStage.consultationScheduled:
-        final c = _upcomingConsultation!;
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(
-                        Icons.event_available_rounded,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'UPCOMING CONSULTATION',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                  StatusBadge.info('CONFIRMED'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Clinical Session with Dr. ${c.dietitianName}',
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${_formatDateTime(c.scheduledAt)} • 45-min HD Video Consultation',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.slate600,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: EbicButton(
-                      label: 'View Session Details',
-                      icon: Icons.video_call_rounded,
-                      onPressed: () {
-                        Navigator.pushNamed(
-                          context,
-                          AppRoutes.consultationDetail,
-                          arguments: {'consultation': c},
-                        ).then((_) => _loadHomeData());
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-
-      // 4. Consultation In Progress
-      case HealthPassStage.consultationInProgress:
-        final c = _upcomingConsultation!;
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          gradient: const LinearGradient(
-            colors: [Color(0xFFB45309), Color(0xFFD97706)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'VIDEO SESSION LIVE',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  StatusBadge.warning('ACTIVE'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Consultation with Dr. ${c.dietitianName}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Dietitian is reviewing your dietary profile and clinical records in real-time.',
-                style: TextStyle(color: Colors.white70, fontSize: 12.5),
-              ),
-              const SizedBox(height: 16),
-              EbicButton(
-                label: 'Join Video Call Now',
-                icon: Icons.video_call_rounded,
-                onPressed: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.consultationVideo,
-                    arguments: {'consultation': c},
-                  ).then((_) => _loadHomeData());
-                },
-              ),
-            ],
-          ),
-        );
-
-      // 4b. Video call done, dietitian finalizing notes (VIDEO_COMPLETED)
-      case HealthPassStage.consultationAwaitingNotes:
-        final c = _notesPendingConsultation!;
-        final passStart = _healthPass?.startDate;
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(
-                        Icons.check_circle_outline_rounded,
-                        color: Color(0xFF0369A1),
-                        size: 18,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'CONSULTATION COMPLETED',
-                        style: TextStyle(
-                          color: Color(0xFF0369A1),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                  StatusBadge.info(c.isInitial ? 'KICKOFF' : 'FOLLOW-UP'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Consultation completed',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Session completed • Dietitian is finalizing clinical notes.'
-                '${c.isInitial && passStart != null ? ' Pass started ${DateFormat('d MMM').format(passStart)}.' : ''}',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.slate600,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 16),
-              EbicButton(
-                label: 'View Consultation',
-                icon: Icons.description_outlined,
-                variant: EbicButtonVariant.outline,
-                onPressed: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.consultationDetail,
-                    arguments: {'consultation': c},
-                  ).then((_) => _loadHomeData(silent: true));
-                },
-              ),
-            ],
-          ),
-        );
-
-      // 4d. Dietitian never started the call — auto-cancelled, not counted
-      case HealthPassStage.consultationDietitianMissed:
-        final c = _dietitianMissedConsultation!;
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(
-                    Icons.event_busy_rounded,
-                    color: Color(0xFFB45309),
-                    size: 18,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'CONSULTATION CANCELLED',
-                    style: TextStyle(
-                      color: Color(0xFFB45309),
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '${c.dietitianDisplayName} couldn\'t join',
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Cancelled by clinic • Free rebooking available anytime.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.slate600,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 16),
-              EbicButton(
-                label: 'Book a New Time',
-                icon: Icons.calendar_today_rounded,
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.consultationBook,
-                ).then((_) => _loadHomeData(silent: true)),
-              ),
-            ],
-          ),
-        );
-
-      // 4c. Consultation missed (NO_SHOW) — reschedule the same one
-      case HealthPassStage.consultationMissed:
-        final c = _missedConsultation!;
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(
-                    Icons.event_busy_rounded,
-                    color: AppColors.danger,
-                    size: 18,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'CONSULTATION MISSED',
-                    style: TextStyle(
-                      color: AppColors.danger,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'You missed your ${c.isInitial ? 'kickoff' : 'follow-up'} with ${c.dietitianDisplayName}',
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Missed session • Reschedule anytime at no extra charge.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.slate600,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 16),
-              EbicButton(
-                label: 'Reschedule Consultation',
-                icon: Icons.event_repeat_rounded,
-                onPressed: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.consultationDetail,
-                    arguments: {'consultation': c},
-                  ).then((_) => _loadHomeData(silent: true));
-                },
-              ),
-            ],
-          ),
-        );
-
-      // 5. Consultation Done, Meal Curation In Progress
-      case HealthPassStage.mealCurationInProgress:
-        final doctor =
-            _completedConsultation?.dietitianName ?? 'your Clinical Dietitian';
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(
-                        Icons.menu_book_rounded,
-                        color: Color(0xFF7C3AED),
-                        size: 18,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'STEP 3: MEAL CURATION',
-                        style: TextStyle(
-                          color: Color(0xFF7C3AED),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3E8FF),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'CURATING',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF7C3AED),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Dr. $doctor is Curating Your Meals',
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Custom daily recipes in curation • Ready within 24 hours.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.slate600,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: EbicButton(
-                      label: 'Chat with Dietitian',
-                      icon: Icons.chat_bubble_outline_rounded,
-                      onPressed: () =>
-                          Navigator.pushNamed(context, AppRoutes.dietitianChat),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: EbicButton(
-                      label: 'Book a Chef',
-                      isOutlined: true,
-                      icon: Icons.soup_kitchen_rounded,
-                      onPressed: () =>
-                          Navigator.pushNamed(context, AppRoutes.bookChef),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-
-      // 6. Meals Assigned and Ready!
-      case HealthPassStage.mealsAssigned:
-        return _buildLiveDietPlanHeroCard(isDark);
-
-      // 7. Active Subscription Ongoing
-      case HealthPassStage.subscriptionActive:
-        return EbicCard(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(
-                        Icons.verified_rounded,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'HEALTH PASS ACTIVE',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                  StatusBadge.success('ACTIVE'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _healthPass?.planName ?? 'EBIC Health Pass',
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _healthPass?.endDate != null
-                    ? 'Valid until ${_formatDate(_healthPass!.endDate!)} • ${_healthPass?.coveredMembersCount ?? 1} Covered'
-                    : 'Unlimited clinical dietitian consultations & home dining discounts.',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.slate600,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: EbicButton(
-                      label: 'Book Chef',
-                      icon: Icons.soup_kitchen_rounded,
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        AppRoutes.bookChefAssigned,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: EbicButton(
-                      label: 'Diet Plan',
-                      isOutlined: true,
-                      icon: Icons.restaurant_menu_rounded,
-                      onPressed: () =>
-                          Navigator.pushNamed(context, AppRoutes.dietPlan),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-    }
-  }
-
-  Widget _buildLiveDietPlanHeroCard(bool isDark) {
-    final todayPlanData =
-        _todayMeal ?? (_homeData?['today_plan'] as Map<String, dynamic>?);
-    final rawMeals = (todayPlanData?['meals'] as List<dynamic>?) ?? [];
-    final drName = _completedConsultation?.dietitianName ??
-        _upcomingConsultation?.dietitianName ??
-        'Clinical Dietitian';
-    final cleanDr = drName.startsWith('Dr.') ? drName : 'Dr. $drName';
-
-    // Extract quick meal highlights for the hero banner
-    final mealHighlights = rawMeals.take(4).map((m) {
-      final occ = _formatOccasion(m['occasion']?.toString());
-      final cal = _parseNum(m['calories'])?.round() ?? 0;
-      final name = m['name']?.toString() ?? 'Prescribed Meal';
-      final isDone = m['completed'] == true;
-      return {
-        'occ': occ,
-        'cal': cal,
-        'name': name,
-        'done': isDone,
-        'rawOcc': m['occasion']?.toString(),
-      };
-    }).toList();
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF022C22),
-            Color(0xFF064E3B),
-            Color(0xFF047857),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFF34D399).withOpacity(0.35),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF064E3B).withOpacity(0.35),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top Row: Live Pulse Pill + Doctor Verified Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.28),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF34D399).withOpacity(0.4),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF34D399),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0xFF34D399),
-                            blurRadius: 6,
-                            spreadRadius: 1,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'YOUR DIET PLAN IS LIVE',
-                      style: TextStyle(
-                        color: Color(0xFFA7F3D0),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.14),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.verified_rounded,
-                        color: Color(0xFF6EE7B7),
-                        size: 13,
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          cleanDr,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Heading & Subtitle
-          const Text(
-            'Your Clinical Diet Plan is Live!',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-              letterSpacing: -0.4,
-            ),
-          ),
-          const SizedBox(height: 5),
-          const Text(
-            'Personalized recipes assigned for today. Book an EBIC Executive Chef to prepare these clinical meals fresh at your home.',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12.5,
-              height: 1.4,
-            ),
-          ),
-
-          // Meal Highlights Strip
-          const SizedBox(height: 14),
-          if (mealHighlights.isNotEmpty) ...[
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: mealHighlights.map((m) {
-                  final occStyle =
-                      _getOccasionStyle(m['rawOcc'] as String?, isDark);
-                  final isDone = m['done'] as bool;
-                  return Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.24),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.15),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isDone
-                              ? Icons.check_circle_rounded
-                              : (occStyle['icon'] as IconData),
-                          size: 13,
-                          color: isDone
-                              ? const Color(0xFF34D399)
-                              : const Color(0xFFA7F3D0),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${m['occ']}: ',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 130),
-                          child: Text(
-                            m['name'] as String,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if ((_parseInt(m['cal']) ?? 0) > 0) ...[
-                          const SizedBox(width: 5),
-                          Text(
-                            '• ${m['cal']} kcal',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.55),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 14),
-          ] else ...[
-            // Feature Pillars if no meal items loaded yet
-            Row(
-              children: [
-                _buildHeroChip(Icons.verified_rounded, 'Clinical Standards'),
-                const SizedBox(width: 6),
-                _buildHeroChip(
-                    Icons.local_fire_department_rounded, 'Calorie Measured'),
-                const SizedBox(width: 6),
-                _buildHeroChip(Icons.soup_kitchen_rounded, 'Chef Ready'),
-              ],
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Dual Action Buttons
-          Row(
-            children: [
-              Expanded(
-                flex: 6,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF064E3B),
-                    elevation: 2,
-                    shadowColor: Colors.black26,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.soup_kitchen_rounded,
-                    size: 18,
-                    color: Color(0xFF064E3B),
-                  ),
-                  label: const Text(
-                    'Book Chef for Meal',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF064E3B),
-                    ),
-                  ),
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pushNamed(
-                      context,
-                      AppRoutes.bookChefAssigned,
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 4,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.12),
-                    foregroundColor: Colors.white,
-                    side: BorderSide(
-                      color: Colors.white.withOpacity(0.4),
-                      width: 1.2,
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.calendar_month_rounded,
-                    size: 15,
-                    color: Colors.white,
-                  ),
-                  label: const Text(
-                    'View Plan',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pushNamed(context, AppRoutes.dietPlan);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeroChip(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: AppColors.primaryLight),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ───────────────────────── 3. Quick Actions Row ─────────────────────────
 
   Widget _buildQuickActionsRow() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -3080,19 +2370,7 @@ class _HomeScreenState extends State<HomeScreen> {
         iconColor: const Color(0xFF0D9488),
         iconBg: const Color(0xFFCCFBF1),
         label: 'Book\nChef',
-        onTap: () {
-          if (!SessionManager().isAuthenticated) {
-            Navigator.pushNamed(context, AppRoutes.login);
-            return;
-          }
-          if (_healthPassStage == HealthPassStage.mealsAssigned) {
-            Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
-          } else if (_healthPass == null) {
-            Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
-          } else {
-            Navigator.pushNamed(context, AppRoutes.bookChef);
-          }
-        },
+        onTap: () => _handleBookChefTap(context),
       ),
       _QuickAction(
         icon: Icons.eco_rounded,
@@ -3223,299 +2501,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ───────────────────────── 3B. Bento Grid Mosaic Tiles ─────────────────────────
-
-  Widget _buildBentoNutritionTile(bool isDark) {
-    final todayPlanData =
-        _todayMeal ?? (_homeData?['today_plan'] as Map<String, dynamic>?);
-    final hasPlan = todayPlanData?['hasPlan'] == true;
-    final meals = (todayPlanData?['meals'] as List<dynamic>?) ?? [];
-    final firstMeal = meals.isNotEmpty && meals.first is Map
-        ? (meals.first as Map<String, dynamic>)
-        : null;
-    final mealName = firstMeal?['name']?.toString() ??
-        firstMeal?['dishName']?.toString();
-
-    return EbicCard(
-      borderRadius: 18,
-      padding: const EdgeInsets.all(14),
-      onTap: () {
-        HapticFeedback.lightImpact();
-        if (!SessionManager().isAuthenticated) {
-          Navigator.pushNamed(context, AppRoutes.login);
-          return;
-        }
-        Navigator.pushNamed(context, AppRoutes.dietPlan);
-      },
-      child: SizedBox(
-        height: 138,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD1FAE5),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFF10B981).withOpacity(0.25),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.restaurant_menu_rounded,
-                    color: Color(0xFF059669),
-                    size: 18,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: hasPlan
-                        ? const Color(0xFFD1FAE5)
-                        : (isDark ? AppColors.slate800 : AppColors.slate100),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: hasPlan
-                          ? const Color(0xFF10B981).withOpacity(0.3)
-                          : (isDark ? AppColors.slate700 : AppColors.slate200),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Text(
-                    hasPlan ? 'ACTIVE PLAN' : 'NUTRITION',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: hasPlan
-                          ? const Color(0xFF047857)
-                          : (isDark ? AppColors.slate400 : AppColors.slate600),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  hasPlan
-                      ? (mealName ?? 'Personalized Diet')
-                      : 'Clinical Nutrition',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.2,
-                    color: isDark ? Colors.white : AppColors.slate900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  hasPlan
-                      ? 'Target macros curated'
-                      : 'Calorie-targeted recipes',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppColors.slate400 : AppColors.slate500,
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              children: const [
-                Text(
-                  'View Diet Plan',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
-                SizedBox(width: 2),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 13,
-                  color: AppColors.primary,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBentoHydrationTile(bool isDark) {
-    final snapshot = _homeData?['health_snapshot'] as Map<String, dynamic>?;
-    final rawSteps = snapshot?['steps'];
-    final num? stepsNum = rawSteps is num
-        ? rawSteps
-        : (rawSteps is String ? num.tryParse(rawSteps) : null);
-    final hydrationRatio = _targetWaterLiters > 0
-        ? (_loggedWaterLiters / _targetWaterLiters).clamp(0.0, 1.0)
-        : 0.0;
-
-    return EbicCard(
-      borderRadius: 18,
-      padding: const EdgeInsets.all(14),
-      onTap: () {
-        HapticFeedback.lightImpact();
-        widget.onNavigateTab?.call(1);
-      },
-      child: SizedBox(
-        height: 138,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFF3B82F6).withOpacity(0.25),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.water_drop_rounded,
-                    color: Color(0xFF2563EB),
-                    size: 18,
-                  ),
-                ),
-                InkWell(
-                  onTap: _quickLogWater,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF1E3A8A).withOpacity(0.5)
-                          : const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFF93C5FD),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.add_rounded,
-                          size: 11,
-                          color: Color(0xFF1D4ED8),
-                        ),
-                        Text(
-                          '250ml',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1D4ED8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      _loggedWaterLiters.toStringAsFixed(1),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white : AppColors.slate900,
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    Text(
-                      '/ ${_targetWaterLiters.toStringAsFixed(0)}L',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2563EB),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: hydrationRatio,
-                    minHeight: 5,
-                    backgroundColor: isDark
-                        ? AppColors.slate800
-                        : AppColors.slate200,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFF3B82F6),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.directions_walk_rounded,
-                      size: 13,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      stepsNum != null ? '$stepsNum steps' : 'Track steps',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                        color: isDark
-                            ? AppColors.slate300
-                            : AppColors.slate700,
-                      ),
-                    ),
-                  ],
-                ),
-                const Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 13,
-                  color: AppColors.primary,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _openDietitianConsultation() async {
     HapticFeedback.lightImpact();
@@ -3611,245 +2596,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _buildBentoDietitianTile(bool isDark) {
-    final hasUpcoming = _upcomingConsultation != null;
-    final dietitianName = _upcomingConsultation?.dietitianName ??
-        _completedConsultation?.dietitianName;
-
-    return EbicCard(
-      borderRadius: 18,
-      padding: const EdgeInsets.all(14),
-      onTap: _openDietitianConsultation,
-      child: SizedBox(
-        height: 138,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0E7FF),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFF4F46E5).withOpacity(0.25),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.medical_services_rounded,
-                    color: Color(0xFF4F46E5),
-                    size: 18,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: hasUpcoming
-                        ? const Color(0xFFFEF3C7)
-                        : (isDark
-                            ? AppColors.slate800
-                            : const Color(0xFFEEF2FF)),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: hasUpcoming
-                          ? const Color(0xFFF59E0B).withOpacity(0.3)
-                          : const Color(0xFF6366F1).withOpacity(0.3),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Text(
-                    hasUpcoming ? 'SESSION READY' : '1-ON-1',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: hasUpcoming
-                          ? const Color(0xFFB45309)
-                          : const Color(0xFF4F46E5),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  dietitianName != null
-                      ? (dietitianName.startsWith('Dr') ? dietitianName : 'Dr. $dietitianName')
-                      : 'Clinical Dietitian',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.2,
-                    color: isDark ? Colors.white : AppColors.slate900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  hasUpcoming
-                      ? 'Upcoming video consult'
-                      : 'Video care & lab reviews',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppColors.slate400 : AppColors.slate500,
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              children: const [
-                Text(
-                  'Consult Now',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF4F46E5),
-                  ),
-                ),
-                SizedBox(width: 2),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 13,
-                  color: Color(0xFF4F46E5),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBentoHealthVaultTile(bool isDark) {
-    return EbicCard(
-      borderRadius: 18,
-      padding: const EdgeInsets.all(14),
-      onTap: () {
-        HapticFeedback.lightImpact();
-        Navigator.pushNamed(context, AppRoutes.healthDocuments);
-      },
-      child: SizedBox(
-        height: 138,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFCCFBF1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFF0D9488).withOpacity(0.25),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.folder_shared_rounded,
-                    color: Color(0xFF0D9488),
-                    size: 18,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFCCFBF1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFF0D9488).withOpacity(0.3),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: const Text(
-                    'ENCRYPTED',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: Color(0xFF0F766E),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Health Documents',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.2,
-                    color: isDark ? Colors.white : AppColors.slate900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Lab reports & prescriptions',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppColors.slate400 : AppColors.slate500,
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              children: const [
-                Text(
-                  'Open Vault',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0D9488),
-                  ),
-                ),
-                SizedBox(width: 2),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 13,
-                  color: Color(0xFF0D9488),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ───────────────────────── 4. Today's Plan & Assigned Meals Card ─────────────────────────
 
   Widget _buildTodayPlanCard() {
-    if (!_hasActiveHealthPass) {
+    if (!_hasTodayPrescribedMeals) {
       return const SizedBox.shrink();
     }
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final todayPlanData =
         _todayMeal ?? (_homeData?['today_plan'] as Map<String, dynamic>?);
-    final hasPlan = todayPlanData?['hasPlan'] == true ||
-        ((todayPlanData?['meals'] as List?)?.isNotEmpty ?? false);
     final rawMeals = (todayPlanData?['meals'] as List<dynamic>?) ?? [];
 
     final totalCalories = rawMeals.fold<int>(0, (sum, m) {
@@ -3861,23 +2617,21 @@ class _HomeScreenState extends State<HomeScreen> {
       return sum + c;
     });
 
-    final List<Map<String, dynamic>> meals = hasPlan
-        ? rawMeals.map((m) {
-            final rawCal = m['calories'];
-            final calories = (rawCal is num
-                    ? rawCal.round()
-                    : (rawCal is String ? int.tryParse(rawCal) : null)) ??
-                0;
-            return {
-              'rawOccasion': m['occasion']?.toString(),
-              'occasion': _formatOccasion(m['occasion']?.toString()),
-              'name': m['name']?.toString() ?? 'Clinical Meal',
-              'calories': calories,
-              'completed': m['completed'] == true,
-              'notes': m['notes']?.toString(),
-            };
-          }).toList()
-        : [];
+    final List<Map<String, dynamic>> meals = rawMeals.map((m) {
+      final rawCal = m['calories'];
+      final calories = (rawCal is num
+              ? rawCal.round()
+              : (rawCal is String ? int.tryParse(rawCal) : null)) ??
+          0;
+      return {
+        'rawOccasion': m['occasion']?.toString(),
+        'occasion': _formatOccasion(m['occasion']?.toString()),
+        'name': m['name']?.toString() ?? 'Clinical Meal',
+        'calories': calories,
+        'completed': m['completed'] == true,
+        'notes': m['notes']?.toString(),
+      };
+    }).toList();
 
     final canBookPlanMeals =
         rawMeals.any((m) => m['bookChefEligible'] == true) || meals.isNotEmpty;
@@ -3984,66 +2738,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(height: 14),
 
-          // Meal Items or Empty Curation State
-          if (meals.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primarySubtle,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.auto_awesome_rounded,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Diet Plan in Preparation',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : AppColors.slate900,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          todayPlanData?['message']?.toString() ??
-                              'Your clinical dietitian is curating your personalized meals for today.',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: isDark ? AppColors.slate400 : AppColors.slate600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            ...meals.map(
-              (m) => Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: _buildModernMealCard(m, isDark),
-              ),
+          // Meal Items
+          ...meals.map(
+            (m) => Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: _buildModernMealCard(m, isDark),
             ),
+          ),
 
           // Chef Booking Action Banner
           if (canBookPlanMeals) ...[
@@ -4325,16 +3026,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMealPlanRow(String occasion, String name, bool completed) {
-    return _buildModernMealCard({
-      'rawOccasion': occasion,
-      'occasion': occasion,
-      'name': name,
-      'completed': completed,
-    }, Theme.of(context).brightness == Brightness.dark);
-  }
-
-  // ───────────────────────── 5. Health Snapshot & Progress Card ─────────────────────────
 
   Widget _buildHealthSnapshotCard() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -4357,16 +3048,6 @@ class _HomeScreenState extends State<HomeScreen> {
         : null;
     final num? heartRateNum = _parseInt(snapshot?['heartRate']);
     final num? caloriesNum = _parseInt(snapshot?['calories']);
-
-    final sources = snapshot?['sources'] as Map<String, dynamic>? ?? {};
-    final weightSource = sources['weight']?.toString() ??
-        (_customLoggedWeight != null ? 'MANUAL' : (weightNum != null ? 'MANUAL' : null));
-    final heartSource = sources['heartRate']?.toString() ??
-        (heartRateNum != null ? 'HEALTH_CONNECT' : null);
-    final calSource = sources['calories']?.toString() ??
-        (caloriesNum != null ? 'HEALTH_CONNECT' : null);
-    final sleepSource = sources['sleep']?.toString() ??
-        (sleepStr != null ? 'HEALTH_CONNECT' : null);
 
     final effectiveWeight = _customLoggedWeight ?? weightNum?.toDouble();
     final effectiveHeight = _customLoggedHeight ?? heightNum?.toDouble();
@@ -4392,393 +3073,52 @@ class _HomeScreenState extends State<HomeScreen> {
         caloriesNum != null ||
         _loggedWaterLiters > 0;
 
-    final hydrationRatio = _targetWaterLiters > 0
-        ? (_loggedWaterLiters / _targetWaterLiters).clamp(0.0, 1.0)
-        : 0.0;
     final stepRatio = stepsNum != null
         ? (stepsNum / 10000).clamp(0.0, 1.0)
         : 0.0;
 
-    return EbicCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.monitor_heart_outlined,
-                color: AppColors.primary,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Health Progress & Vitals',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: isDark ? Colors.white : AppColors.slate900,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => widget.onNavigateTab?.call(1),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text(
-                  'Health Hub →',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Hydration Progress Bar
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF1E3A8A).withValues(alpha: 0.5)
-                                : const Color(0xFFEFF6FF),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.water_drop_rounded,
-                            size: 13,
-                            color: Color(0xFF2563EB),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _loggedWaterLiters > 0
-                                ? 'Daily Hydration (${_loggedWaterLiters.toStringAsFixed(1)} / ${_targetWaterLiters.toStringAsFixed(0)}L)'
-                                : 'Daily Hydration (0.0 / ${_targetWaterLiters.toStringAsFixed(0)}L)',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? AppColors.slate200
-                                  : AppColors.slate800,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: _quickLogWater,
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF1E3A8A).withValues(alpha: 0.5)
-                            : const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF93C5FD)),
-                      ),
-                      child: const Text(
-                        '+250ml',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1D4ED8),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: hydrationRatio,
-                  minHeight: 7,
-                  backgroundColor: isDark
-                      ? AppColors.slate800
-                      : AppColors.slate200,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFF3B82F6),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Daily Steps Progress Bar
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.primaryDark.withValues(alpha: 0.4)
-                              : AppColors.primarySubtle,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.directions_walk_rounded,
-                          size: 13,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        stepsNum != null
-                            ? 'Active Steps ($stepsNum / 10,000)'
-                            : 'Active Steps (— / 10,000)',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? AppColors.slate200
-                              : AppColors.slate800,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    stepsNum != null ? '${(stepRatio * 100).toInt()}%' : '0%',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? AppColors.slate400 : AppColors.slate600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: stepRatio,
-                  minHeight: 7,
-                  backgroundColor: isDark
-                      ? AppColors.slate800
-                      : AppColors.slate200,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // 2x2 Bento Grid: Weight & BMI, Heart Rate, Active Calories, Sleep
-          Row(
-            children: [
-              Expanded(
-                child: _buildVitalCard(
-                  icon: Icons.monitor_weight_outlined,
-                  iconColor: const Color(0xFF0D9488),
-                  iconBg: const Color(0xFF0D9488).withValues(alpha: 0.12),
-                  label: 'Weight & BMI',
-                  value: effectiveWeight != null
-                      ? '${effectiveWeight.toStringAsFixed(1)} kg'
-                      : '— kg',
-                  badgeText: bmiInfo != null
-                      ? 'BMI ${effectiveBmi!.toStringAsFixed(1)} • ${bmiInfo.category}'
-                      : '+ Add height',
-                  badgeColor: bmiInfo != null
-                      ? bmiInfo.color
-                      : AppColors.primary,
-                  badgeBg: bmiInfo != null
-                      ? bmiInfo.bgColor
-                      : AppColors.primarySubtle,
-                  source: weightSource,
-                  isDark: isDark,
-                  onTap: _showLogVitalsBottomSheet,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildVitalCard(
-                  icon: Icons.favorite_rounded,
-                  iconColor: const Color(0xFFE11D48),
-                  iconBg: const Color(0xFFE11D48).withValues(alpha: 0.12),
-                  label: 'Heart Rate',
-                  value: heartRateNum != null
-                      ? '${heartRateNum.toInt()} bpm'
-                      : (hasVitals ? '72 bpm' : '— bpm'),
-                  badgeText: 'Resting pulse',
-                  badgeColor: const Color(0xFFE11D48),
-                  badgeBg: const Color(0xFFFFF1F2),
-                  source: heartSource,
-                  isDark: isDark,
-                  onTap: () => widget.onNavigateTab?.call(1),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildVitalCard(
-                  icon: Icons.local_fire_department_rounded,
-                  iconColor: const Color(0xFFEA580C),
-                  iconBg: const Color(0xFFEA580C).withValues(alpha: 0.12),
-                  label: 'Active Burn',
-                  value: caloriesNum != null
-                      ? '${caloriesNum.toInt()} kcal'
-                      : (hasVitals ? '420 kcal' : '— kcal'),
-                  badgeText: 'Burned today',
-                  badgeColor: const Color(0xFFEA580C),
-                  badgeBg: const Color(0xFFFFF7ED),
-                  source: calSource,
-                  isDark: isDark,
-                  onTap: () => widget.onNavigateTab?.call(1),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildVitalCard(
-                  icon: Icons.bedtime_rounded,
-                  iconColor: const Color(0xFF6366F1),
-                  iconBg: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                  label: 'Sleep',
-                  value: sleepStr ?? (hasVitals ? '7.5h' : '—'),
-                  badgeText: 'Rest duration',
-                  badgeColor: const Color(0xFF6366F1),
-                  badgeBg: const Color(0xFFEEF2FF),
-                  source: sleepSource,
-                  isDark: isDark,
-                  onTap: () => widget.onNavigateTab?.call(1),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          if (!hasVitals) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: AppColors.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'No vitals logged yet today. Tap below or quick-log water above!',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: isDark ? AppColors.slate300 : AppColors.slate700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: EbicButton(
-                  label: hasVitals ? 'Update Weight & Vitals' : 'Log Health Vitals',
-                  icon: Icons.add_chart_rounded,
-                  onPressed: _showLogVitalsBottomSheet,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 2,
-                child: OutlinedButton(
-                  onPressed: () => widget.onNavigateTab?.call(1),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: BorderSide(
-                      color: isDark ? AppColors.slate700 : AppColors.slate300,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'Full Hub →',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppColors.slate800,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFF0F172A).withValues(alpha: 0.06),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-    );
-  }
-
-  // ───────────────────────── Guest State: Health Progress & Vitals ─────────────────────────
-
-  Widget _buildGuestHealthSnapshotCard(bool isDark) {
-    return EbicCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // 1. Refined Header Strip
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(7),
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
+                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.22),
+                        width: 0.8,
+                      ),
                     ),
                     child: const Icon(
-                      Icons.monitor_heart_outlined,
-                      color: AppColors.primary,
+                      Icons.monitor_heart_rounded,
+                      color: Color(0xFF10B981),
                       size: 18,
                     ),
                   ),
@@ -4787,205 +3127,425 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Health Progress & Vitals',
+                        'Daily Health Pulse',
                         style: TextStyle(
-                          fontWeight: FontWeight.bold,
                           fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
                           color: isDark ? Colors.white : AppColors.slate900,
                         ),
                       ),
                       Text(
-                        'Guest Mode • Real-time Tracking',
+                        'Biomarkers & Activity',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: isDark
-                              ? AppColors.slate400
-                              : AppColors.slate500,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500,
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.3),
+              InkWell(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  widget.onNavigateTab?.call(1);
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    children: const [
+                      Text(
+                        'Health Hub',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      SizedBox(width: 3),
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 10,
+                        color: AppColors.primary,
+                      ),
+                    ],
                   ),
                 ),
-                child: const Text(
-                  'SYNC OFF',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                    letterSpacing: 0.6,
-                  ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // 2. 4-Pillar Metric Micro-Grid
+          Row(
+            children: [
+              Expanded(
+                child: _buildPulseVitalPill(
+                  icon: Icons.monitor_weight_outlined,
+                  color: const Color(0xFF0D9488),
+                  value: effectiveWeight != null
+                      ? effectiveWeight.toStringAsFixed(1)
+                      : '—',
+                  unit: 'kg',
+                  label: 'Weight',
+                  badge: bmiInfo != null
+                      ? 'BMI ${effectiveBmi!.toStringAsFixed(1)}'
+                      : null,
+                  isDark: isDark,
+                  onTap: _showLogVitalsBottomSheet,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPulseVitalPill(
+                  icon: Icons.directions_walk_rounded,
+                  color: const Color(0xFF10B981),
+                  value: stepsNum != null
+                      ? (stepsNum >= 1000
+                            ? '${(stepsNum / 1000).toStringAsFixed(1)}k'
+                            : '$stepsNum')
+                      : '—',
+                  unit: 'steps',
+                  label: 'Activity',
+                  badge: stepsNum != null
+                      ? '${(stepRatio * 100).toInt()}% goal'
+                      : null,
+                  isDark: isDark,
+                  onTap: () => widget.onNavigateTab?.call(1),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPulseVitalPill(
+                  icon: Icons.favorite_rounded,
+                  color: const Color(0xFFE11D48),
+                  value: heartRateNum != null
+                      ? '${heartRateNum.toInt()}'
+                      : (hasVitals ? '72' : '—'),
+                  unit: 'bpm',
+                  label: 'Heart',
+                  badge: 'Resting',
+                  isDark: isDark,
+                  onTap: () => widget.onNavigateTab?.call(1),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPulseVitalPill(
+                  icon: Icons.bedtime_rounded,
+                  color: const Color(0xFF6366F1),
+                  value: sleepStr != null
+                      ? sleepStr.replaceAll('h', '')
+                      : (hasVitals ? '7.5' : '—'),
+                  unit: 'hrs',
+                  label: 'Sleep',
+                  badge: 'Restful',
+                  isDark: isDark,
+                  onTap: () => widget.onNavigateTab?.call(1),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
 
+          // 3. Ambient Interactive Action Bar
+          InkWell(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _showLogVitalsBottomSheet();
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : const Color(0xFFE2E8F0),
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        hasVitals
+                            ? Icons.check_circle_rounded
+                            : Icons.add_circle_outline_rounded,
+                        size: 14,
+                        color: hasVitals
+                            ? const Color(0xFF10B981)
+                            : AppColors.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        hasVitals
+                            ? 'Biomarkers active • Tap to log weight'
+                            : 'No vitals logged today • Tap to record',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.slate300 : AppColors.slate700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: const [
+                      Text(
+                        'Update',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPulseVitalPill({
+    required IconData icon,
+    required Color color,
+    required String value,
+    required String unit,
+    required String label,
+    String? badge,
+    required bool isDark,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap != null
+            ? () {
+                HapticFeedback.lightImpact();
+                onTap();
+              }
+            : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
+          decoration: BoxDecoration(
+            color: isDark
+                ? color.withValues(alpha: 0.08)
+                : color.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: color.withValues(alpha: isDark ? 0.2 : 0.15),
+              width: 0.8,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 14, color: color),
+              ),
+              const SizedBox(height: 6),
+              RichText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: value,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : AppColors.slate900,
+                      ),
+                    ),
+                    if (unit.isNotEmpty) ...[
+                      const TextSpan(text: ' '),
+                      TextSpan(
+                        text: unit,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                badge ?? label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ───────────────────────── Guest State: Daily Health Pulse ─────────────────────────
+
+  Widget _buildGuestHealthSnapshotCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFF0F172A).withValues(alpha: 0.06),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.22),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.monitor_heart_rounded,
+                      color: Color(0xFF10B981),
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Daily Health Pulse',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                          color: isDark ? Colors.white : AppColors.slate900,
+                        ),
+                      ),
+                      Text(
+                        'Connect Wearables & Vitals',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              InkWell(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.pushNamed(context, AppRoutes.login);
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.25),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Sign In',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 12,
+                        color: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Text(
-            'Track your daily hydration, active steps, sleep, and diet adherence seamlessly with an EBIC account.',
+            'Sync steps, heart rate & biomarkers to calibrate clinical nutrition with your personal chef.',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11.5,
               height: 1.4,
               color: isDark ? AppColors.slate300 : AppColors.slate600,
             ),
           ),
-          const SizedBox(height: 14),
-
-          // 6 Vitals Preview Tiles (2 rows of 3)
+          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _buildGuestMetricTile(
-                  icon: '💧',
-                  title: 'Hydration',
-                  value: '—',
-                  goal: '3.0 L goal',
-                  isDark: isDark,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildGuestMetricTile(
-                  icon: '👟',
-                  title: 'Steps',
-                  value: '—',
-                  goal: '10k goal',
-                  isDark: isDark,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildGuestMetricTile(
-                  icon: '⚖️',
-                  title: 'Weight & BMI',
-                  value: '—',
-                  goal: 'Target log',
-                  isDark: isDark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildGuestMetricTile(
-                  icon: '😴',
-                  title: 'Sleep',
-                  value: '—',
-                  goal: '8h restful',
-                  isDark: isDark,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildGuestMetricTile(
-                  icon: '💓',
-                  title: 'Heart Rate',
-                  value: '—',
-                  goal: '72 bpm avg',
-                  isDark: isDark,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildGuestMetricTile(
-                  icon: '🔥',
-                  title: 'Calories',
-                  value: '—',
-                  goal: 'Active burn',
-                  isDark: isDark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Informational Banner
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF064E3B).withValues(alpha: 0.25)
-                  : const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isDark
-                    ? const Color(0xFF047857).withValues(alpha: 0.35)
-                    : const Color(0xFFBBF7D0),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.lock_outline_rounded,
-                  size: 18,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Sign in to link fitness wearables and save your personal vitals.',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? AppColors.slate200
-                          : const Color(0xFF166534),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Action Buttons
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: EbicButton(
-                  label: 'Sign In to Log Vitals',
-                  icon: Icons.login_rounded,
-                  onPressed: () =>
-                      Navigator.pushNamed(context, AppRoutes.login),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: OutlinedButton(
-                  onPressed: () => widget.onNavigateTab?.call(1),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: BorderSide(
-                      color: isDark ? AppColors.slate700 : AppColors.slate300,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'Health Hub',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppColors.slate800,
-                    ),
-                  ),
-                ),
-              ),
+              _buildGuestPreviewChip('⚖️ Weight', isDark),
+              const SizedBox(width: 6),
+              _buildGuestPreviewChip('👟 Steps', isDark),
+              const SizedBox(width: 6),
+              _buildGuestPreviewChip('💓 Heart', isDark),
+              const SizedBox(width: 6),
+              _buildGuestPreviewChip('😴 Sleep', isDark),
             ],
           ),
         ],
@@ -4993,211 +3553,35 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildGuestMetricTile({
-    required String icon,
-    required String title,
-    required String value,
-    required String goal,
-    required bool isDark,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-      decoration: BoxDecoration(
-        color: isDark
-            ? AppColors.slate800.withValues(alpha: 0.6)
-            : AppColors.slate50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? AppColors.slate700 : AppColors.slate200,
-        ),
-      ),
-      child: Column(
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 16)),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: isDark ? AppColors.slate400 : AppColors.slate500,
-            ),
+  Widget _buildGuestPreviewChip(String label, bool isDark) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.04)
+              : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFE2E8F0),
+            width: 0.8,
           ),
-          const SizedBox(height: 2),
-          Text(
-            title,
+        ),
+        child: Center(
+          child: Text(
+            label,
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: isDark ? AppColors.slate300 : AppColors.slate700,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
-          Text(
-            goal,
-            style: TextStyle(
-              fontSize: 8.5,
-              color: isDark ? AppColors.slate500 : AppColors.slate400,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVitalCard({
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBg,
-    required String label,
-    required String value,
-    required String badgeText,
-    required Color badgeColor,
-    required Color badgeBg,
-    required bool isDark,
-    VoidCallback? onTap,
-    String? source,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            color: isDark
-                ? AppColors.slate800.withValues(alpha: 0.6)
-                : AppColors.slate50,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? AppColors.slate700 : AppColors.slate200,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: isDark ? iconColor.withValues(alpha: 0.2) : iconBg,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, size: 14, color: iconColor),
-                  ),
-                  if (source != null && source.isNotEmpty)
-                    ProvenanceBadge(source: source, isCompact: true)
-                  else
-                    Flexible(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? AppColors.slate400 : AppColors.slate500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (source != null && source.isNotEmpty) ...[
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.slate400 : AppColors.slate500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-              ],
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : AppColors.slate900,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? badgeColor.withValues(alpha: 0.18)
-                      : badgeBg,
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(
-                    color: isDark
-                        ? badgeColor.withValues(alpha: 0.35)
-                        : badgeColor.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Text(
-                  badgeText,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.bold,
-                    color: badgeColor,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSnapshotMetric(
-    String label,
-    String value,
-    String hint, {
-    bool isDark = false,
-  }) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : AppColors.slate900,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: isDark ? AppColors.slate400 : AppColors.slate500,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        Text(
-          hint,
-          style: TextStyle(
-            fontSize: 9.5,
-            color: isDark ? AppColors.slate500 : AppColors.slate400,
-          ),
-        ),
-      ],
     );
   }
 
@@ -5956,9 +4340,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return DateFormat('dd MMM yyyy').format(dt);
   }
 
-  String _formatDateTime(DateTime dt) {
-    return DateFormat('dd MMM • hh:mm a').format(dt);
-  }
 }
 
 /// Lightweight data holder for quick-action tiles on the home screen.

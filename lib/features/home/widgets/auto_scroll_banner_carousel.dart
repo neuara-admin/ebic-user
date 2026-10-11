@@ -12,7 +12,8 @@ String? resolveBannerMediaUrl(String? url) {
   final resolved = AppConfig.resolveMediaUrl(url);
   if (resolved == null) return null;
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    if (resolved.contains('localhost:3000') || resolved.contains('127.0.0.1:3000')) {
+    if (resolved.contains('localhost:3000') ||
+        resolved.contains('127.0.0.1:3000')) {
       return resolved
           .replaceAll('localhost:3000', '10.0.2.2:3000')
           .replaceAll('127.0.0.1:3000', '10.0.2.2:3000');
@@ -106,7 +107,8 @@ class AutoScrollBannerCarousel extends StatefulWidget {
   });
 
   @override
-  State<AutoScrollBannerCarousel> createState() => _AutoScrollBannerCarouselState();
+  State<AutoScrollBannerCarousel> createState() =>
+      _AutoScrollBannerCarouselState();
 }
 
 class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
@@ -122,15 +124,19 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
   void initState() {
     super.initState();
     final hasMultiple = _banners.length > 1;
-    _pageController = PageController(viewportFraction: hasMultiple ? 0.90 : 1.0);
+    _pageController = PageController(
+      viewportFraction: hasMultiple ? 0.90 : 1.0,
+    );
     _startTimer();
   }
 
   @override
   void didUpdateWidget(covariant AutoScrollBannerCarousel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.settings.autoScrollEnabled != widget.settings.autoScrollEnabled ||
-        oldWidget.settings.autoScrollIntervalSeconds != widget.settings.autoScrollIntervalSeconds ||
+    if (oldWidget.settings.autoScrollEnabled !=
+            widget.settings.autoScrollEnabled ||
+        oldWidget.settings.autoScrollIntervalSeconds !=
+            widget.settings.autoScrollIntervalSeconds ||
         oldWidget.banners.length != widget.banners.length) {
       _startTimer();
     }
@@ -185,7 +191,11 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
     if (banner.isVideo) {
       _showVideoPreviewSheet(banner);
     } else if (banner.targetRoute != null && banner.targetRoute!.isNotEmpty) {
-      Navigator.pushNamed(context, banner.targetRoute!, arguments: banner.routeArguments);
+      Navigator.pushNamed(
+        context,
+        banner.targetRoute!,
+        arguments: banner.routeArguments,
+      );
     }
   }
 
@@ -235,7 +245,8 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                 final banner = _banners[index];
                 final isLast = index == _banners.length - 1;
                 final isCurrentActive = index == _currentPage;
-                final shouldShowText = widget.settings.showTextOverlay && banner.showTextOverlay;
+                final shouldShowText =
+                    widget.settings.showTextOverlay && banner.showTextOverlay;
 
                 return Padding(
                   padding: EdgeInsets.only(
@@ -253,12 +264,16 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF0F172A).withValues(alpha: 0.08),
+                            color: const Color(
+                              0xFF0F172A,
+                            ).withValues(alpha: 0.08),
                             blurRadius: 16,
                             offset: const Offset(0, 6),
                           ),
                           BoxShadow(
-                            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+                            color: const Color(
+                              0xFF0F172A,
+                            ).withValues(alpha: 0.03),
                             blurRadius: 4,
                             offset: const Offset(0, 1),
                           ),
@@ -300,19 +315,28 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                                 top: 12,
                                 right: 12,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.black.withValues(alpha: 0.6),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.3),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.3,
+                                      ),
                                       width: 0.8,
                                     ),
                                   ),
                                   child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 12),
+                                      Icon(
+                                        Icons.play_circle_fill_rounded,
+                                        color: Colors.white,
+                                        size: 12,
+                                      ),
                                       SizedBox(width: 4),
                                       Text(
                                         'VIDEO',
@@ -331,23 +355,37 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                             // Content Container with Proper Internal Spacing (Only when text overlay is enabled)
                             if (shouldShowText)
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     // Top Row: Tag Pill & Action Cue
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         // Pill Badge
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4.5,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: banner.tagColor.withValues(alpha: 0.92),
-                                            borderRadius: BorderRadius.circular(20),
+                                            color: banner.tagColor.withValues(
+                                              alpha: 0.92,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
                                             border: Border.all(
-                                              color: Colors.white.withValues(alpha: 0.3),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.3,
+                                              ),
                                               width: 0.8,
                                             ),
                                           ),
@@ -375,12 +413,20 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
 
                                         if (banner.isVideo)
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 4,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withValues(alpha: 0.55),
-                                              borderRadius: BorderRadius.circular(20),
+                                              color: Colors.black.withValues(
+                                                alpha: 0.55,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
                                               border: Border.all(
-                                                color: Colors.white.withValues(alpha: 0.35),
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.35,
+                                                ),
                                                 width: 0.8,
                                               ),
                                             ),
@@ -388,13 +434,15 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 const Icon(
-                                                  Icons.play_circle_fill_rounded,
+                                                  Icons
+                                                      .play_circle_fill_rounded,
                                                   color: Colors.white,
                                                   size: 13,
                                                 ),
                                                 const SizedBox(width: 4),
                                                 Text(
-                                                  banner.videoDuration ?? 'Story',
+                                                  banner.videoDuration ??
+                                                      'Story',
                                                   style: const TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 10.5,
@@ -406,12 +454,20 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                                           )
                                         else
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: Colors.white.withValues(alpha: 0.22),
-                                              borderRadius: BorderRadius.circular(20),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.22,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
                                               border: Border.all(
-                                                color: Colors.white.withValues(alpha: 0.35),
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.35,
+                                                ),
                                                 width: 0.8,
                                               ),
                                             ),
@@ -429,7 +485,8 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                                                 ),
                                                 const SizedBox(width: 3),
                                                 const Icon(
-                                                  Icons.arrow_forward_ios_rounded,
+                                                  Icons
+                                                      .arrow_forward_ios_rounded,
                                                   color: Colors.white,
                                                   size: 9,
                                                 ),
@@ -441,18 +498,21 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
 
                                     // Bottom Text Hierarchy
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Row(
-                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
                                           children: [
                                             Container(
                                               width: 3.5,
                                               height: 18,
                                               decoration: BoxDecoration(
                                                 color: banner.tagColor,
-                                                borderRadius: BorderRadius.circular(2),
+                                                borderRadius:
+                                                    BorderRadius.circular(2),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
@@ -474,11 +534,15 @@ class _AutoScrollBannerCarouselState extends State<AutoScrollBannerCarousel> {
                                         ),
                                         const SizedBox(height: 4),
                                         Padding(
-                                          padding: const EdgeInsets.only(left: 11.5),
+                                          padding: const EdgeInsets.only(
+                                            left: 11.5,
+                                          ),
                                           child: Text(
                                             banner.subtitle,
                                             style: TextStyle(
-                                              color: Colors.white.withValues(alpha: 0.88),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.88,
+                                              ),
                                               fontSize: 11.5,
                                               height: 1.25,
                                             ),
@@ -557,7 +621,9 @@ class _BannerCardMediaState extends State<_BannerCardMedia> {
   @override
   void initState() {
     super.initState();
-    if (widget.banner.isVideo && widget.settings.videoAutoplayCarousel && widget.isActive) {
+    if (widget.banner.isVideo &&
+        widget.settings.videoAutoplayCarousel &&
+        widget.isActive) {
       _initInlineVideo();
     }
   }
@@ -587,7 +653,9 @@ class _BannerCardMediaState extends State<_BannerCardMedia> {
     if (resolvedUrl == null || resolvedUrl.isEmpty) return;
 
     try {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(resolvedUrl));
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(resolvedUrl),
+      );
       _videoController = controller;
       await controller.initialize();
       await controller.setLooping(widget.settings.videoLoop);
@@ -618,7 +686,8 @@ class _BannerCardMediaState extends State<_BannerCardMedia> {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedImageUrl = resolveBannerMediaUrl(widget.banner.imageUrl) ?? widget.banner.imageUrl;
+    final resolvedImageUrl =
+        resolveBannerMediaUrl(widget.banner.imageUrl) ?? widget.banner.imageUrl;
 
     return Stack(
       fit: StackFit.expand,
@@ -631,7 +700,10 @@ class _BannerCardMediaState extends State<_BannerCardMedia> {
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => Container(
             color: AppColors.slate800,
-            child: const Icon(Icons.image_not_supported_rounded, color: Colors.white38),
+            child: const Icon(
+              Icons.image_not_supported_rounded,
+              color: Colors.white38,
+            ),
           ),
         ),
 
@@ -711,7 +783,9 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
     }
 
     try {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(resolvedUrl));
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(resolvedUrl),
+      );
       _controller = controller;
 
       controller.addListener(_videoListener);
@@ -788,7 +862,8 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final banner = widget.banner;
-    final resolvedPoster = resolveBannerMediaUrl(banner.imageUrl) ?? banner.imageUrl;
+    final resolvedPoster =
+        resolveBannerMediaUrl(banner.imageUrl) ?? banner.imageUrl;
 
     return Container(
       decoration: BoxDecoration(
@@ -818,7 +893,10 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4.5,
+                ),
                 decoration: BoxDecoration(
                   color: banner.tagColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -826,7 +904,11 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(widget.getBannerIcon(banner.id), color: banner.tagColor, size: 12),
+                    Icon(
+                      widget.getBannerIcon(banner.id),
+                      color: banner.tagColor,
+                      size: 12,
+                    ),
                     const SizedBox(width: 5),
                     Text(
                       banner.tag,
@@ -847,11 +929,18 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
             ],
           ),
           const SizedBox(height: 6),
-          Text(banner.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            banner.title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 4),
           Text(
             banner.subtitle,
-            style: const TextStyle(fontSize: 13, color: AppColors.slate500, height: 1.35),
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.slate500,
+              height: 1.35,
+            ),
           ),
           const SizedBox(height: 14),
 
@@ -892,7 +981,11 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
                         errorBuilder: (_, __, ___) => Container(
                           color: AppColors.slate800,
                           child: const Center(
-                            child: Icon(Icons.videocam_off_rounded, color: Colors.white38, size: 40),
+                            child: Icon(
+                              Icons.videocam_off_rounded,
+                              color: Colors.white38,
+                              size: 40,
+                            ),
                           ),
                         ),
                       ),
@@ -902,7 +995,10 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
                       Container(
                         color: Colors.black45,
                         child: const Center(
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
                         ),
                       ),
 
@@ -915,22 +1011,38 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.error_outline_rounded, color: Colors.white70, size: 36),
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                color: Colors.white70,
+                                size: 36,
+                              ),
                               const SizedBox(height: 8),
                               Text(
                                 _errorMessage ?? 'Failed to play video',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
                               ),
                               const SizedBox(height: 12),
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                icon: const Icon(Icons.refresh_rounded, size: 16),
+                                icon: const Icon(
+                                  Icons.refresh_rounded,
+                                  size: 16,
+                                ),
                                 label: const Text('Retry Playback'),
                                 onPressed: _initVideo,
                               ),
@@ -940,7 +1052,9 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
                       ),
 
                     // Controls overlay
-                    if (_isInitialized && _controller != null && (_showControls || !_controller!.value.isPlaying)) ...[
+                    if (_isInitialized &&
+                        _controller != null &&
+                        (_showControls || !_controller!.value.isPlaying)) ...[
                       // Dim scrim
                       Container(color: Colors.black38),
 
@@ -985,7 +1099,9 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Icon(
-                              _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                              _isMuted
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded,
                               color: Colors.white,
                               size: 18,
                             ),
@@ -1006,11 +1122,18 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
                               children: [
                                 Text(
                                   _formatDuration(_controller!.value.position),
-                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 Text(
                                   _formatDuration(_controller!.value.duration),
-                                  style: const TextStyle(color: Colors.white70, fontSize: 10),
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                  ),
                                 ),
                               ],
                             ),
@@ -1044,17 +1167,27 @@ class _BannerVideoSheetState extends State<_BannerVideoSheet> {
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 13),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
               label: Text(
                 banner.ctaText ?? 'Explore Full Experience',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               onPressed: () {
                 Navigator.pop(context);
-                if (banner.targetRoute != null && banner.targetRoute!.isNotEmpty) {
-                  Navigator.pushNamed(context, banner.targetRoute!, arguments: banner.routeArguments);
+                if (banner.targetRoute != null &&
+                    banner.targetRoute!.isNotEmpty) {
+                  Navigator.pushNamed(
+                    context,
+                    banner.targetRoute!,
+                    arguments: banner.routeArguments,
+                  );
                 }
               },
             ),
