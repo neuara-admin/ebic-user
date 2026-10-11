@@ -1786,6 +1786,13 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     }
   }
 
+  Future<void> _handleRefresh() async {
+    HapticFeedback.lightImpact();
+    await _loadSavedAddress();
+    await _loadAvailablePromotions();
+    await _fetchDynamicCookingTimeAndQuote();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1820,9 +1827,14 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
-              child: Column(
+            RefreshIndicator(
+              color: AppColors.primary,
+              backgroundColor: isDark ? AppColors.slate800 : Colors.white,
+              onRefresh: _handleRefresh,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (_errorMessage != null && quote == null) ...[
@@ -1928,6 +1940,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                 ],
               ),
             ),
+          ),
 
             // Floating Sticky Checkout Bar (Primary Action Controller)
             if (quote != null)
