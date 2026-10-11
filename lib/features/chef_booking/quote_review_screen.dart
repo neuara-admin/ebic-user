@@ -105,6 +105,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   // after payment. A picked chef is tried first under the same rules.
   static const String _autoAssignChefLabel = 'Nearest available certified chef';
   AvailableChefModel? _preferredChef;
+  int? _availableChefCount;
+  AvailableChefModel? _recommendedChef;
   bool _isConfirming = false;
 
   @override
@@ -322,7 +324,36 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     );
     if (choice != null && mounted) {
       setState(() => _preferredChef = choice.chef);
+      _fetchAvailableChefs();
     }
+  }
+
+  Future<void> _fetchAvailableChefs() async {
+    final addressId = _resolvedAddressId;
+    if (addressId == null) return;
+    try {
+      final res = await _api.get<Map<String, dynamic>>(
+        ApiEndpoints.chefBookingsAvailableChefs,
+        queryParameters: {
+          'addressId': addressId,
+          if (_quote?.quoteId != null) 'quoteId': _quote!.quoteId,
+          if (_quote?.cookingTimeMinutes != null)
+            'cookMinutes': _quote!.cookingTimeMinutes.toString(),
+        },
+      );
+      if (mounted && res.success && res.data != null) {
+        final result = AvailableChefsResult.fromJson(res.data!);
+        setState(() {
+          _availableChefCount = result.availableCount;
+          _recommendedChef =
+              result.availableChefs.isNotEmpty ? result.availableChefs.first : null;
+          if (_preferredChef != null &&
+              !result.availableChefs.any((c) => c.id == _preferredChef!.id)) {
+            _preferredChef = null;
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   /// Dietitian-assigned meal: the dishes and portions are the prescription
@@ -900,6 +931,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         _quote = QuoteModel.fromJson(rawQuote);
         if (_quote != null) {
           _couponDiscount = _quote!.discount;
+          _fetchAvailableChefs();
         }
       } else {
         // Prices come only from the backend pricing engine — never estimated here.
@@ -1658,6 +1690,19 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   Future<void> _proceedToPayment() async {
     if (_quote == null) return;
 
+    if (_availableChefCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No chefs are currently available in your area for this visit. Please try again shortly or choose a scheduled slot.',
+          ),
+          backgroundColor: AppColors.danger,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
     final resolvedAddressId =
         _selectedAddress?.id ??
         widget.bookingConfig['addressId'] ??
@@ -2278,17 +2323,31 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: chef == null ? AppColors.slate50 : AppColors.primarySubtle,
+                color: _availableChefCount == 0
+                    ? const Color(0xFFFEF2F2)
+                    : (chef == null ? AppColors.slate50 : AppColors.primarySubtle),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: chef == null
-                      ? AppColors.slate200
-                      : AppColors.primary.withOpacity(0.4),
+                  color: _availableChefCount == 0
+                      ? const Color(0xFFFCA5A5)
+                      : (chef == null
+                          ? AppColors.slate200
+                          : AppColors.primary.withOpacity(0.4)),
                 ),
               ),
               child: Row(
                 children: [
-                  if (chef == null)
+                  if (_availableChefCount == 0)
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.person_off_rounded, color: Color(0xFFDC2626), size: 24),
+                    )
+                  else if (chef == null)
                     Container(
                       width: 44,
                       height: 44,
@@ -2306,31 +2365,43 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          chef?.name ?? 'Auto-assign best available chef',
+                          _availableChefCount == 0
+                              ? 'No Chefs Available Right Now'
+                              : (chef?.name ?? 'Auto-assign best available chef'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: AppColors.slate900,
+                            color: _availableChefCount == 0 ? const Color(0xFF991B1B) : AppColors.slate900,
                           ),
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          chef == null
-                              ? 'Nearest free certified chef, assigned after payment. Tap to pick a chef yourself.'
-                              : [
-                                  if (chef.rating != null)
-                                    '★ ${chef.rating!.toStringAsFixed(1)} (${chef.ratingCount})'
-                                  else
-                                    'New chef',
-                                  if (chef.etaMinutes != null) '~${chef.etaMinutes} min away',
-                                  if (chef.cookedForYouCount > 0)
-                                    'cooked for you ${chef.cookedForYouCount}×',
-                                ].join('  ·  '),
+                          _availableChefCount == 0
+                              ? 'All certified chefs in your hub area are currently busy or off duty.'
+                              : (chef == null
+                                  ? (_availableChefCount != null && _availableChefCount! > 0
+                                      ? (_recommendedChef != null
+                                          ? 'EBIC Pick: ${_recommendedChef!.name} (${_recommendedChef!.etaMinutes != null ? "~${_recommendedChef!.etaMinutes}m, " : ""}★${_recommendedChef!.rating?.toStringAsFixed(1) ?? "4.9"}) · $_availableChefCount chefs near you. Tap to change.'
+                                          : 'EBIC will pick the best of $_availableChefCount available chefs near you. Tap to choose manually.')
+                                      : 'Nearest free certified chef, assigned after payment. Tap to pick a chef yourself.')
+                                  : [
+                                      if (chef.rating != null)
+                                        '★ ${chef.rating!.toStringAsFixed(1)} (${chef.ratingCount})'
+                                      else
+                                        'New chef',
+                                      if (chef.etaMinutes != null) '~${chef.etaMinutes} min away',
+                                      if (chef.cookedForYouCount > 0)
+                                        'cooked for you ${chef.cookedForYouCount}×',
+                                    ].join('  ·  ')),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11.5, color: AppColors.slate600, height: 1.3),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: _availableChefCount == 0 ? const Color(0xFFB91C1C) : AppColors.slate600,
+                            height: 1.3,
+                          ),
                         ),
                       ],
                     ),
@@ -4551,7 +4622,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           SizedBox(
             height: 44,
             child: ElevatedButton.icon(
-              onPressed: _isConfirming
+              onPressed: (_isConfirming || _availableChefCount == 0)
                   ? null
                   : () {
                       HapticFeedback.mediumImpact();
@@ -4567,9 +4638,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               label: Text(
                 _isConfirming
                     ? 'Confirming…'
-                    : q.total <= 0
-                        ? 'Confirm Booking'
-                        : 'Proceed to Pay',
+                    : _availableChefCount == 0
+                        ? 'No Chefs Available'
+                        : q.total <= 0
+                            ? 'Confirm Booking'
+                            : 'Proceed to Pay',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -4580,6 +4653,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     ? Colors.teal.shade700
                     : AppColors.primary,
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: AppColors.slate300,
+                disabledForegroundColor: AppColors.slate600,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

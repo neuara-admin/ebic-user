@@ -331,6 +331,43 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
         await _handlePreferredChefUnavailable(orderRes.error!.message);
         return;
       }
+      if (orderRes.error?.code == 'NO_CHEFS_AVAILABLE') {
+        setState(() {
+          _isProcessing = false;
+          _errorMessage = orderRes.error?.message ??
+              'No chefs are currently available in your area for this visit. Please try again later.';
+        });
+        if (mounted) {
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.person_off_rounded, color: AppColors.danger),
+                  SizedBox(width: 8),
+                  Text('No Chefs Available', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+              content: Text(
+                orderRes.error?.message ??
+                    'No certified chefs are currently available in your area to take this booking. No payment was charged.',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Back to Review', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
       if (!orderRes.success || orderRes.data == null) {
         setState(() {
           _isProcessing = false;

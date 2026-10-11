@@ -235,8 +235,12 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
 
   Widget _buildConfirmBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final available = _result?.availableChefs ?? const <AvailableChefModel>[];
     final chef = _selectedChef;
-    final label = chef == null ? 'Continue with auto-assign' : 'Continue with ${chef.name}';
+    final bool canConfirm = chef != null ? chef.available : available.isNotEmpty;
+    final String label = chef != null
+        ? 'Continue with ${chef.name}'
+        : (available.isNotEmpty ? 'Continue with auto-assign' : 'No chefs available right now');
     return SafeArea(
       top: false,
       child: Container(
@@ -254,13 +258,17 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
         child: SizedBox(
           height: 50,
           child: ElevatedButton(
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              _confirm();
-            },
+            onPressed: canConfirm
+                ? () {
+                    HapticFeedback.mediumImpact();
+                    _confirm();
+                  }
+                : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: isDark ? AppColors.slate800 : AppColors.slate300,
+              disabledForegroundColor: isDark ? AppColors.slate500 : AppColors.slate500,
               elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
@@ -374,7 +382,7 @@ class _AutoAssignTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hint = recommended == null
-        ? 'We’ll assign the nearest free certified chef after payment.'
+        ? 'No certified chefs are currently free in your area right now.'
         : 'Right now that’s ${recommended!.name}'
             '${recommended!.etaMinutes != null ? ', ~${recommended!.etaMinutes} min away' : ''}.';
     return _SelectableShell(
