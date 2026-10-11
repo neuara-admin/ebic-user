@@ -1713,8 +1713,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final isArrived = status == 'ARRIVED' || status == 'WAITING_CUSTOMER';
     final isCooking =
         status == 'COOKING' || status == 'PLATING' || status == 'IN_PROGRESS';
-    final isSearching =
-        status == 'SEARCHING' || status == 'CREATED' || status == 'PENDING';
+    final isSearching = status == 'SEARCHING';
+    final isPendingPayment = status == 'CREATED' || status == 'PENDING';
 
     return EbicCard(
       onTap: () => Navigator.pushNamed(
@@ -1804,15 +1804,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isSearching
-                          ? 'Assigning Executive Chef...'
-                          : (isEnRoute
-                                ? 'Chef is on the way'
-                                : (isArrived
-                                      ? 'Chef has arrived at doorstep'
-                                      : (isCooking
-                                            ? 'Cooking in progress'
-                                            : 'Chef ${order.chefName} Assigned'))),
+                      isPendingPayment
+                          ? 'Payment Pending'
+                          : (isSearching
+                              ? 'Assigning Executive Chef...'
+                              : (isEnRoute
+                                    ? 'Chef is on the way'
+                                    : (isArrived
+                                          ? 'Chef has arrived at doorstep'
+                                          : (isCooking
+                                                ? 'Cooking in progress'
+                                                : 'Chef ${order.chefName} Assigned')))),
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
@@ -1820,13 +1822,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     Text(
-                      isEnRoute
-                          ? '${order.occasionLabel} • Arriving in ~18 mins'
-                          : (isArrived
-                                ? 'Share Start OTP to begin cooking'
-                                : (isCooking
-                                      ? 'Estimated cook time: ${order.cookingTimeMinutes} mins'
-                                      : 'Preparing ingredients & packing kit')),
+                      isPendingPayment
+                          ? 'Tap to review order & complete payment'
+                          : (isEnRoute
+                              ? '${order.occasionLabel} • Arriving in ~18 mins'
+                              : (isArrived
+                                    ? 'Share Start OTP to begin cooking'
+                                    : (isCooking
+                                          ? 'Estimated cook time: ${order.cookingTimeMinutes} mins'
+                                          : (isSearching
+                                                ? 'Searching verified chefs near your hub'
+                                                : 'Preparing ingredients & packing kit')))),
                       style: TextStyle(
                         fontSize: 12.5,
                         color: isEnRoute ? Colors.white70 : AppColors.slate600,
