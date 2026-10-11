@@ -136,11 +136,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
     }
   }
 
-  /// Only a Chef Menu (catalogue) booking came from the cart; a diet-plan
-  /// booking must leave whatever the customer has in the cart untouched.
-  bool get _isCatalogueBooking =>
-      widget.checkoutData['mode'] != 'ASSIGNED_MEAL' &&
-      widget.checkoutData['bookingFlow'] != 'ASSIGNED_MEAL';
+
 
   double get _effectiveFinalAmount {
     final rawQuote = widget.checkoutData['quote'];
@@ -419,7 +415,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
       // payable, confirm — never open Razorpay for a ₹0 order, even if the
       // earlier quote shown on screen differed.
       if (!backendRequiresPayment) {
-        if (_isCatalogueBooking) CartService().clear();
+        CartService().clear();
         setState(() => _isProcessing = false);
         if (!mounted) return;
         Navigator.pushNamedAndRemoveUntil(
@@ -517,7 +513,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
       }
 
       // 6. Clear cart and reset state
-      if (_isCatalogueBooking) CartService().clear();
+      CartService().clear();
 
       setState(() => _isProcessing = false);
 

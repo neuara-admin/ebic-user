@@ -47,9 +47,14 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
       if (!mounted) return;
 
       // Customer without a Health Pass:
-      // Directly redirect to items catalogue without any error snackbar.
+      // Allow them to view booking types without auto-redirecting.
       if (pass == null) {
-        Navigator.pushReplacementNamed(context, AppRoutes.bookChefCatalogue);
+        setState(() {
+          _activePass = null;
+          _passNoticeMessage = null;
+          _isPassExpired = false;
+          _isCheckingPass = false;
+        });
         return;
       }
 
@@ -101,7 +106,12 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
       });
     } catch (_) {
       if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.bookChefCatalogue);
+        setState(() {
+          _activePass = null;
+          _passNoticeMessage = null;
+          _isPassExpired = false;
+          _isCheckingPass = false;
+        });
       }
     }
   }
@@ -114,6 +124,115 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
       builder: (ctx) => _ChefVideoModal(
         videoUrl: _videoTeaserUrl!,
         title: 'Live Chef Cooking Experience',
+      ),
+    );
+  }
+
+  void _showPassRequiredModal() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.slate700 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.eco_rounded, color: AppColors.primary, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'EBIC Health Pass Required',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: isDark ? Colors.white : AppColors.slate900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'For Clinical Diet Plan Meals',
+                          style: TextStyle(fontSize: 12, color: AppColors.slate500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Clinical diet plan meals are prescribed by verified doctors & dietitians and include covered home chef visits. Join EBIC Health Pass to unlock your personalized meal plan, or order on-demand dishes from the chef catalogue.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? AppColors.slate300 : AppColors.slate600,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Browse Menu'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.pushNamed(context, AppRoutes.healthPass);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Get Health Pass', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -320,9 +439,15 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
                 accentColor: AppColors.primary,
                 subtitle: 'Personalized to your doctor-prescribed meal chart and calorie goals.',
                 features: const ['Doctor-Approved', 'Family Portioning', 'Clinical Profile'],
-                buttonText: 'Cook Diet Plan Meals',
+                buttonText: _activePass == null ? 'Unlock with Health Pass' : 'Cook Diet Plan Meals',
                 isPrimary: true,
-                onTap: () => Navigator.pushNamed(context, AppRoutes.bookChefAssigned),
+                onTap: () {
+                  if (_activePass == null) {
+                    _showPassRequiredModal();
+                  } else {
+                    Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
+                  }
+                },
               ),
 
               const SizedBox(height: 14),

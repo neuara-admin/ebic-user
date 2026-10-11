@@ -1626,8 +1626,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         return;
       }
 
-      final isCatalogue = !_isAssignedFlow;
-      if (isCatalogue) CartService().clear();
+      CartService().clear();
       Navigator.pushNamedAndRemoveUntil(
         context,
         AppRoutes.bookChefConfirmation,

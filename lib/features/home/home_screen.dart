@@ -2109,14 +2109,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     flex: 5,
                     child: EbicButton(
-                      label: 'Browse Chef Menu',
-                      icon: Icons.restaurant_menu_rounded,
+                      label: 'Book a Chef',
+                      icon: Icons.soup_kitchen_rounded,
+                      variant: EbicButtonVariant.primary,
                       onPressed: () {
                         HapticFeedback.lightImpact();
-                        Navigator.pushNamed(
-                          context,
-                          AppRoutes.bookChefCatalogue,
-                        );
+                        if (!SessionManager().isAuthenticated) {
+                          Navigator.pushNamed(context, AppRoutes.login);
+                          return;
+                        }
+                        if (_healthPassStage == HealthPassStage.mealsAssigned) {
+                          Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
+                        } else {
+                          Navigator.pushNamed(context, AppRoutes.bookChef);
+                        }
                       },
                     ),
                   ),
@@ -2124,20 +2130,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     flex: 5,
                     child: EbicButton(
-                      label: 'Book a Chef',
-                      icon: Icons.soup_kitchen_rounded,
+                      label: 'Browse Chef Menu',
+                      icon: Icons.restaurant_menu_rounded,
                       variant: EbicButtonVariant.outline,
+                      color: Colors.white,
                       onPressed: () {
                         HapticFeedback.lightImpact();
-                        if (!SessionManager().isAuthenticated) {
-                          Navigator.pushNamed(context, AppRoutes.login);
-                          return;
-                        }
-                        if (_healthPass == null) {
-                          Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
-                        } else {
-                          Navigator.pushNamed(context, AppRoutes.bookChef);
-                        }
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.bookChefCatalogue,
+                        );
                       },
                     ),
                   ),
