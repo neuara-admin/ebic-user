@@ -7,7 +7,6 @@ import '../../core/auth/session_manager.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/order_model.dart';
-import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
 
@@ -127,7 +126,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   }
 
   bool _isCurrent(OrderModel o) {
-    return o.status != 'COMPLETED' && !o.isCancelled;
+    return o.status != 'COMPLETED' &&
+        !o.isCancelled &&
+        o.status.toUpperCase() != 'CREATED' &&
+        !o.isPaymentPending &&
+        !o.isPaymentFailed;
   }
 
   @override
@@ -140,8 +143,13 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     // 1. Current Bookings (Active, Cooking, Arriving, Upcoming Scheduled)
     final allCurrentOrders = _orders.where(_isCurrent).toList();
 
-    // 2. Previous Bookings (Completed, Cancelled)
-    final allPreviousOrders = _orders.where((o) => !_isCurrent(o)).toList();
+    // 2. Previous Bookings (Completed, Cancelled - excluding unconfirmed abandoned drafts)
+    final allPreviousOrders = _orders.where((o) {
+      if (o.status.toUpperCase() == 'CREATED' || o.isPaymentPending) {
+        return false;
+      }
+      return !_isCurrent(o);
+    }).toList();
 
     // 3. Filter previous bookings based on selected status filter
     final filteredPreviousOrders = allPreviousOrders.where((o) {

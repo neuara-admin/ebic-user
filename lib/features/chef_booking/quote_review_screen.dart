@@ -906,7 +906,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         _quote = null;
         if (quoteRes.error?.code == 'FORBIDDEN' ||
             quoteRes.error?.code == 'HTTP_403' ||
-            (quoteRes.error?.message?.toLowerCase().contains('permission') ?? false)) {
+            (quoteRes.error?.message.toLowerCase().contains('permission') ?? false)) {
           _errorMessage = 'Only registered customer accounts can book chef visits. If you are signed in with a partner or chef account, please sign in with a registered customer account.';
         } else {
           _errorMessage = quoteRes.error?.message ??

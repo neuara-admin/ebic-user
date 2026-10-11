@@ -30,6 +30,7 @@ class OrderModel {
   final double couponDiscount;
   final double walletDeduction;
   final String? paymentMode;
+  final String? paymentStatus;
   final String? cookingNotes;
   final String? dietaryNotes;
   final List<String> allergyAlerts;
@@ -56,6 +57,7 @@ class OrderModel {
     this.couponDiscount = 0.0,
     this.walletDeduction = 0.0,
     this.paymentMode,
+    this.paymentStatus,
     this.cookingNotes,
     this.dietaryNotes,
     this.allergyAlerts = const [],
@@ -90,10 +92,23 @@ class OrderModel {
     final s = status.toUpperCase();
     return s.startsWith('CANCEL') ||
         s == 'CHEF_CANCELLED' ||
-        s.contains('FAILED') ||
+        s == 'FAILED_NO_SUPPLY' ||
         s.contains('NO_SUPPLY') ||
         s.contains('REJECT') ||
         s.contains('EXPIRED');
+  }
+
+  bool get isPaymentFailed {
+    final p = (paymentStatus ?? '').toUpperCase();
+    final s = status.toUpperCase();
+    return p == 'FAILED' || s == 'PAYMENT_FAILED' || (s == 'FAILED' && p != 'SUCCEEDED');
+  }
+
+  bool get isPaymentPending {
+    if (isPaymentFailed) return false;
+    final p = (paymentStatus ?? '').toUpperCase();
+    final s = status.toUpperCase();
+    return (s == 'CREATED' || s == 'PENDING') && p != 'PAID' && p != 'SUCCEEDED';
   }
 
   bool get isCompleted => status.toUpperCase() == 'COMPLETED';
@@ -175,10 +190,16 @@ class OrderModel {
 
   // Customer-friendly status label adhering to Section 45
   String get customerStatusLabel {
+    if (isPaymentFailed) {
+      return 'Payment Failed';
+    }
+    if (isPaymentPending) {
+      return 'Payment Pending';
+    }
     switch (status.toUpperCase()) {
       case 'CREATED':
       case 'PENDING':
-        return 'Booking Created';
+        return 'Payment Pending';
       case 'SEARCHING':
         return 'Assigning Chef...';
       case 'ASSIGNED':
@@ -220,6 +241,9 @@ class OrderModel {
   }
 
   int get statusStepIndex {
+    if (isPaymentFailed || isPaymentPending) {
+      return 0;
+    }
     switch (status.toUpperCase()) {
       case 'CREATED':
       case 'SEARCHING':
@@ -440,6 +464,7 @@ class OrderModel {
       couponDiscount: coupon,
       walletDeduction: wallet,
       paymentMode: json['paymentMode']?.toString() ?? json['paymentMethod']?.toString() ?? json['payment']?['method']?.toString(),
+      paymentStatus: json['paymentStatus']?.toString() ?? json['payment']?['status']?.toString(),
       cookingNotes: json['cookingNotes']?.toString() ?? json['notes']?.toString() ?? json['instructions']?.toString(),
       dietaryNotes: json['dietaryNotes']?.toString(),
       allergyAlerts: (json['allergies'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],

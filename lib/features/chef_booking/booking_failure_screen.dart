@@ -94,7 +94,7 @@ class BookingFailureScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'We were unable to verify payment for your chef booking.',
+                  'Payment was not completed. No booking was created.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13.5,
@@ -169,7 +169,10 @@ class BookingFailureScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _buildRow('Booking Reference', bookingRef, isDark),
+                      if (orderId != null && orderId.isNotEmpty)
+                        _buildRow('Booking Reference', bookingRef, isDark)
+                      else
+                        _buildRow('Booking Status', 'Not Created (Unpaid)', isDark),
                       const SizedBox(height: 8),
                       _buildRow('Attempted Method', selectedMethod, isDark),
                       const SizedBox(height: 8),

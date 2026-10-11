@@ -357,9 +357,17 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           if (activeItems.isNotEmpty && activeItems.first is Map) {
-            _activeOrder = OrderModel.fromJson(
+            final parsed = OrderModel.fromJson(
               Map<String, dynamic>.from(activeItems.first as Map),
             );
+            if (parsed.status.toUpperCase() != 'CREATED' &&
+                !parsed.isPaymentPending &&
+                !parsed.isPaymentFailed &&
+                !parsed.isCancelled) {
+              _activeOrder = parsed;
+            } else {
+              _activeOrder = null;
+            }
           } else {
             _activeOrder = null;
           }
@@ -1694,6 +1702,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildActiveServiceCard() {
     // A. Active Chef Booking
     if (_activeOrder != null) {
+      if (_activeOrder!.status.toUpperCase() == 'CREATED' ||
+          _activeOrder!.isPaymentPending ||
+          _activeOrder!.isPaymentFailed) {
+        return const SizedBox.shrink();
+      }
       if (_activeOrder!.isCancelled) {
         return _buildCancelledOrFailedOrderCard(_activeOrder!);
       }
@@ -1852,10 +1865,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? 'Track Live on GPS'
                       : (isArrived
                             ? 'View OTP & Details'
-                            : 'View Booking Details'),
+                            : (isPendingPayment
+                                  ? 'Complete Payment'
+                                  : 'View Booking Details')),
                   icon: isEnRoute
                       ? Icons.navigation_rounded
-                      : Icons.receipt_long_rounded,
+                      : (isPendingPayment
+                            ? Icons.payment_rounded
+                            : Icons.receipt_long_rounded),
                   onPressed: () {
                     if (isEnRoute) {
                       Navigator.pushNamed(

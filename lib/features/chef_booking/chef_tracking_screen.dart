@@ -1127,9 +1127,15 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
     } else if (_activeIndex == 1) {
       title = 'Chef assigned';
       subtitle = 'Live tracking starts when $_chefDisplayName leaves';
+    } else if (_order?.isPaymentPending == true || currentStatus.toUpperCase() == 'CREATED') {
+      title = 'Payment Pending';
+      subtitle = 'Complete payment to begin chef dispatch';
+    } else if (_order?.isPaymentFailed == true || currentStatus.toUpperCase() == 'FAILED' || currentStatus.toUpperCase() == 'PAYMENT_FAILED') {
+      title = 'Payment Failed';
+      subtitle = 'Transaction was declined. Please retry payment';
     } else {
-      title = 'Booking confirmed';
-      subtitle = "We're assigning a verified chef";
+      title = 'Assigning Executive Chef...';
+      subtitle = "We're searching verified chefs near your hub";
     }
 
     return Column(

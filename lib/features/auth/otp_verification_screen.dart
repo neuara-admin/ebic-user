@@ -163,8 +163,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           res.error?.code == 'RESOURCE_NOT_FOUND' ||
           res.error?.code == 'HTTP_404' ||
           res.error?.code == 'USER_NOT_FOUND' ||
-          (res.error?.message?.toLowerCase().contains('no account') ?? false) ||
-          (res.error?.message?.toLowerCase().contains('register first') ?? false);
+          (res.error?.message.toLowerCase().contains('no account') ?? false) ||
+          (res.error?.message.toLowerCase().contains('register first') ?? false);
 
       if (isNotFound) {
         ScaffoldMessenger.of(context).showSnackBar(

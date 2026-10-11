@@ -11,6 +11,8 @@ import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
 import '../../shared/services/invoice_download_service.dart';
+import '../../core/services/razorpay_service.dart';
+import '../../core/storage/token_storage.dart';
 import '../chef_booking/cancel_booking_dialog.dart';
 import 'rate_order_dialog.dart';
 
@@ -96,8 +98,116 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  bool _isPaying = false;
+
+  Future<void> _completePayment() async {
+    final order = _order;
+    if (order == null || _isPaying) return;
+
+    setState(() => _isPaying = true);
+
+    try {
+      final idempotencyKey = 'pay_${order.id}_${DateTime.now().millisecondsSinceEpoch}';
+      final initRes = await _api.post<Map<String, dynamic>>(
+        ApiEndpoints.orderPayInitiate(order.id),
+        body: {'method': 'GATEWAY'},
+        requiresIdempotency: true,
+        explicitIdempotencyKey: idempotencyKey,
+      );
+
+      if (!initRes.success || initRes.data == null) {
+        throw Exception(initRes.message ?? initRes.error?.message ?? 'Failed to initiate payment.');
+      }
+
+      final payData = initRes.data!;
+      final backendRequiresPayment = payData['requiresPayment'] == true;
+
+      if (!backendRequiresPayment) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Order verified & covered under plan! Dispatching chef...'),
+              backgroundColor: Color(0xFF059669),
+            ),
+          );
+        }
+        await _fetchOrderDetail();
+        return;
+      }
+
+      final razorpayKey = payData['keyId']?.toString() ?? payData['key']?.toString();
+      final razorpayOrderId = payData['gatewayOrderId']?.toString();
+      final amountPaise = payData['amountPaise'] as num?;
+
+      if (razorpayKey == null || razorpayOrderId == null || amountPaise == null) {
+        throw Exception('Payment configuration is incomplete. Please try again.');
+      }
+
+      final userPhone = await TokenStorage.getUserPhone();
+      final userEmail = await TokenStorage.getUserEmail();
+
+      final checkoutRes = await RazorpayService().openCheckout(
+        keyId: razorpayKey,
+        orderId: razorpayOrderId,
+        amountPaise: amountPaise,
+        currency: payData['currency']?.toString() ?? 'INR',
+        name: 'EBIC Home Chef',
+        description: 'Instant Home Chef Booking',
+        prefillContact: userPhone,
+        prefillEmail: userEmail,
+      );
+
+      if (!checkoutRes.isSuccess) {
+        throw Exception(checkoutRes.errorMessage ?? 'Payment was cancelled or failed.');
+      }
+
+      final gatewayPaymentId = checkoutRes.paymentId;
+      if (gatewayPaymentId == null || gatewayPaymentId.isEmpty) {
+        throw Exception('Payment was not completed. Please try again.');
+      }
+
+      final verifyRes = await _api.post<Map<String, dynamic>>(
+        ApiEndpoints.orderPayVerify(order.id),
+        body: {
+          'gatewayPaymentId': gatewayPaymentId,
+          'gatewaySignature': checkoutRes.signature ?? '',
+        },
+        requiresIdempotency: true,
+        explicitIdempotencyKey: idempotencyKey,
+      );
+
+      if (!verifyRes.success) {
+        throw Exception(verifyRes.error?.message ?? verifyRes.message ?? 'Could not verify payment.');
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment confirmed! Matching executive chef now.'),
+            backgroundColor: Color(0xFF059669),
+          ),
+        );
+      }
+      await _fetchOrderDetail();
+    } catch (e) {
+      final err = e.toString().replaceAll('Exception:', '').trim();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(err),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+      await _fetchOrderDetail();
+    } finally {
+      if (mounted) setState(() => _isPaying = false);
+    }
+  }
+
   bool get _isOrderActive {
     if (_order == null) return false;
+    if (_order!.isPaymentPending || _order!.isPaymentFailed) return false;
     return !_order!.isCancelled && _order!.status.toUpperCase() != 'COMPLETED';
   }
 
@@ -162,7 +272,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              order.isInstant ? 'Instant Cook Dispatch' : 'Chef Booking Details',
+              order.isPaymentPending
+                  ? 'Payment Pending'
+                  : (order.isPaymentFailed
+                      ? 'Payment Failed'
+                      : (order.isInstant ? 'Instant Cook Dispatch' : 'Chef Booking Details')),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             Text(
@@ -253,22 +367,33 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     DateFormat dateFormat,
   ) {
     final isCancelled = order.isCancelled;
+    final isPaymentPending = order.isPaymentPending;
+    final isPaymentFailed = order.isPaymentFailed;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: isCancelled
+        gradient: isPaymentFailed || isCancelled
             ? const LinearGradient(
                 colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               )
-            : AppColors.primaryGradient,
+            : (isPaymentPending
+                ? const LinearGradient(
+                    colors: [Color(0xFFD97706), Color(0xFFB45309)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : AppColors.primaryGradient),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: (isCancelled ? AppColors.danger : AppColors.primary).withOpacity(0.35),
+            color: (isPaymentFailed || isCancelled
+                    ? AppColors.danger
+                    : (isPaymentPending ? AppColors.warning : AppColors.primary))
+                .withOpacity(0.35),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -292,16 +417,22 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isCancelled
+                        isPaymentFailed || isCancelled
                             ? Icons.error_outline_rounded
-                            : (isActive ? Icons.navigation_rounded : Icons.check_circle_rounded),
+                            : (isPaymentPending
+                                ? Icons.pending_actions_rounded
+                                : (isActive ? Icons.navigation_rounded : Icons.check_circle_rounded)),
                         size: 13,
                         color: Colors.white,
                       ),
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
-                          order.isInstant ? 'INSTANT DISPATCH' : order.occasionLabel.toUpperCase(),
+                          isPaymentPending
+                              ? 'AWAITING PAYMENT'
+                              : (isPaymentFailed
+                                  ? 'PAYMENT DECLINED'
+                                  : (order.isInstant ? 'INSTANT DISPATCH' : order.occasionLabel.toUpperCase())),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -336,17 +467,25 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       width: 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: isCancelled ? AppColors.danger : AppColors.primary,
+                        color: isPaymentFailed || isCancelled
+                            ? AppColors.danger
+                            : (isPaymentPending ? AppColors.warning : AppColors.primary),
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      StatusBadge.formatStatus(order.status),
+                      isPaymentFailed
+                          ? 'FAILED'
+                          : (isPaymentPending
+                              ? 'PENDING'
+                              : StatusBadge.formatStatus(order.status)),
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
-                        color: isCancelled ? AppColors.danger : AppColors.primaryDark,
+                        color: isPaymentFailed || isCancelled
+                            ? AppColors.danger
+                            : (isPaymentPending ? AppColors.warning : AppColors.primaryDark),
                         letterSpacing: 0.2,
                       ),
                     ),
@@ -357,7 +496,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            order.customerStatusLabel,
+            isPaymentFailed
+                ? 'Payment Failed'
+                : (isPaymentPending
+                    ? 'Payment Pending'
+                    : order.customerStatusLabel),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 21,
@@ -367,17 +510,21 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            order.status.toUpperCase() == 'FAILED_NO_SUPPLY'
-                ? 'No executive chef was available in your area. Your payment is 100% refunded.'
-                : isCancelled
-                    ? 'This booking was cancelled.'
-                    : (order.isInstant && isActive
-                        ? (order.promisedEtaAt != null
-                            ? 'Instant Dispatch • Arriving by ${DateFormat('hh:mm a').format(order.promisedEtaAt!)}'
-                            : 'Instant Dispatch • Chef arriving in ~15-20 mins')
-                        : (order.promisedEtaAt != null
-                            ? 'Expected Arrival: ${dateFormat.format(order.promisedEtaAt!)}'
-                            : 'Booked on ${dateFormat.format(order.createdAt)}')),
+            isPaymentFailed
+                ? 'Payment could not be confirmed. Tap below to retry and start chef assignment.'
+                : (isPaymentPending
+                    ? 'Your booking is reserved, but chef dispatch cannot begin until payment is confirmed.'
+                    : (order.status.toUpperCase() == 'FAILED_NO_SUPPLY'
+                        ? 'No executive chef was available in your area. Your payment is 100% refunded.'
+                        : (isCancelled
+                            ? 'This booking was cancelled.'
+                            : (order.isInstant && isActive
+                                ? (order.promisedEtaAt != null
+                                    ? 'Instant Dispatch • Arriving by ${DateFormat('hh:mm a').format(order.promisedEtaAt!)}'
+                                    : 'Instant Dispatch • Chef arriving in ~15-20 mins')
+                                : (order.promisedEtaAt != null
+                                    ? 'Expected Arrival: ${dateFormat.format(order.promisedEtaAt!)}'
+                                    : 'Booked on ${dateFormat.format(order.createdAt)}'))))),
             style: TextStyle(
               color: Colors.white.withOpacity(0.85),
               fontSize: 12.5,
@@ -398,22 +545,68 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 children: [
                   Icon(Icons.timeline_rounded, size: 13, color: Colors.white),
                   SizedBox(width: 5),
-                  Flexible(child: Text(
-                    'View Complete Status & Milestones',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.2,
+                  Flexible(
+                    child: Text(
+                      'View Complete Status & Milestones',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.2,
+                      ),
                     ),
-                  )),
+                  ),
                   SizedBox(width: 4),
                   Icon(Icons.arrow_forward_ios_rounded, size: 9, color: Colors.white),
                 ],
               ),
             ),
           ),
-          if (isActive) ...[
+          if (isPaymentPending || isPaymentFailed) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: isPaymentFailed ? const Color(0xFFDC2626) : const Color(0xFFB45309),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 2,
+                    ),
+                    icon: _isPaying
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: isPaymentFailed ? const Color(0xFFDC2626) : const Color(0xFFB45309),
+                            ),
+                          )
+                        : Icon(
+                            isPaymentFailed ? Icons.refresh_rounded : Icons.payment_rounded,
+                            size: 18,
+                            color: isPaymentFailed ? const Color(0xFFDC2626) : const Color(0xFFB45309),
+                          ),
+                    label: Text(
+                      _isPaying
+                          ? 'Processing...'
+                          : (isPaymentFailed
+                              ? 'Retry Payment • ₹${order.totalAmount.toStringAsFixed(0)}'
+                              : 'Complete Payment • ₹${order.totalAmount.toStringAsFixed(0)}'),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    onPressed: _isPaying ? null : _completePayment,
+                  ),
+                ),
+              ],
+            ),
+          ] else if (isActive) ...[
             const SizedBox(height: 14),
             Row(
               children: [
@@ -895,6 +1088,94 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   Widget _buildChefProfileCard(BuildContext context, OrderModel order, bool isDark) {
+    if (order.isPaymentPending || order.isPaymentFailed) {
+      return EbicCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Expanded(
+                  child: Text(
+                    'EXECUTIVE CHEF ASSIGNMENT',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.slate500,
+                      letterSpacing: 0.6,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFFDE68A), width: 0.6),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.hourglass_empty_rounded, size: 11, color: Color(0xFFB45309)),
+                      SizedBox(width: 3),
+                      Text(
+                        'On Hold',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFB45309),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.person_search_rounded, color: Color(0xFFB45309), size: 24),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Awaiting Payment Confirmation',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : AppColors.slate900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Verified chef matching starts immediately once payment is confirmed.',
+                        style: TextStyle(fontSize: 11.5, color: AppColors.slate500),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
     return EbicCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1847,72 +2128,130 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Total Amount Paid',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  order.isPaymentPending
+                      ? 'Total Amount Payable'
+                      : (order.isPaymentFailed ? 'Amount Due (Unpaid)' : 'Total Amount Paid'),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 '₹${order.totalAmount.toStringAsFixed(0)}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 20,
-                  color: AppColors.primaryDark,
+                  color: order.isPaymentFailed
+                      ? const Color(0xFFDC2626)
+                      : (order.isPaymentPending ? const Color(0xFFB45309) : AppColors.primaryDark),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF10B981)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    order.paymentMode != null
-                        ? 'Pre-paid Online via ${order.paymentMode}'
-                        : 'Pre-paid Online via UPI / Razorpay (Confirmed)',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white70 : AppColors.slate700,
+          if (order.isPaymentPending) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate800 : const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.pending_actions_rounded, size: 16, color: Color(0xFFD97706)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Payment Pending (₹${order.totalAmount.toStringAsFixed(0)} awaiting checkout completion)',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                InvoiceDownloadService.downloadAndShare(
-                  context,
-                  endpoint: ApiEndpoints.orderInvoicePdf(order.id),
-                  fileName: 'EBIC-Invoice-${order.bookingReference ?? order.id.substring(0, 8)}.pdf',
-                );
-              },
-              icon: const Icon(Icons.receipt_long_rounded, size: 16),
-              label: const Text('Download / Share Invoice', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                foregroundColor: AppColors.primaryDark,
-                side: BorderSide(color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
+                ],
               ),
             ),
-          ),
+          ] else if (order.isPaymentFailed) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate800 : const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFFCA5A5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, size: 16, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Payment Unsuccessful (Transaction declined or cancelled)',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate800 : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF10B981)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      order.paymentMode != null
+                          ? 'Pre-paid Online via ${order.paymentMode}'
+                          : 'Pre-paid Online via UPI / Razorpay (Confirmed)',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : AppColors.slate700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (!order.isPaymentPending && !order.isPaymentFailed) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  InvoiceDownloadService.downloadAndShare(
+                    context,
+                    endpoint: ApiEndpoints.orderInvoicePdf(order.id),
+                    fileName: 'EBIC-Invoice-${order.bookingReference ?? order.id.substring(0, 8)}.pdf',
+                  );
+                },
+                icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                label: const Text('Download / Share Invoice', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  foregroundColor: AppColors.primaryDark,
+                  side: BorderSide(color: isDark ? AppColors.slate700 : const Color(0xFFE2E8F0)),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1962,6 +2301,53 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   Widget? _buildBottomBar(BuildContext context, OrderModel order, bool isActive, bool isDark) {
+    if (order.isPaymentPending || order.isPaymentFailed) {
+      final isFailed = order.isPaymentFailed;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.slate900 : Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, -3),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isFailed ? const Color(0xFFDC2626) : AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 2,
+              ),
+              icon: _isPaying
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Icon(isFailed ? Icons.refresh_rounded : Icons.payment_rounded, size: 20),
+              label: Text(
+                _isPaying
+                    ? 'Connecting Gateway...'
+                    : (isFailed
+                        ? 'Retry Payment • ₹${order.totalAmount.toStringAsFixed(0)}'
+                        : 'Complete Payment • ₹${order.totalAmount.toStringAsFixed(0)}'),
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              onPressed: _isPaying ? null : _completePayment,
+            ),
+          ),
+        ),
+      );
+    }
+
     if (!isActive) return null;
 
     return Container(

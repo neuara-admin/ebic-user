@@ -515,6 +515,20 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
         _errorMessage = errStr;
       });
 
+      // If an order draft was initialized, delete/cancel it immediately so no booking is created
+      if (orderId != null) {
+        try {
+          await _api.delete(ApiEndpoints.orderDetail(orderId));
+        } catch (_) {
+          try {
+            await _api.post(
+              '${ApiEndpoints.orderDetail(orderId)}/cancellation',
+              body: {'reason_code': 'PAYMENT_FAILED', 'comment': 'Payment cancelled or failed during checkout'},
+            );
+          } catch (_) {}
+        }
+      }
+
       if (!mounted) return;
 
       Navigator.pushNamedAndRemoveUntil(
@@ -522,7 +536,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
         AppRoutes.bookChefFailure,
         (route) => route.isFirst,
         arguments: {
-          'orderId': orderId,
+          'orderId': null, // Booking was not created
           'errorMessage': errStr,
           'checkoutData': {
             ...widget.checkoutData,
