@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/api_endpoints.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/remote_config_service.dart';
 import '../../core/routing/app_routes.dart';
@@ -24,8 +26,37 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
   String? _passNoticeMessage;
   bool _isPassExpired = false;
 
+  // Diet Plan Status State
+  bool _hasDietPlan = false;
+  bool _isConsultationPending = false;
+  String? _dietitianName;
+  bool _didReadRouteArgs = false;
+  bool? _hasDietPlanFromArgs;
+  String? _dietitianNameFromArgs;
+  bool? _isConsultationPendingFromArgs;
+
   /// Preview video configured in admin settings (Customer App); null hides it.
   String? get _videoTeaserUrl => RemoteConfigService().chefBookingVideoUrl;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didReadRouteArgs) {
+      _didReadRouteArgs = true;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map) {
+        if (args.containsKey('hasDietPlan')) {
+          _hasDietPlanFromArgs = args['hasDietPlan'] == true;
+        }
+        if (args['dietitianName'] != null) {
+          _dietitianNameFromArgs = args['dietitianName']?.toString();
+        }
+        if (args.containsKey('isConsultationPending')) {
+          _isConsultationPendingFromArgs = args['isConsultationPending'] == true;
+        }
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -38,6 +69,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
   ///   without needing the "Cook My Diet Plan" selector.
   /// - Customers holding a Health Pass that is not active yet (or expired)
   ///   are shown an informative notice explaining their pass status.
+  /// - Customers with an active Health Pass are checked for an assigned diet plan.
   Future<void> _checkHealthPassAccess() async {
     setState(() => _isCheckingPass = true);
     try {
@@ -95,10 +127,46 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
         return;
       }
 
+      // Customer has an active Health Pass: verify if diet plan is assigned
+      bool hasPlan = false;
+      bool consultationPending = pass.startDate == null ||
+          pass.isConsultationPending ||
+          pass.latestCompletedConsultation == null;
+      String? doctorName = pass.assignedDietitian?.name ??
+          pass.activeConsultation?.dietitianName ??
+          pass.latestCompletedConsultation?.dietitianName;
+
+      try {
+        final dietRes = await ApiClient().get<Map<String, dynamic>>(
+          ApiEndpoints.todayDietPlan,
+          requiresAuth: true,
+        );
+        if (dietRes.success && dietRes.data != null) {
+          final data = dietRes.data!;
+          final meals = (data['meals'] as List<dynamic>?) ??
+              (data['todayMeals'] as List<dynamic>?) ?? [];
+          hasPlan = (data['hasPlan'] == true || meals.isNotEmpty) && meals.isNotEmpty;
+        }
+      } catch (_) {}
+
+      // If route arguments supplied explicit status from HomeScreen:
+      if (_hasDietPlanFromArgs != null) {
+        hasPlan = _hasDietPlanFromArgs!;
+      }
+      if (_dietitianNameFromArgs != null && _dietitianNameFromArgs!.isNotEmpty) {
+        doctorName = _dietitianNameFromArgs;
+      }
+      if (_isConsultationPendingFromArgs != null) {
+        consultationPending = _isConsultationPendingFromArgs!;
+      }
+
       setState(() {
         _activePass = pass;
         _passNoticeMessage = null;
         _isPassExpired = false;
+        _hasDietPlan = hasPlan;
+        _isConsultationPending = consultationPending && !hasPlan;
+        _dietitianName = doctorName;
         _isCheckingPass = false;
       });
     } catch (_) {
@@ -426,26 +494,29 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
               const SizedBox(height: 18),
 
               // 3. Option 1: Cook My Diet Plan (Clinically Tailored)
-              _buildBookingOptionCard(
-                isDark: isDark,
-                title: 'Cook My Diet Plan',
-                badgeText: 'RECOMMENDED',
-                badgeColor: AppColors.primary,
-                badgeBg: isDark ? const Color(0xFF064E3B) : const Color(0xFFDCFCE7),
-                icon: Icons.eco_rounded,
-                accentColor: AppColors.primary,
-                subtitle: 'Personalized to your doctor-prescribed meal chart and calorie goals.',
-                features: const ['Doctor-Approved', 'Family Portioning', 'Clinical Profile'],
-                buttonText: _activePass == null ? 'Unlock with Health Pass' : 'Cook Diet Plan Meals',
-                isPrimary: true,
-                onTap: () {
-                  if (_activePass == null) {
-                    _showPassRequiredModal();
-                  } else {
-                    Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
-                  }
-                },
-              ),
+              if (_activePass != null && !_hasDietPlan)
+                _buildDietPlanNotAssignedCard(isDark)
+              else
+                _buildBookingOptionCard(
+                  isDark: isDark,
+                  title: 'Cook My Diet Plan',
+                  badgeText: _activePass == null ? 'UNLOCK WITH PASS' : 'RECOMMENDED',
+                  badgeColor: AppColors.primary,
+                  badgeBg: isDark ? const Color(0xFF064E3B) : const Color(0xFFDCFCE7),
+                  icon: Icons.eco_rounded,
+                  accentColor: AppColors.primary,
+                  subtitle: 'Personalized to your doctor-prescribed meal chart and calorie goals.',
+                  features: const ['Doctor-Approved', 'Family Portioning', 'Clinical Profile'],
+                  buttonText: _activePass == null ? 'Unlock with Health Pass' : 'Cook Diet Plan Meals',
+                  isPrimary: true,
+                  onTap: () {
+                    if (_activePass == null) {
+                      _showPassRequiredModal();
+                    } else {
+                      Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
+                    }
+                  },
+                ),
 
               const SizedBox(height: 14),
 
@@ -721,6 +792,393 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ───────────────────────── 3. Cook My Diet Plan (Not Assigned State) ─────────────────────────
+
+  Widget _buildDietPlanNotAssignedCard(bool isDark) {
+    final isPendingConsultation = _isConsultationPending;
+    final doctor = _dietitianName ?? 'Clinical Dietitian';
+    final cleanDoctor = doctor.startsWith('Dr.') ? doctor : 'Dr. $doctor';
+
+    final badgeColor = isPendingConsultation ? const Color(0xFFD97706) : const Color(0xFF7C3AED);
+    final badgeBg = isDark
+        ? (isPendingConsultation ? const Color(0xFF451A03) : const Color(0xFF2E1065))
+        : (isPendingConsultation ? const Color(0xFFFEF3C7) : const Color(0xFFF3E8FF));
+    final badgeText = isPendingConsultation ? 'CONSULTATION PENDING' : 'PLAN IN PREPARATION';
+    final accentColor = isPendingConsultation ? const Color(0xFFD97706) : const Color(0xFF7C3AED);
+
+    return InkWell(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        _showDietPlanNotAssignedSheet();
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.slate900 : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: accentColor.withOpacity(0.4),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withOpacity(isDark ? 0.15 : 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Row: Icon + Badge + Title
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    isPendingConsultation ? Icons.video_call_rounded : Icons.restaurant_menu_rounded,
+                    color: accentColor,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: badgeBg,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: badgeColor,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Cook My Diet Plan',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : AppColors.slate900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: isDark ? AppColors.slate600 : AppColors.slate400,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Informative Notice Banner
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? AppColors.slate800 : AppColors.slate200,
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    isPendingConsultation ? Icons.info_outline_rounded : Icons.hourglass_top_rounded,
+                    size: 16,
+                    color: accentColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isPendingConsultation
+                              ? 'Kickoff consultation needed'
+                              : '$cleanDoctor is curating your meals',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : AppColors.slate900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isPendingConsultation
+                              ? 'Complete your 1-on-1 consultation to unlock personalized recipes and macro-targeted meals.'
+                              : 'Your clinical recipes are in preparation and will be ready within 24 hours.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? AppColors.slate400 : AppColors.slate600,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Hint Text
+            Text(
+              '💡 You can still book any dishes from Chef\'s Recipe Menu below with your Health Pass visit quota!',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? AppColors.slate400 : AppColors.slate600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Action Buttons Row
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      if (isPendingConsultation) {
+                        Navigator.pushNamed(context, AppRoutes.consultationBook);
+                      } else {
+                        Navigator.pushNamed(context, AppRoutes.dietPlan);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentColor,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: Icon(
+                      isPendingConsultation ? Icons.video_call_rounded : Icons.restaurant_menu_rounded,
+                      size: 15,
+                    ),
+                    label: Text(
+                      isPendingConsultation ? 'Schedule Kickoff Call' : 'Check Plan Status',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? Colors.white : AppColors.slate800,
+                      side: BorderSide(
+                        color: isDark ? AppColors.slate700 : AppColors.slate300,
+                        width: 1,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.menu_book_rounded, size: 15),
+                    label: const Text(
+                      "Browse Menu",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDietPlanNotAssignedSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPendingConsultation = _isConsultationPending;
+    final doctor = _dietitianName ?? 'Clinical Dietitian';
+    final cleanDoctor = doctor.startsWith('Dr.') ? doctor : 'Dr. $doctor';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.slate700 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (isPendingConsultation ? const Color(0xFFD97706) : const Color(0xFF7C3AED)).withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isPendingConsultation ? Icons.video_call_rounded : Icons.restaurant_menu_rounded,
+                      color: isPendingConsultation ? const Color(0xFFD97706) : const Color(0xFF7C3AED),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isPendingConsultation ? 'Kickoff Consultation Needed' : 'Diet Plan In Curation',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: isDark ? Colors.white : AppColors.slate900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isPendingConsultation
+                              ? 'Required before meal preparation'
+                              : 'Curated by $cleanDoctor',
+                          style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                isPendingConsultation
+                    ? 'Because your EBIC Health Pass includes medical-grade clinical dining, our certified dietitian must first review your biomarkers and dietary preferences before prescribing custom daily dishes.'
+                    : '$cleanDoctor has completed your consultation and is now calibrating your daily recipes and calorie goals. Your customized diet plan will be ready within 24 hours.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? AppColors.slate300 : AppColors.slate600,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF06281E) : const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF047857).withOpacity(0.4) : const Color(0xFFBBF7D0),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Good news: You can still use your covered Chef Visits right now on any dish from the Chef\'s Menu catalogue!',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF166534),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text("Browse Chef's Menu"),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        if (isPendingConsultation) {
+                          Navigator.pushNamed(context, AppRoutes.consultationBook);
+                        } else {
+                          Navigator.pushNamed(context, AppRoutes.dietPlan);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isPendingConsultation ? const Color(0xFFD97706) : const Color(0xFF7C3AED),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(
+                        isPendingConsultation ? 'Book Consultation' : 'View Diet Plan',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

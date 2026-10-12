@@ -625,6 +625,133 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
     return result;
   }
 
+  int get _totalAvailableDishes {
+    final selectedMembers = _members
+        .where((m) => _selectedMemberIds.contains(m.id))
+        .toList();
+    int count = 0;
+    for (final member in selectedMembers) {
+      final plan = _memberDietPlans[member.id];
+      final todayMeals = (plan?['todayMeals'] as List<dynamic>?) ?? [];
+      for (final meal in todayMeals) {
+        final occ = meal['occasion']?.toString().toUpperCase() ?? '';
+        if (_isMealMatchingOccasion(occ)) {
+          final dishes = (meal['dishes'] as List<dynamic>?) ?? [];
+          count += dishes.length;
+        }
+      }
+    }
+    return count;
+  }
+
+  void _showNoAssignedPlanDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.slate700 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD97706).withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.restaurant_menu_rounded,
+                      color: Color(0xFFD97706),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Diet Plan Not Assigned Yet',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Clinical recipes in preparation',
+                          style: TextStyle(fontSize: 12, color: AppColors.slate500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Your clinical dietitian has not assigned a meal plan for this occasion yet. You can order from our Chef\'s Recipe Menu catalogue right away with your Health Pass visit quota!',
+                style: TextStyle(fontSize: 13, color: AppColors.slate600, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.pushNamed(context, AppRoutes.dietPlan);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('View Diet Plan'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.pushReplacementNamed(context, AppRoutes.bookChefCatalogue);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text("Browse Chef's Menu", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _proceedToQuote() async {
     if (_selectedMemberIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -646,6 +773,10 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
 
     final dishesToCook = _collectSelectedDishesForBooking();
     if (dishesToCook.isEmpty) {
+      if (_totalAvailableDishes == 0) {
+        _showNoAssignedPlanDialog();
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select at least one meal dish to prepare.'),

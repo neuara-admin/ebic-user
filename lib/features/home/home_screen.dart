@@ -1937,14 +1937,27 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     final hasActivePass = _healthPass != null && _healthPass!.isActive && !_healthPass!.isExpired;
-    if (_healthPassStage == HealthPassStage.mealsAssigned) {
+    if (_healthPassStage == HealthPassStage.mealsAssigned && _hasTodayPrescribedMeals) {
       Navigator.pushNamed(context, AppRoutes.bookChefAssigned);
     } else if (!hasActivePass) {
       // Without an active Health Pass, directly open Chef Recipe Catalogue for instant booking
       Navigator.pushNamed(context, AppRoutes.bookChefCatalogue);
     } else {
-      // With an active Health Pass, open selector (Cook Diet Plan vs A La Carte)
-      Navigator.pushNamed(context, AppRoutes.bookChef);
+      // With an active Health Pass but diet plan not yet assigned, open selector with explicit context
+      Navigator.pushNamed(
+        context,
+        AppRoutes.bookChef,
+        arguments: {
+          'hasDietPlan': _hasTodayPrescribedMeals,
+          'stage': _healthPassStage,
+          'isConsultationPending': _healthPassStage == HealthPassStage.kickoffNeeded ||
+              _healthPassStage == HealthPassStage.consultationScheduled ||
+              _healthPassStage == HealthPassStage.consultationMissed,
+          'dietitianName': _upcomingConsultation?.dietitianName ??
+              _completedConsultation?.dietitianName ??
+              _healthPass?.assignedDietitian?.name,
+        },
+      );
     }
   }
 
