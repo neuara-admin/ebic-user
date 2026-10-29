@@ -108,12 +108,12 @@ class ConsultationModel {
     final slot = json['slot'] as Map<String, dynamic>?;
 
     final startsAt = json['scheduledAt'] != null
-        ? DateTime.tryParse(json['scheduledAt']) ?? DateTime.now()
+        ? (DateTime.tryParse(json['scheduledAt'])?.toLocal() ?? DateTime.now())
         : DateTime.now();
 
     final endsAt = slot?['endsAt'] != null
-        ? DateTime.tryParse(slot!['endsAt']) ?? startsAt.add(const Duration(minutes: 45))
-        : (json['endsAt'] != null ? DateTime.tryParse(json['endsAt']) : startsAt.add(const Duration(minutes: 45)));
+        ? (DateTime.tryParse(slot!['endsAt'])?.toLocal() ?? startsAt.add(const Duration(minutes: 45)))
+        : (json['endsAt'] != null ? DateTime.tryParse(json['endsAt'])?.toLocal() : startsAt.add(const Duration(minutes: 45)));
 
     final rawAdditionalNotes = json['additionalNotes'] as String?;
     final rawReason = json['reason'] as String?;
@@ -173,7 +173,7 @@ class ConsultationModel {
       sequenceNumber: (json['sequenceNumber'] as num?)?.toInt() ?? 1,
       notesStatus: json['notesStatus']?.toString() ?? 'NOT_STARTED',
       cancelReasonCode: json['cancelReasonCode']?.toString(),
-      callEndedAt: json['callEndedAt'] != null ? DateTime.tryParse(json['callEndedAt'].toString()) : null,
+      callEndedAt: json['callEndedAt'] != null ? DateTime.tryParse(json['callEndedAt'].toString())?.toLocal() : null,
       roomUrl: json['roomUrl'] ?? json['meetingLink'],
       meetingLink: json['meetingLink'] ?? json['roomUrl'],
       reason: rawReason,

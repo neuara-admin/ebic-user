@@ -1875,7 +1875,7 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedDate = DateTime.now().add(const Duration(days: 1));
+    _selectedDate = DateTime.now();
     _fetchSlots();
   }
 
@@ -1991,7 +1991,7 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
   Widget build(BuildContext context) {
     final availableDates = <DateTime>[];
     final now = DateTime.now();
-    for (int i = 1; i <= 14; i++) {
+    for (int i = 0; i < 14; i++) {
       availableDates.add(DateTime(now.year, now.month, now.day + i));
     }
 
@@ -2105,7 +2105,11 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                         final openSlotsCount = dateSlots.where((s) => !s.isBooked).length;
 
                         String dayLabel = DateFormat('EEE').format(d).toUpperCase();
-                        if (idx == 0) dayLabel = 'TOMORROW';
+                        if (idx == 0) {
+                          dayLabel = 'TODAY';
+                        } else if (idx == 1) {
+                          dayLabel = 'TOMORROW';
+                        }
 
                         return InkWell(
                           onTap: () {

@@ -73,10 +73,10 @@ class DietitianSlotModel {
       id: json['id'] ?? '',
       dietitianId: json['dietitianId'] ?? '',
       startsAt: json['startsAt'] != null
-          ? DateTime.tryParse(json['startsAt']) ?? DateTime.now()
+          ? (DateTime.tryParse(json['startsAt'])?.toLocal() ?? DateTime.now())
           : DateTime.now(),
       endsAt: json['endsAt'] != null
-          ? DateTime.tryParse(json['endsAt']) ?? DateTime.now().add(const Duration(minutes: 45))
+          ? (DateTime.tryParse(json['endsAt'])?.toLocal() ?? DateTime.now().add(const Duration(minutes: 45)))
           : DateTime.now().add(const Duration(minutes: 45)),
       isBooked: json['isBooked'] ?? false,
     );

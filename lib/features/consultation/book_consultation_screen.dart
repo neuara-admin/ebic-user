@@ -57,7 +57,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
   bool _isLoadingMembers = true;
 
   // Date & Slot Selection
-  DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  DateTime _selectedDate = DateTime.now();
   List<DietitianSlotModel> _allSlots = [];
   DietitianSlotModel? _selectedSlot;
   bool _isLoadingSlots = false;
@@ -1255,7 +1255,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
         itemCount: 14,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (ctx, idx) {
-          final date = now.add(Duration(days: idx + 1));
+          final date = now.add(Duration(days: idx));
           final isSelected = _selectedDate.year == date.year &&
               _selectedDate.month == date.month &&
               _selectedDate.day == date.day;
@@ -1263,7 +1263,11 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
           final availableSlotsCount = _getSlotsForDate(date).length;
 
           String dayLabel = DateFormat('EEE').format(date).toUpperCase();
-          if (idx == 0) dayLabel = 'TOMORROW';
+          if (idx == 0) {
+            dayLabel = 'TODAY';
+          } else if (idx == 1) {
+            dayLabel = 'TOMORROW';
+          }
 
           return InkWell(
             onTap: () {
@@ -1453,7 +1457,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (morning.isNotEmpty) _buildSlotGroup('🌅 Morning Slots (09:00 AM – 12:00 PM)', morning, isDark),
+        if (morning.isNotEmpty) _buildSlotGroup('🌅 Morning Slots (08:00 AM – 12:00 PM)', morning, isDark),
         if (afternoon.isNotEmpty) _buildSlotGroup('☀️ Afternoon Slots (12:00 PM – 04:00 PM)', afternoon, isDark),
         if (evening.isNotEmpty) _buildSlotGroup('🌆 Evening Slots (04:00 PM – 08:00 PM)', evening, isDark),
       ],
