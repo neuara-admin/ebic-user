@@ -247,10 +247,23 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
               .map((e) => Map<String, dynamic>.from(e as Map))
               .toList();
         }
-        if (list.isNotEmpty && mounted) {
+        if (mounted) {
+          final now = DateTime.now();
           setState(() {
             _availableOffers.clear();
             for (final p in list) {
+              if (p['isExpired'] == true) continue;
+              final status = p['status']?.toString().toUpperCase();
+              if (status != null && status != 'ACTIVE') continue;
+
+              final validUntilStr = p['validUntil']?.toString();
+              if (validUntilStr != null && validUntilStr.isNotEmpty) {
+                final expiry = DateTime.tryParse(validUntilStr);
+                if (expiry != null && expiry.isBefore(now)) {
+                  continue; // Skip expired coupon
+                }
+              }
+
               final val = (p['discountValue'] as num?)?.toDouble() ?? 0.0;
               _availableOffers.add({
                 'code': p['code']?.toString() ?? 'OFFER',
@@ -265,6 +278,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                     '',
                 'discount': val,
                 'badge': p['formattedDiscount']?.toString() ?? 'OFFER',
+                'validUntil': validUntilStr,
               });
             }
           });

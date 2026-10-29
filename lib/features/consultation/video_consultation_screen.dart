@@ -65,6 +65,16 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
   }
 
   Future<void> _initJoinSession() async {
+    final scheduledAt = widget.consultation.scheduledAt;
+    if (DateTime.now().isBefore(scheduledAt)) {
+      setState(() {
+        _isAuthorizing = false;
+        _authErrorCode = 'JOIN_WINDOW_CLOSED';
+        _authError =
+            'This consultation is scheduled for ${DateFormat('hh:mm a, d MMM').format(scheduledAt)}. You cannot join the video call before the scheduled appointment time.';
+      });
+      return;
+    }
     try {
       final res = await _api.post<Map<String, dynamic>>(
         ApiEndpoints.consultationJoin(widget.consultation.id),

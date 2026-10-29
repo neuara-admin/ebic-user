@@ -1494,34 +1494,61 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                 ),
               ],
             ] else if (isInProgress) ...[
-              Row(
-                children: [
-                  Expanded(
-                    flex: 5,
-                    child: EbicButton(
-                      label: 'Join Video Call',
-                      icon: Icons.videocam_rounded,
-                      onPressed: () {
-                        Navigator.pushNamed(
-                          context,
-                          AppRoutes.consultationVideo,
-                          arguments: {'consultation': c},
-                        ).then((_) => _fetchConsultation(silent: true));
-                      },
-                    ),
+              if (DateTime.now().isBefore(c.scheduledAt)) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.warning.withOpacity(0.3)),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: EbicButton(
-                      label: 'Refresh',
-                      icon: Icons.refresh_rounded,
-                      variant: EbicButtonVariant.outline,
-                      onPressed: () => _fetchConsultation(),
-                    ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_clock_rounded, size: 18, color: AppColors.warning),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'This consultation is scheduled for ${DateFormat('hh:mm a').format(c.scheduledAt)}. You cannot join before the scheduled appointment time.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : AppColors.slate800,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: EbicButton(
+                        label: 'Join Video Call',
+                        icon: Icons.videocam_rounded,
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            AppRoutes.consultationVideo,
+                            arguments: {'consultation': c},
+                          ).then((_) => _fetchConsultation(silent: true));
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: EbicButton(
+                        label: 'Refresh',
+                        icon: Icons.refresh_rounded,
+                        variant: EbicButtonVariant.outline,
+                        onPressed: () => _fetchConsultation(),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ] else if (c.status == 'NO_SHOW') ...[
               Row(
                 children: [

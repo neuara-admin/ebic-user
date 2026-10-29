@@ -1342,8 +1342,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 12),
                   ],
 
-                  // 2. Urgent Video Call Alert (if consultation is active right now)
-                  if (_upcomingConsultation?.status == 'IN_PROGRESS') ...[
+                  // 2. Urgent Video Call Alert (if consultation is active right now and reached scheduled time)
+                  if (_upcomingConsultation?.status == 'IN_PROGRESS' &&
+                      !DateTime.now().isBefore(_upcomingConsultation!.scheduledAt)) ...[
                     _buildUrgentVideoCallBanner(_upcomingConsultation!),
                     const SizedBox(height: 12),
                   ],

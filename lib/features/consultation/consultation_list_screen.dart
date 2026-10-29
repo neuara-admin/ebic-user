@@ -1663,31 +1663,46 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
                     ),
                   ],
                 ] else if (isInProgress) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: EbicButton(
-                          label: 'Join Video Call',
-                          icon: Icons.videocam_rounded,
-                          onPressed: () {
-                            Navigator.pushNamed(
-                              context,
-                              AppRoutes.consultationVideo,
-                              arguments: {'consultation': c},
-                            );
-                          },
+                  if (DateTime.now().isBefore(c.scheduledAt)) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: EbicButton(
+                            label: 'Opens at ${DateFormat('hh:mm a').format(c.scheduledAt)}',
+                            icon: Icons.lock_clock_rounded,
+                            variant: EbicButtonVariant.outline,
+                            onPressed: () => _showConsultationDetailsModal(c),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: EbicButton(
-                          label: 'View Details',
-                          variant: EbicButtonVariant.outline,
-                          onPressed: () => _showConsultationDetailsModal(c),
+                      ],
+                    ),
+                  ] else ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: EbicButton(
+                            label: 'Join Video Call',
+                            icon: Icons.videocam_rounded,
+                            onPressed: () {
+                              Navigator.pushNamed(
+                                context,
+                                AppRoutes.consultationVideo,
+                                arguments: {'consultation': c},
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: EbicButton(
+                            label: 'View Details',
+                            variant: EbicButtonVariant.outline,
+                            onPressed: () => _showConsultationDetailsModal(c),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ] else ...[
                   // Past actions (Completed, Cancelled)
                   Row(

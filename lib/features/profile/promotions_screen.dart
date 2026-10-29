@@ -55,8 +55,24 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
         }
 
         if (parsedList.isNotEmpty) {
+          final now = DateTime.now();
+          final validList = parsedList.where((p) {
+            if (p['isExpired'] == true) return false;
+            final status = p['status']?.toString().toUpperCase();
+            if (status != null && status != 'ACTIVE') return false;
+
+            final validUntilStr = p['validUntil']?.toString();
+            if (validUntilStr != null && validUntilStr.isNotEmpty) {
+              final expiry = DateTime.tryParse(validUntilStr);
+              if (expiry != null && expiry.isBefore(now)) {
+                return false;
+              }
+            }
+            return true;
+          }).toList();
+
           setState(() {
-            _offers = parsedList;
+            _offers = validList;
             _isLoading = false;
           });
           return;

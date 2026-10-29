@@ -57,6 +57,8 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {
@@ -69,6 +71,33 @@ android {
         }
     }
 
+    packaging {
+        resources {
+            excludes += listOf(
+                "META-INF/*.kotlin_module",
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*"
+            )
+        }
+        jniLibs {
+            excludes += listOf(
+                "lib/*/libagora_lip_sync_extension.so",
+                "lib/*/libagora_clear_vision_extension.so",
+                "lib/*/libagora_spatial_audio_extension.so",
+                "lib/*/libagora_ai_noise_suppression_extension.so",
+                "lib/*/libagora_face_capture_extension.so",
+                "lib/*/libagora_segmentation_extension.so",
+                "lib/*/libagora_ai_echo_cancellation_extension.so",
+                "lib/*/libagora_audio_beauty_extension.so",
+                "lib/*/libagora_content_inspect_extension.so",
+                "lib/*/libagora_video_quality_analyzer_extension.so",
+                "lib/*/libagora_video_av1_encoder_extension.so",
+                "lib/*/libagora_face_detection_extension.so",
+                "lib/*/libagora_screen_capture_extension.so"
+            )
+        }
+    }
 }
 
 flutter {

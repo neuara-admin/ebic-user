@@ -80,18 +80,35 @@ class _HealthPassQuoteReviewScreenState extends State<HealthPassQuoteReviewScree
         } else if (raw is Map && raw['items'] is List) {
           list = (raw['items'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
         }
-        if (mounted && list.isNotEmpty) {
+        if (mounted) {
+          final now = DateTime.now();
+          final validList = <Map<String, dynamic>>[];
+          for (final p in list) {
+            if (p['isExpired'] == true) continue;
+            final status = p['status']?.toString().toUpperCase();
+            if (status != null && status != 'ACTIVE') continue;
+
+            final validUntilStr = p['validUntil']?.toString();
+            if (validUntilStr != null && validUntilStr.isNotEmpty) {
+              final expiry = DateTime.tryParse(validUntilStr);
+              if (expiry != null && expiry.isBefore(now)) {
+                continue; // Skip expired coupon
+              }
+            }
+
+            final val = (p['discountValue'] as num?)?.toDouble() ?? 0.0;
+            validList.add({
+              'code': p['code']?.toString() ?? 'OFFER',
+              'title': p['title']?.toString() ?? p['name']?.toString() ?? 'Special Offer',
+              'desc': p['desc']?.toString() ?? p['description']?.toString() ?? p['terms']?.toString() ?? '',
+              'discount': val,
+              'badge': p['formattedDiscount']?.toString() ?? 'OFFER',
+              'validUntil': validUntilStr,
+            });
+          }
+
           setState(() {
-            _availableHealthPassOffers = list.map((p) {
-              final val = (p['discountValue'] as num?)?.toDouble() ?? 0.0;
-              return {
-                'code': p['code']?.toString() ?? 'OFFER',
-                'title': p['title']?.toString() ?? p['name']?.toString() ?? 'Special Offer',
-                'desc': p['desc']?.toString() ?? p['description']?.toString() ?? p['terms']?.toString() ?? '',
-                'discount': val,
-                'badge': p['formattedDiscount']?.toString() ?? 'OFFER',
-              };
-            }).toList();
+            _availableHealthPassOffers = validList;
           });
         }
       }
