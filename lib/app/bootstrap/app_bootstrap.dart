@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/config/app_config.dart';
@@ -68,9 +67,47 @@ class AppBootstrap {
 
     // 3. Initialize logging & crash reporting
     final crashReporting = CrashReportingService();
-    FlutterError.onError = (details) {
-      if (kDebugMode) FlutterError.presentError(details);
-      crashReporting.recordError(details.exception, details.stack, fatal: true);
+    FlutterError.onError = crashReporting.recordFlutterError;
+
+    WidgetsBinding.instance.platformDispatcher.onError = (Object error, StackTrace stack) {
+      crashReporting.recordError(
+        error,
+        stack,
+        fatal: true,
+        reason: 'Uncaught platform asynchronous error',
+      );
+      return true; // Prevents app crash
+    };
+
+    ErrorWidget.builder = (FlutterErrorDetails details) {
+      crashReporting.recordFlutterError(details);
+      return Material(
+        color: const Color(0xFFF8FAFC),
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: Color(0xFFE11D48), size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Temporary Display Error',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'A view rendering error occurred. Your data and session are safe.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
     };
 
     // 4. Initialize analytics

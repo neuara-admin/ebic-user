@@ -11,6 +11,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   iris_method_channel
   pdfx
   permission_handler_windows
+  sentry_flutter
   share_plus
   url_launcher_windows
 )

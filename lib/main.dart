@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'app/bootstrap/app_bootstrap.dart';
+import 'core/analytics/crash_reporting_service.dart';
 import 'core/realtime/realtime_notification_banner.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/app_routes.dart';
@@ -17,9 +19,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 void main() async {
-  await AppBootstrap.initialize();
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  runApp(const EbicCustomerApp());
+  await CrashReportingService.instance.init(
+    appRunner: () async {
+      await AppBootstrap.initialize();
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      runApp(const EbicCustomerApp());
+    },
+  );
 }
 
 class EbicCustomerApp extends StatelessWidget {
@@ -42,6 +48,9 @@ class EbicCustomerApp extends StatelessWidget {
         return MaterialApp(
           navigatorKey: AppKeys.navigatorKey,
           scaffoldMessengerKey: AppKeys.scaffoldMessengerKey,
+          navigatorObservers: [
+            SentryNavigatorObserver(),
+          ],
           title: 'Ebic',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,

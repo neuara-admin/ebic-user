@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../config/app_config.dart';
+import '../analytics/crash_reporting_service.dart';
 import '../storage/token_storage.dart';
 import 'api_endpoints.dart';
 import 'api_response.dart';
@@ -481,6 +482,13 @@ class ApiClient {
     dynamic requestBody,
     dynamic responseBody,
   }) {
+    if (statusCode != null && statusCode >= 500) {
+      CrashReportingService.instance.addBreadcrumb(
+        'Server Error HTTP $statusCode: ${uri?.path}',
+        category: 'http',
+        data: {'statusCode': statusCode},
+      );
+    }
     debugPrint('════════════════════════════════════════════════════════════');
     debugPrint('❌ [API Error] ${method != null ? '[$method] ' : ''}${uri?.path ?? ''}');
     if (uri != null) debugPrint('   URL: $uri');
@@ -637,6 +645,18 @@ class ApiClient {
     final code = _resolveErrorCode(e);
     final msg = _cleanErrorMessage(e);
     _logApiError(method: method, uri: uri, code: code, message: msg, requestBody: requestBody);
+    if (e is SocketException) {
+      CrashReportingService.instance.addBreadcrumb('Network offline', category: 'network');
+    } else if (e is TimeoutException) {
+      CrashReportingService.instance.addBreadcrumb('Request timeout: ${uri.path}', category: 'network');
+    } else {
+      CrashReportingService.instance.recordError(
+        e,
+        StackTrace.current,
+        context: 'ApiClient.$method',
+        reason: msg,
+      );
+    }
     return ApiResponse<T>(
       success: false,
       error: ApiError(code: code, message: msg),

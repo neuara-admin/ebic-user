@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
+import '../analytics/crash_reporting_service.dart';
 import '../api/api_endpoints.dart';
 import '../storage/token_storage.dart';
 import '../../features/catalogue/cart_service.dart';
@@ -69,6 +70,10 @@ class SessionManager extends ChangeNotifier {
           email: res.data!['email'],
           avatarUrl: res.data!['avatarUrl'],
         );
+        final restoredId = res.data!['id']?.toString();
+        if (restoredId != null && restoredId.isNotEmpty) {
+          CrashReportingService.instance.setUserContext(userId: restoredId, role: 'CUSTOMER');
+        }
         CartService().loadFromBackend();
       } else {
         if (res.error?.code == 'ACCOUNT_RESTRICTED') {
@@ -157,6 +162,10 @@ class SessionManager extends ChangeNotifier {
       );
     }
 
+    final authedId = userData?['id']?.toString();
+    if (authedId != null && authedId.isNotEmpty) {
+      CrashReportingService.instance.setUserContext(userId: authedId, role: 'CUSTOMER');
+    }
     _status = AuthSessionStatus.authenticated;
     _sessionMessage = null;
     notifyListeners();
@@ -174,6 +183,7 @@ class SessionManager extends ChangeNotifier {
     _currentUser = null;
     _status = AuthSessionStatus.expired;
     _sessionMessage = 'Your session has expired. Please log in again.';
+    CrashReportingService.instance.clearUserContext();
     notifyListeners();
   }
 
@@ -210,6 +220,7 @@ class SessionManager extends ChangeNotifier {
     _currentUser = null;
     _status = AuthSessionStatus.unauthenticated;
     _sessionMessage = null;
+    CrashReportingService.instance.clearUserContext();
     notifyListeners();
   }
 
