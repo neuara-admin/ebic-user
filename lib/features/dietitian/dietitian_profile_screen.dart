@@ -4,7 +4,6 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/dietitian_model.dart';
 import '../../shared/models/health_pass_model.dart';
-import '../../shared/widgets/ebic_button.dart';
 import '../health_pass/data/health_pass_repository.dart';
 import 'dietitian_chat_screen.dart';
 

@@ -633,7 +633,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   },
                 ),
               ),
-              if (secondaryEmptyAction != null) secondaryEmptyAction,
+              ?secondaryEmptyAction,
             ],
           ),
         ),

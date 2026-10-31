@@ -50,15 +50,17 @@ class RazorpayService {
 
   void _handlePaymentSuccess(PaymentSuccessResponse response) {
     debugPrint(
-      '[Razorpay] Payment Success: paymentId=${response.paymentId}, orderId=${response.orderId}, signature=${response.signature}',
+      '[Razorpay] Payment Success: orderId=${response.orderId}',
     );
 
-    final isTest = (_currentKey != null && _currentKey!.startsWith('rzp_test_')) ||
-        kDebugMode ||
-        (_currentOrderId != null && _currentOrderId!.startsWith('sim_'));
+    // Simulated IDs/signatures exist only for local development. A release
+    // build always forwards exactly what Razorpay returned for server checks.
+    final isTest = kDebugMode &&
+        ((_currentKey != null && _currentKey!.startsWith('rzp_test_')) ||
+            (_currentOrderId != null && _currentOrderId!.startsWith('sim_')));
 
     final effectivePaymentId = response.paymentId ??
-        'pay_sim_${DateTime.now().millisecondsSinceEpoch}';
+        (isTest ? 'pay_sim_${DateTime.now().millisecondsSinceEpoch}' : null);
 
     final effectiveOrderId = response.orderId ?? _currentOrderId;
 
@@ -125,9 +127,18 @@ class RazorpayService {
 
     _activeCompleter = Completer<RazorpayPaymentResult>();
 
-    final effectiveKey = (keyId.isEmpty || keyId == 'rzp_test_simulated')
-        ? 'rzp_test_Tb32WMsZscKtDf'
-        : keyId;
+    final isUnconfigured = keyId.isEmpty || keyId == 'rzp_test_simulated';
+    if (kReleaseMode && (isUnconfigured || !orderId.startsWith('order_'))) {
+      // The backend could not create a real Razorpay order. Never fall back to
+      // a test key or an order-less checkout in production.
+      _activeCompleter!.complete(const RazorpayPaymentResult.failure(
+        errorCode: -3,
+        errorMessage: 'Payments are temporarily unavailable. You have not been charged. Please try again shortly.',
+      ));
+      return _activeCompleter!.future;
+    }
+
+    final effectiveKey = isUnconfigured ? 'rzp_test_Tb32WMsZscKtDf' : keyId;
 
     _currentKey = effectiveKey;
     _currentOrderId = orderId;
@@ -158,7 +169,7 @@ class RazorpayService {
       if (!_activeCompleter!.isCompleted) {
         _activeCompleter!.complete(RazorpayPaymentResult.failure(
           errorCode: -2,
-          errorMessage: 'Unable to launch payment gateway: $e',
+          errorMessage: 'Unable to open the payment screen. You have not been charged. Please try again.',
         ));
       }
     }

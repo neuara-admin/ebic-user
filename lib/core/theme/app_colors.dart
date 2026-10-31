@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Brand Emerald
-  static const Color primary = Color(0xFF059669); // Emerald 600
+  static const Color primary = Color(0xFF047857); // Emerald 700 — 5.48:1 with white (WCAG 1.4.3)
   static const Color primaryLight = Color(0xFF10B981); // Emerald 500
-  static const Color primaryDark = Color(0xFF047857); // Emerald 700
+  static const Color primaryDark = Color(0xFF065F46); // Emerald 800
   static const Color primarySubtle = Color(0xFFECFDF5); // Emerald 50
 
   static const Color emerald50 = Color(0xFFECFDF5);
@@ -53,7 +53,7 @@ class AppColors {
   static const Color successLight = Color(0xFFD1FAE5);
   static const Color successDark = Color(0xFF065F46);
   static const Color warning = Color(0xFFF59E0B);
-  static const Color danger = Color(0xFFEF4444);
+  static const Color danger = Color(0xFFDC2626); // Red 600 — 4.83:1 on white
   static const Color dangerLight = Color(0xFFFEE2E2);
   static const Color info = Color(0xFF3B82F6);
   static const Color background = Color(0xFFF8FAFC);

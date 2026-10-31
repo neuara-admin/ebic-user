@@ -1,11 +1,8 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
-import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
-import '../../shared/widgets/ebic_outlined_button.dart';
 import '../../shared/widgets/member_switcher_widget.dart';
 
 import '../../core/api/api_client.dart';
@@ -13,12 +10,10 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/auth/session_manager.dart';
 import '../../core/config/app_config.dart';
 import '../../core/storage/token_storage.dart';
-import '../../shared/models/health_pass_model.dart';
 import '../dietitian/dietitian_profile_screen.dart';
 import '../../shared/models/dietitian_model.dart';
 import '../health_pass/data/health_pass_repository.dart';
 import 'presentation/widgets/provenance_badge.dart';
-import 'presentation/widgets/bmi_meter_widget.dart';
 
 /// Section 31 & 35: Health Hub Screen
 /// Designed as a cohesive health dashboard rather than a list of disconnected features.
@@ -1251,26 +1246,6 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
     final sleepSource = sources['sleep']?.toString();
     final heartSource = sources['heartRate']?.toString();
     final calSource = sources['calories']?.toString();
-
-    final weightDisplay = weightVal != null
-        ? '${weightVal.toStringAsFixed(1)} kg'
-        : '—';
-    final weightSub = bmiVal != null
-        ? 'BMI ${bmiVal.toStringAsFixed(1)} • ${_getBmiCategory(bmiVal)}'
-        : (weightVal != null ? 'Synced vital' : 'Tap to log');
-
-    final waterDisplay = waterVal != null
-        ? '${waterVal.toStringAsFixed(1)} L'
-        : '—';
-    final waterSub = waterVal != null ? 'Daily intake' : 'Tap to log';
-
-    final stepsDisplay =
-        stepsVal != null && stepsVal > 0 ? '$stepsVal' : '—';
-    final stepsSub =
-        stepsVal != null && stepsVal > 0 ? 'Steps today' : 'Tap to track';
-
-    final sleepDisplay = sleepVal != null ? '$sleepVal' : '—';
-    final sleepSub = sleepVal != null ? 'Rest duration' : 'Tap to log';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.slate900 : Colors.white;

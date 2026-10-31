@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
@@ -491,13 +492,13 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
         final effectiveSignature = (checkoutRes.signature != null &&
                 checkoutRes.signature!.isNotEmpty)
             ? checkoutRes.signature!
-            : (razorpayKey.startsWith('rzp_test_')
+            : (kDebugMode && razorpayKey.startsWith('rzp_test_')
                 ? 'sim_test_signature_$gatewayPaymentId'
                 : '');
         final effectiveOrderId = checkoutRes.orderId ?? razorpayOrderId;
 
         debugPrint(
-          '[PaymentCheckout] Verifying payment: paymentId=$gatewayPaymentId, orderId=$effectiveOrderId, signature=$effectiveSignature',
+          '[PaymentCheckout] Verifying payment for order $effectiveOrderId',
         );
 
         // Authoritative verify — a booking is only confirmed if the backend

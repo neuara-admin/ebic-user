@@ -54,7 +54,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>EBIC reads your steps, sleep, heart rate, and other Apple Health data to personalize your nutrition plan and share progress with your dietitian.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>EBIC does not write data to Apple Health. This permission is required by the system but is unused.</string>
+	<string>EBIC only reads from Apple Health and never writes or changes your Health data.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

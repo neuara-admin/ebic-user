@@ -1,17 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Release: HTTPS only, system CAs only. User-installed CAs are NOT trusted,
+     so a certificate added to the device cannot intercept API, payment or
+     health traffic. The debug variant (src/debug/res/xml) relaxes this for
+     local development. -->
 <network-security-config>
-    <!-- Allow cleartext traffic for local API and video streaming servers (dev/staging) -->
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
         </trust-anchors>
     </base-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">192.168.1.5</domain>
-        <domain includeSubdomains="true">10.0.2.2</domain>
-        <domain includeSubdomains="true">127.0.0.1</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">100.61.151.169</domain>
-    </domain-config>
 </network-security-config>

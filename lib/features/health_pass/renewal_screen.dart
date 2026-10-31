@@ -145,8 +145,15 @@ class _HealthPassRenewalScreenState extends State<HealthPassRenewalScreen> {
           throw Exception(checkoutRes.errorMessage ?? 'Renewal payment cancelled or incomplete.');
         }
 
-        gatewayPaymentId = checkoutRes.paymentId!;
-        gatewaySignature = checkoutRes.signature ?? 'sim_test_signature_$gatewayPaymentId';
+        final confirmedPaymentId = checkoutRes.paymentId;
+        if (confirmedPaymentId == null || confirmedPaymentId.isEmpty) {
+          throw Exception(
+            "We couldn't confirm your payment. If money was deducted, please contact support with your bank reference.",
+          );
+        }
+        gatewayPaymentId = confirmedPaymentId;
+        // No fabricated signatures: the backend verifies with Razorpay directly.
+        gatewaySignature = checkoutRes.signature ?? '';
       } else {
         // The backend did not open a payment — never fabricate a payment result.
         throw Exception('Payment could not be started. Please try again.');

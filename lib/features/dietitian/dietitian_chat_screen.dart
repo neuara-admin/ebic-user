@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -129,7 +128,6 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
   String? _stagedAttachmentName;
   String? _stagedAttachmentSize;
   String? _stagedAttachmentPath;
-  Uint8List? _stagedAttachmentBytes;
   static final Map<String, String> _localPathCache = {};
   static final Map<String, Uint8List> _localBytesCache = {};
 
@@ -270,7 +268,6 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
         _stagedAttachmentName = fileName;
         _stagedAttachmentSize = sizeStr;
         _stagedAttachmentPath = image.path;
-        _stagedAttachmentBytes = bytes;
         _localPathCache[fileName] = image.path;
         _localBytesCache[fileName] = bytes;
       });
@@ -284,7 +281,6 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
       _stagedAttachmentName = name;
       _stagedAttachmentSize = defaultSize;
       _stagedAttachmentPath = null;
-      _stagedAttachmentBytes = null;
     });
   }
 
@@ -293,7 +289,6 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
       _stagedAttachmentName = null;
       _stagedAttachmentSize = null;
       _stagedAttachmentPath = null;
-      _stagedAttachmentBytes = null;
     });
   }
 
@@ -511,7 +506,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
           body: {
             'body': bodyToSend,
             'senderRole': 'CUSTOMER',
-            if (stagedName != null) 'attachmentUrl': stagedName,
+            'attachmentUrl': ?stagedName,
             'attachmentName': ?stagedName,
             'attachmentSize': ?stagedSize,
           },
@@ -1312,50 +1307,6 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
                   // Attachment preview card if exists
                   if (msg.attachmentName != null || msg.attachmentUrl != null)
                     _buildAttachmentBubbleContent(msg, isMe, isDark),
-                  if (false) ...[
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isMe ? Colors.white.withOpacity(0.15) : (isDark ? AppColors.slate800 : const Color(0xFFF1F5F9)),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.attach_file_rounded,
-                            size: 14,
-                            color: isMe ? Colors.white : AppColors.primary,
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              msg.attachmentName!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isMe ? Colors.white : (isDark ? Colors.white : AppColors.slate900),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (msg.attachmentSize != null) ...[
-                            const SizedBox(width: 6),
-                            Text(
-                              '(${msg.attachmentSize})',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                color: isMe ? Colors.white70 : AppColors.slate500,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-
                   if (msg.body.isNotEmpty && !(msg.body.startsWith('Shared') && msg.attachmentName != null))
                     Text(
                     msg.body,
@@ -1444,7 +1395,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
                     )
                   else if (hasLocalFile)
                     Image.file(
-                      File(cachedPath!),
+                      File(cachedPath),
                       width: double.infinity,
                       height: 145,
                       fit: BoxFit.cover,
@@ -1676,7 +1627,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
                   child: cachedBytes != null
                       ? Image.memory(cachedBytes, fit: BoxFit.contain)
                       : (hasLocal
-                          ? Image.file(File(cachedPath!), fit: BoxFit.contain)
+                          ? Image.file(File(cachedPath), fit: BoxFit.contain)
                           : (hasRemote
                               ? Image.network(AppConfig.resolveMediaUrl(rawUrl) ?? rawUrl, fit: BoxFit.contain)
                               : _buildImagePlaceholder(attName, true))),
@@ -1907,46 +1858,6 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
     );
   }
 
-  Widget _buildQuickSuggestions(bool isDark) {
-    if (_messages.isNotEmpty) return const SizedBox.shrink();
-    return Container(
-      height: 34,
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        scrollDirection: Axis.horizontal,
-        itemCount: _patientSuggestions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (ctx, idx) {
-          final prompt = _patientSuggestions[idx];
-          return InkWell(
-            onTap: () => _sendMessage(prompt),
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.slate900 : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isDark ? AppColors.slate800 : const Color(0xFFE2E8F0),
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  prompt,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? AppColors.slate300 : AppColors.slate700,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
   /// Modern, elevated edge-to-edge message input bar with attachment preview
   Widget _buildInputBar(bool isDark) {
     final drFirstName = widget.dietitian.name

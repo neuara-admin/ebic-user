@@ -54,8 +54,11 @@ class ApiClient {
 
   bool _triedFallbackUrl = false;
 
+  /// Debug-only convenience for `adb reverse`. Never in release: any app on the
+  /// phone can listen on 127.0.0.1:3000 and would then receive every API call,
+  /// bearer token included, over plain HTTP.
   Future<bool> _trySwitchToReverseAdbFallback() async {
-    if (_triedFallbackUrl) return false;
+    if (kReleaseMode || _triedFallbackUrl) return false;
     _triedFallbackUrl = true;
     final currentUri = Uri.tryParse(AppConfig.apiBaseUrl);
     if (currentUri != null && currentUri.host != '127.0.0.1' && currentUri.host != 'localhost') {
