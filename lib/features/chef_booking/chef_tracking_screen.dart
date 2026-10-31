@@ -74,6 +74,10 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
   double _bearingShown = 0;
   List<LatLng> _animPath = const [];
   DateTime? _lastFixAt;
+  // GPS time of the newest fix applied. Fixes arrive from both the live stream
+  // and the periodic snapshot; an older one must never pull the marker back.
+  DateTime? _lastFixRecordedAt;
+  DateTime _lastCameraFollow = DateTime.fromMillisecondsSinceEpoch(0);
 
   // Journey so far (delivery-app style): where the trip visibly started and
   // the road already driven. Server trail is authoritative; fixes received
@@ -143,7 +147,9 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
       case 'chef.location.updated':
         final lat = double.tryParse('${e['latitude']}');
         final lng = double.tryParse('${e['longitude']}');
-        if (lat != null && lng != null && _isEnRoute) _onChefPosition(LatLng(lat, lng));
+        if (lat != null && lng != null && _isEnRoute) {
+          _onChefPosition(LatLng(lat, lng), recordedAt: DateTime.tryParse('${e['recordedAt']}'));
+        }
         final etaMin = int.tryParse('${e['etaMinutes']}');
         if (etaMin != null) setState(() => _etaMins = etaMin);
         _lastUpdatedAt = DateTime.now();
@@ -310,7 +316,9 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
     if (loc is Map) {
       final lat = double.tryParse('${loc['latitude']}');
       final lng = double.tryParse('${loc['longitude']}');
-      if (lat != null && lng != null) _onChefPosition(LatLng(lat, lng));
+      if (lat != null && lng != null) {
+        _onChefPosition(LatLng(lat, lng), recordedAt: DateTime.tryParse('${loc['recordedAt']}'));
+      }
     }
   }
 
@@ -318,8 +326,12 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
   // Chef marker animation
   // ---------------------------------------------------------------------------
 
-  void _onChefPosition(LatLng next) {
+  void _onChefPosition(LatLng next, {DateTime? recordedAt}) {
     final now = DateTime.now();
+    final last = _lastFixRecordedAt;
+    if (recordedAt != null && last != null && !recordedAt.isAfter(last)) return;
+    final gpsGap = recordedAt != null && last != null ? recordedAt.difference(last) : null;
+    if (recordedAt != null) _lastFixRecordedAt = recordedAt;
     if (_chefShown == null) {
       _chefTo = _chefShown = next;
       _lastFixAt = now;
@@ -330,11 +342,12 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
     final moved = TrackingGeo.distanceMeters(_chefTo!, next);
     if (moved < 3) return;
 
-    // Glide for about as long as fixes are arriving apart, so the marker is
-    // always moving rather than jumping and then waiting (1–6 s).
-    final gap = _lastFixAt == null ? _pollInterval : now.difference(_lastFixAt!);
+    // Uber/Zomato-style: glide for as long as the fixes were taken apart (GPS
+    // time, not arrival time, so a burst of late fixes doesn't fast-forward),
+    // which keeps the marker moving continuously until the next fix lands.
+    final gap = gpsGap ?? (_lastFixAt == null ? _pollInterval : now.difference(_lastFixAt!));
     _lastFixAt = now;
-    final ms = gap.inMilliseconds.clamp(1000, 6000);
+    final ms = gap.inMilliseconds.clamp(800, 10000);
     _moveController.duration = Duration(milliseconds: ms);
 
     final from = _chefShown!;
@@ -352,7 +365,35 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
       _animPath = TrackingGeo.pathAlongRoute(_route, from, next);
       _moveController.forward(from: 0);
     }
-    if (_autoFollow) _fitCamera();
+    _followChef();
+  }
+
+  /// Keeps the chef in view without re-zooming on every fix, which made the
+  /// map lurch every few seconds: pan when the chef nears the edge, and refit
+  /// the whole remaining route only every 15 s.
+  Future<void> _followChef() async {
+    if (!_autoFollow) return;
+    final controller = _mapController;
+    final chef = _chefTo;
+    if (controller == null || chef == null) return;
+    final now = DateTime.now();
+    if (now.difference(_lastCameraFollow) >= const Duration(seconds: 15)) {
+      _lastCameraFollow = now;
+      _fitCamera();
+      return;
+    }
+    try {
+      final region = await controller.getVisibleRegion();
+      final latPad = (region.northeast.latitude - region.southwest.latitude) * 0.2;
+      final lngPad = (region.northeast.longitude - region.southwest.longitude) * 0.2;
+      final inner = LatLngBounds(
+        southwest: LatLng(region.southwest.latitude + latPad, region.southwest.longitude + lngPad),
+        northeast: LatLng(region.northeast.latitude - latPad, region.northeast.longitude - lngPad),
+      );
+      if (!inner.contains(chef)) controller.animateCamera(CameraUpdate.newLatLng(chef));
+    } catch (_) {
+      // Map not laid out yet; the next fix tries again.
+    }
   }
 
   /// Grows the grey "already driven" line between full refreshes. Only once
@@ -384,7 +425,9 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
   int _lastTickMs = 0;
   void _onMoveTick() {
     if (_animPath.length < 2) return;
-    final t = Curves.easeInOut.transform(_moveController.value);
+    // Linear: constant speed between fixes. Easing made the chef stop and
+    // start at every GPS update instead of driving smoothly.
+    final t = _moveController.value;
     final at = TrackingGeo.pointAlong(_animPath, t);
     _chefShown = at.point;
     // Ease the heading towards the road's direction so turns look natural.
