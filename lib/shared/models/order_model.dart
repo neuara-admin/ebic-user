@@ -88,10 +88,12 @@ class OrderModel {
     return t == 'INSTANT' || t == 'NOW' || t.contains('INSTANT') || o == 'NOW' || o == 'INSTANT';
   }
 
+  /// CHEF_CANCELLED is not here on purpose: it only means the chef dropped
+  /// out and a replacement search is running. The booking ends as ASSIGNED
+  /// (new chef) or FAILED_NO_SUPPLY (refunded).
   bool get isCancelled {
     final s = status.toUpperCase();
     return s.startsWith('CANCEL') ||
-        s == 'CHEF_CANCELLED' ||
         s == 'FAILED_NO_SUPPLY' ||
         s.contains('NO_SUPPLY') ||
         s.contains('REJECT') ||
@@ -223,8 +225,10 @@ class OrderModel {
       case 'CANCELLED':
       case 'CANCELLED_CUSTOMER':
       case 'CANCELLED_NOSHOW':
-      case 'CHEF_CANCELLED':
         return 'Cancelled';
+      case 'CHEF_CANCELLED':
+      case 'SEARCHING_REPLACEMENT':
+        return 'Finding a new chef';
       case 'FAILED_NO_SUPPLY':
       case 'NO_SUPPLY':
         return 'No Chef Available';

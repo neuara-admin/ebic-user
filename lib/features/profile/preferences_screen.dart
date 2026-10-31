@@ -5,7 +5,6 @@ import '../../core/storage/local_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
 
-import '../../core/theme/theme_controller.dart';
 
 /// Module 3 — Section 32 (Sections 60–63): Customer Preferences Screen
 class PreferencesScreen extends StatefulWidget {
@@ -17,10 +16,8 @@ class PreferencesScreen extends StatefulWidget {
 
 class _PreferencesScreenState extends State<PreferencesScreen> {
   final ApiClient _api = ApiClient();
-  final ThemeController _themeController = ThemeController();
 
   String _selectedLanguage = 'en';
-  String _themeMode = 'system';
 
   bool _smsNotify = true;
   bool _whatsappNotify = true;
@@ -38,9 +35,6 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
 
   Future<void> _loadPreferences() async {
     setState(() => _isLoading = true);
-
-    // Local theme from ThemeController
-    _themeMode = _themeController.themeModeString;
 
     final prefs = await LocalPreferences.getInstance();
     _selectedLanguage = 'en'; // Enforce English
@@ -253,73 +247,6 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                             onChanged: (val) {
                               setState(() => _emailNotify = val);
                               _updateAccountPreferences();
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Local Device Appearance (Section 62 - Full Light, Dark & System)
-                    const Text(
-                      'APP APPEARANCE (DEVICE LOCAL)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.slate500,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    EbicCard(
-                      child: Column(
-                        children: [
-                          RadioListTile<String>(
-                            contentPadding: EdgeInsets.zero,
-                            secondary: Icon(Icons.brightness_auto, color: isDark ? AppColors.slate300 : AppColors.slate600),
-                            title: Text('System Default', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.slate900)),
-                            subtitle: const Text('Matches your device system dark/light mode setting', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
-                            value: 'system',
-                            groupValue: _themeMode,
-                            activeColor: AppColors.primary,
-                            onChanged: (val) async {
-                              if (val != null) {
-                                setState(() => _themeMode = val);
-                                await _themeController.setThemeMode(val);
-                              }
-                            },
-                          ),
-                          const Divider(height: 12),
-                          RadioListTile<String>(
-                            contentPadding: EdgeInsets.zero,
-                            secondary: const Icon(Icons.light_mode, color: AppColors.accent),
-                            title: Text('Light Theme', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.slate900)),
-                            subtitle: const Text('Clean crisp background with high contrast readability', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
-                            value: 'light',
-                            groupValue: _themeMode,
-                            activeColor: AppColors.primary,
-                            onChanged: (val) async {
-                              if (val != null) {
-                                setState(() => _themeMode = val);
-                                await _themeController.setThemeMode(val);
-                              }
-                            },
-                          ),
-                          const Divider(height: 12),
-                          RadioListTile<String>(
-                            contentPadding: EdgeInsets.zero,
-                            secondary: const Icon(Icons.dark_mode, color: AppColors.primaryLight),
-                            title: Text('Dark Theme', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.slate900)),
-                            subtitle: const Text('Sleek dark theme optimized for low-light environments', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
-                            value: 'dark',
-                            groupValue: _themeMode,
-                            activeColor: AppColors.primary,
-                            onChanged: (val) async {
-                              if (val != null) {
-                                setState(() => _themeMode = val);
-                                await _themeController.setThemeMode(val);
-                              }
                             },
                           ),
                         ],

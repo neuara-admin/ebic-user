@@ -530,7 +530,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             : (order.isInstant && isActive
                                 ? (order.promisedEtaAt != null
                                     ? 'Instant Dispatch • Arriving by ${DateFormat('hh:mm a').format(order.promisedEtaAt!)}'
-                                    : 'Instant Dispatch • Chef arriving in ~15-20 mins')
+                                    : 'Instant Dispatch • Arrival time shown once a chef is assigned')
                                 : (order.promisedEtaAt != null
                                     ? 'Expected Arrival: ${dateFormat.format(order.promisedEtaAt!)}'
                                     : 'Booked on ${dateFormat.format(order.createdAt)}'))))),

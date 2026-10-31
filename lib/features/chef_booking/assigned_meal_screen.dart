@@ -573,6 +573,9 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
     );
   }
 
+  static int _asCookInt(dynamic v, int fallback) =>
+      v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? fallback;
+
   List<Map<String, dynamic>> _collectSelectedDishesForBooking() {
     final List<Map<String, dynamic>> result = [];
 
@@ -607,7 +610,10 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                   'dishId': dishId,
                   'name': d['name'] ?? 'Dietitian Assigned Dish',
                   'servings': _dishServings[key] ?? 1,
-                  'baseCookTimeMin': 20,
+                  // The recipe's own times (not a 20-min placeholder) so the
+                  // quote screen shows and times the dish correctly.
+                  'baseCookTimeMin': _asCookInt(d['baseCookTimeMin'] ?? d['cookingTimeMin'] ?? d['dish']?['baseCookTimeMin'], 20),
+                  'perServingIncMin': _asCookInt(d['perServingIncMin'] ?? d['dish']?['perServingIncMin'], 0),
                   'memberId': memberId,
                   'memberName': memberObj?.name ?? 'Family Member',
                   'imageUrl': rawImg,
@@ -1792,7 +1798,8 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                               name: dishName,
                                               category: 'BALANCED',
                                               imageUrl: rawImg,
-                                              baseCookTimeMin: 20,
+                                              baseCookTimeMin: _asCookInt(d['baseCookTimeMin'] ?? d['cookingTimeMin'], 20),
+                                              perServingIncMin: _asCookInt(d['perServingIncMin'], 0),
                                               description:
                                                   d['description']?.toString(),
                                               dietaryTags: dietaryTags,
@@ -1802,7 +1809,7 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
                                               MaterialPageRoute(
                                                 builder: (_) =>
                                                     DishDetailScreen(
-                                                        dish: dishModel),
+                                                        dish: dishModel, bookable: false),
                                               ),
                                             );
                                           },

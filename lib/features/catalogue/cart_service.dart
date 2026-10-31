@@ -374,21 +374,24 @@ class CartService extends ChangeNotifier {
         },
       );
 
-      if (res.success && res.data != null) {
-        final rawItems = res.data!['items'] as List<dynamic>? ?? [];
-        for (final item in rawItems) {
-          if (item is Map<String, dynamic> &&
-              item['dishId'] == dishId &&
-              (item['memberId'] ?? 'self') == memberId) {
-            final key = _itemKey(memberId, dishId);
-            if (_items.containsKey(key)) {
-              _items[key]!.backendItemId = item['id']?.toString();
-            }
-          }
-        }
-      }
+      if (res.success && res.data != null) _captureBackendId(res.data!, dishId, memberId);
     } catch (err) {
       debugPrint('[CartService] _syncAddItemRemote error: $err');
+    }
+  }
+
+  /// Remembers the server's id for a cart line so later edits PATCH it.
+  void _captureBackendId(Map<String, dynamic> cart, String dishId, String memberId) {
+    final rawItems = cart['items'] as List<dynamic>? ?? [];
+    for (final item in rawItems) {
+      if (item is Map<String, dynamic> &&
+          item['dishId'] == dishId &&
+          (item['memberId'] ?? 'self') == memberId) {
+        final key = _itemKey(memberId, dishId);
+        if (_items.containsKey(key)) {
+          _items[key]!.backendItemId = item['id']?.toString();
+        }
+      }
     }
   }
 
@@ -402,7 +405,9 @@ class CartService extends ChangeNotifier {
           body: {'servings': servings},
         );
       } else {
-        await ApiClient().post(
+        // We don't know the server line id yet. `replace` sets the line to this
+        // count; a plain add would put the new total on top of the old one.
+        final res = await ApiClient().post<Map<String, dynamic>>(
           ApiEndpoints.cartItems,
           requiresAuth: true,
           body: {
@@ -410,8 +415,10 @@ class CartService extends ChangeNotifier {
             'servings': servings,
             'memberId': memberId == 'self' ? null : memberId,
             'occasion': occasionCode,
+            'replace': true,
           },
         );
+        if (res.success && res.data != null) _captureBackendId(res.data!, dishId, memberId);
       }
     } catch (err) {
       debugPrint('[CartService] _syncUpdateRemote error: $err');

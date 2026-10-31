@@ -74,17 +74,19 @@ class HealthProfileModel {
     );
   }
 
-  /// Derived BMI from backend metrics or canonical calculation
+  /// BMI from the current height and weight; the stored BMI metric is only a
+  /// fallback, because it lags behind until the next derived reading and kept
+  /// showing the old value after a weight update.
   double? get bmi {
+    if (heightCm != null && currentWeightKg != null && heightCm! > 0) {
+      final heightM = heightCm! / 100.0;
+      return double.parse((currentWeightKg! / (heightM * heightM)).toStringAsFixed(1));
+    }
     if (latestMetrics.containsKey('BMI')) {
       final bmiObj = latestMetrics['BMI'];
       if (bmiObj is Map && bmiObj['value'] != null) {
         return double.tryParse(bmiObj['value'].toString());
       }
-    }
-    if (heightCm != null && currentWeightKg != null && heightCm! > 0) {
-      final heightM = heightCm! / 100.0;
-      return double.parse((currentWeightKg! / (heightM * heightM)).toStringAsFixed(1));
     }
     return null;
   }

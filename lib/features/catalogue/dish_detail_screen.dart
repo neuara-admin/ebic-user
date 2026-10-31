@@ -12,7 +12,26 @@ import 'cart_service.dart';
 class DishDetailScreen extends StatefulWidget {
   final DishModel dish;
 
-  const DishDetailScreen({super.key, required this.dish});
+  /// Household member whose cart line this screen edits. Defaults to the
+  /// member currently selected in the catalogue.
+  final String? memberId;
+  final String? memberName;
+
+  /// False for prescribed plan meals and for dishes viewed from a quote: the
+  /// portions are fixed, so no stepper and no add-to-booking bar.
+  final bool bookable;
+
+  /// Portions to show when [bookable] is false (e.g. the prescribed amount).
+  final int? fixedServings;
+
+  const DishDetailScreen({
+    super.key,
+    required this.dish,
+    this.memberId,
+    this.memberName,
+    this.bookable = true,
+    this.fixedServings,
+  });
 
   @override
   State<DishDetailScreen> createState() => _DishDetailScreenState();
@@ -23,11 +42,27 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
   int _currentImageIndex = 0;
   final PageController _pageController = PageController();
   final Set<String> _checkedIngredients = {};
+  // Portions already in the cart for this member, 0 when the dish isn't there.
+  int _servingsInCart = 0;
+
+  String get _memberId =>
+      widget.memberId ?? CartService().selectedMemberId ?? 'self';
+  String get _memberName =>
+      widget.memberName ?? CartService().selectedMemberName ?? 'Self';
 
   @override
   void initState() {
     super.initState();
     _servings = widget.dish.defaultServings > 0 ? widget.dish.defaultServings : 1;
+    if (!widget.bookable) {
+      final fixed = widget.fixedServings;
+      if (fixed != null && fixed > 0) _servings = fixed;
+      return;
+    }
+    // Start from what is already booked so the count here and on the menu card
+    // always agree, and saving replaces it instead of adding on top.
+    _servingsInCart = CartService().getServingsForMember(_memberId, widget.dish.id);
+    if (_servingsInCart > 0) _servings = _servingsInCart;
   }
 
   @override
@@ -167,7 +202,7 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
             ),
 
             // 11. Bottom Servings & Add Action Bar
-            _buildBottomActionBar(dish, isDark),
+            if (widget.bookable) _buildBottomActionBar(dish, isDark),
           ],
         ),
       ),
@@ -586,6 +621,16 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
                 ),
               ),
               const SizedBox(width: 8),
+              if (!widget.bookable)
+                Text(
+                  '$_servings ${_servings == 1 ? "Portion" : "Portions"}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDark,
+                  ),
+                )
+              else
               // Interactive Stepper
               Container(
                 decoration: BoxDecoration(
@@ -1118,9 +1163,11 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
           // Add to Booking Button
           Expanded(
             child: EbicButton(
-              label: SessionManager().isAuthenticated
-                  ? 'Add to Chef Booking'
-                  : 'Sign in to Add',
+              label: !SessionManager().isAuthenticated
+                  ? 'Sign in to Add'
+                  : _servingsInCart > 0
+                      ? 'Update Chef Booking'
+                      : 'Add to Chef Booking',
               icon: SessionManager().isAuthenticated
                   ? Icons.add_rounded
                   : Icons.login_rounded,
@@ -1137,12 +1184,17 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
                   Navigator.pushNamed(context, AppRoutes.login);
                   return;
                 }
-                CartService().addDish(dish, servings: _servings);
+                final updating = _servingsInCart > 0;
+                if (updating) {
+                  CartService().updateServings(dish.id, _servings, memberId: _memberId);
+                } else {
+                  CartService().addDishForMember(dish, _memberId, _memberName, servings: _servings);
+                }
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Added ${dish.name} ($_servings ${_servings == 1 ? "portion" : "portions"}) to booking.',
+                      '${updating ? "Updated" : "Added"} ${dish.name} ($_servings ${_servings == 1 ? "portion" : "portions"}) ${updating ? "in" : "to"} booking.',
                     ),
                     behavior: SnackBarBehavior.floating,
                   ),

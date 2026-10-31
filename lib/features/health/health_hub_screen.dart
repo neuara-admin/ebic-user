@@ -2837,7 +2837,8 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
                 icon: Icons.assignment_ind_outlined,
                 iconColor: const Color(0xFF0284C7),
                 badgeBg: const Color(0xFF0284C7).withOpacity(0.12),
-                onTap: () => Navigator.pushNamed(context, AppRoutes.healthProfile),
+                // Reload on return so edited height/weight (and BMI) show straight away.
+                onTap: () => Navigator.pushNamed(context, AppRoutes.healthProfile).then((_) => _loadHealthData()),
                 isDark: isDark,
                 cardBg: cardBg,
                 cardBorder: cardBorder,

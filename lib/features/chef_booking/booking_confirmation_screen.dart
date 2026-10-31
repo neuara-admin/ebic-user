@@ -119,7 +119,9 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
         '';
     final memberName = widget.confirmationData['memberName']?.toString() ?? 'Self';
     final statusUpper = _liveOrder?['status']?.toString().toUpperCase() ?? '';
-    final isCancelled = statusUpper.contains('CANCEL') || statusUpper == 'FAILED_NO_SUPPLY';
+    // CHEF_CANCELLED means a replacement chef is being found, not a cancelled booking.
+    final isCancelled = (statusUpper.contains('CANCEL') && statusUpper != 'CHEF_CANCELLED') ||
+        statusUpper == 'FAILED_NO_SUPPLY';
     final isCompleted = statusUpper == 'COMPLETED';
     final isInactive = isCancelled || isCompleted;
 

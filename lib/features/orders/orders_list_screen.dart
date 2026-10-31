@@ -669,7 +669,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     required Color textMuted,
     required DateFormat dateFormat,
   }) {
-    final isCancelled = order.status.toUpperCase().contains('CANCEL');
+    final isCancelled = order.isCancelled;
     final isActive = !isCancelled &&
         order.status.toUpperCase() != 'COMPLETED' &&
         order.status.toUpperCase() != 'CLOSED';

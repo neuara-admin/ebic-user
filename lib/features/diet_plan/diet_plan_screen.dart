@@ -106,6 +106,8 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
               (json) =>
                   HouseholdMemberModel.fromJson(json as Map<String, dynamic>),
             )
+            // Diet plans come with a Health Pass: only covered members get one.
+            .where((m) => m.isCoveredByHealthPass)
             .toList();
         setState(() {
           _householdMembers = list;
@@ -1865,7 +1867,7 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (_) =>
-                                DishDetailScreen(dish: d.toDishModel()),
+                                DishDetailScreen(dish: d.toDishModel(), bookable: false, fixedServings: d.servings.ceil()),
                           ),
                         );
                       },

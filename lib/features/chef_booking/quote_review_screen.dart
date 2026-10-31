@@ -37,6 +37,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   Timer? _quoteRefreshDebounce;
+  // Bumped per quote request so a slower, older response can't overwrite the
+  // quote for the portions currently on screen.
+  int _quoteRequestSeq = 0;
 
   QuoteModel? _quote;
   Map<String, dynamic>? _cookingTimeData;
@@ -409,10 +412,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         _scheduleQuoteRefresh();
       });
 
-      // Synchronize with CartService so it doesn't reappear
+      // Synchronize with CartService so it doesn't reappear. The line belongs
+      // to a specific member, not whichever member the catalogue has selected.
       if (targetId != null) {
         try {
-          CartService().removeDish(targetId);
+          CartService().removeDish(targetId, memberId: dish['memberId']?.toString());
         } catch (_) {}
       }
     } else {
@@ -445,12 +449,11 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       // Synchronize with CartService
       if (targetId != null) {
         try {
-          CartService().updateServings(targetId, newQty);
+          CartService().updateServings(targetId, newQty, memberId: dish['memberId']?.toString());
         } catch (_) {}
       }
     }
-
-    _fetchDynamicCookingTimeAndQuote();
+    // _scheduleQuoteRefresh() above re-quotes once the taps settle.
   }
 
   void _showAddMoreDishesOptions() {
@@ -828,6 +831,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
     }
 
     final dishes = (widget.bookingConfig['dishes'] as List<dynamic>?) ?? [];
+    final seq = ++_quoteRequestSeq;
 
     try {
       // 1. Calculate Authoritative Dynamic Cooking Time from backend (Section 34)
@@ -930,6 +934,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         ApiEndpoints.calculateQuote,
         body: quotePayload,
       );
+      // Portions changed while this request was in flight; a newer one owns the result.
+      if (seq != _quoteRequestSeq) return;
 
       final hasFreeVisitEntitlement = !_isComboMealOccasion &&
           (hpQuoteContext?['entitlement_available'] == true ||
@@ -961,6 +967,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
         }
       }
     } catch (e) {
+      if (seq != _quoteRequestSeq) return;
       _quote = null;
       _errorMessage = 'Unable to calculate a quote right now. Please try again.';
     }
@@ -1701,6 +1708,13 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
   }
 
   Future<void> _proceedToPayment() async {
+    // A portion change may still be waiting on its re-quote. Checkout must use
+    // the quote (and cooking time) for what is on screen, not the previous one.
+    if (_quoteRefreshDebounce?.isActive ?? false) {
+      _quoteRefreshDebounce!.cancel();
+      await _fetchDynamicCookingTimeAndQuote();
+      if (!mounted) return;
+    }
     if (_quote == null) return;
 
     if (_availableChefCount == 0) {
@@ -2498,7 +2512,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
           ),
           const SizedBox(height: 2),
           const Text(
-            'Certified chef arrives 15-20 mins before cooking time',
+            'Your arrival time is confirmed once a chef is assigned',
             style: TextStyle(fontSize: 11, color: AppColors.slate500),
           ),
           const Divider(height: 18, color: AppColors.slate200),
@@ -2950,7 +2964,9 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                   ...memberDishes.map((d) {
                     final name = d['name']?.toString() ?? 'Recipe';
                     final servings = _asInt(d['servings'] ?? d['quantity'], 1);
-                    final cookTime = _asInt(d['baseCookTimeMin'], 20);
+                    // This line's time grows with its portions.
+                    final cookTime = _asInt(d['baseCookTimeMin'], 20) +
+                        (servings - 1) * _asInt(d['perServingIncMin'], 0);
                     final unitPrice = isAssigned
                         ? 0.0
                         : _dishUnitPrice(d);
@@ -2996,7 +3012,8 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                                 name: name,
                                 category: d['category']?.toString() ?? 'BALANCED',
                                 imageUrl: rawImg,
-                                baseCookTimeMin: cookTime,
+                                baseCookTimeMin: _asInt(d['baseCookTimeMin'], 20),
+                                perServingIncMin: _asInt(d['perServingIncMin'], 0),
                                 description: d['description']?.toString(),
                                 dietaryTags: (d['dietaryTags'] as List<dynamic>?)?.map((t) => t.toString()).toList() ??
                                     [isVeg ? 'Vegetarian' : 'Non-Vegetarian'],
@@ -3004,7 +3021,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => DishDetailScreen(dish: dishModel),
+                                  builder: (_) => DishDetailScreen(dish: dishModel, bookable: false, fixedServings: servings),
                                 ),
                               );
                             },

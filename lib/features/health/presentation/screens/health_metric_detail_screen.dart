@@ -334,8 +334,9 @@ class _HealthMetricDetailScreenState extends State<HealthMetricDetailScreen> {
     final rawBmi = _parseDouble(_data?['bmi']);
     final height = _parseDouble(_data?['heightCm']);
 
+    // Current height and weight first; a stored BMI can be from an older weight.
     double? bmi = rawBmi;
-    if ((bmi == null || bmi <= 0) && weight != null && height != null && height > 0) {
+    if (weight != null && height != null && height > 0) {
       final hM = height / 100.0;
       bmi = double.parse((weight / (hM * hM)).toStringAsFixed(1));
     }

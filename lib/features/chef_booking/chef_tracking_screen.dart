@@ -105,11 +105,10 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
   bool _isOrderCancelled(String? status) {
     if (status == null) return false;
     final s = status.toUpperCase();
-    return s.contains('CANCEL') ||
-        s == 'FAILED_NO_SUPPLY' ||
-        s == 'CHEF_CANCELLED' ||
-        s == 'CANCELLED_CUSTOMER' ||
-        s == 'CANCELLED_NOSHOW';
+    // CHEF_CANCELLED is a replacement search, not the end of the booking:
+    // keep polling so the customer sees the new chef (or "no chef available").
+    if (s == 'CHEF_CANCELLED') return false;
+    return s.contains('CANCEL') || s == 'FAILED_NO_SUPPLY';
   }
 
   @override
@@ -659,6 +658,7 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
       case 'CREATED':
       case 'SEARCHING':
       case 'SEARCHING_REPLACEMENT':
+      case 'CHEF_CANCELLED':
         return 0;
       case 'CHEF_ASSIGNED':
       case 'ACCEPTED':

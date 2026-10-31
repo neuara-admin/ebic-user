@@ -238,7 +238,9 @@ class DietPlanDishItemModel {
       imageUrl: imageUrl,
       images: allImages,
       videoUrl: videoUrl,
-      baseCookTimeMin: cookingTimeMin ?? preparationTimeMin ?? 25,
+      baseCookTimeMin: cookingTimeMin ?? 25,
+      // The API's preparationTimeMin is the dish's per-portion increment.
+      perServingIncMin: preparationTimeMin ?? 0,
       defaultServings: servingQuantity.toInt() > 0 ? servingQuantity.toInt() : 1,
       preparationInstructions: preparationSteps.isNotEmpty ? preparationSteps.join('\n') : null,
       preparationSteps: preparationSteps,

@@ -1535,7 +1535,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => DishDetailScreen(dish: dish)),
+                MaterialPageRoute(builder: (_) => DishDetailScreen(dish: dish, memberId: activeMemberId, memberName: activeMemberName)),
               );
             },
             child: Row(

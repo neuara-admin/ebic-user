@@ -69,24 +69,7 @@ class _PreparationChecklistScreenState extends State<PreparationChecklistScreen>
   }
 
   Future<void> _toggleItemStatus(PreparationItemModel item) async {
-    final nextStatus = item.isReady ? 'PENDING' : 'READY';
-
-    // Optimistic UI update
-    setState(() {
-      item.status = nextStatus;
-    });
-
-    try {
-      await _api.patch<Map<String, dynamic>>(
-        ApiEndpoints.chefBookingPreparation(widget.orderId),
-        body: {
-          'ingredientId': item.ingredientId.isNotEmpty ? item.ingredientId : item.id,
-          'status': nextStatus,
-        },
-      );
-    } catch (_) {
-      // Keep optimistic state for smooth offline-resilient UI
-    }
+    await _updateStatus(item, item.isReady ? 'PENDING' : 'READY');
   }
 
   Future<void> _markAllReady() async {
@@ -100,23 +83,35 @@ class _PreparationChecklistScreenState extends State<PreparationChecklistScreen>
       }
     });
 
+    final messenger = ScaffoldMessenger.of(context);
+    var ok = false;
     try {
-      await _api.post<Map<String, dynamic>>(
+      final res = await _api.post<Map<String, dynamic>>(
         ApiEndpoints.chefBookingMarkAllReady(widget.orderId),
         body: {},
       );
+      ok = res.success;
     } catch (_) {}
+    if (!mounted) return;
 
     setState(() => _isUpdatingAll = false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (!ok) {
+      // Show what the server actually has rather than the optimistic ticks.
+      await _fetchChecklist();
+      messenger.showSnackBar(
         const SnackBar(
-          content: Text('All ingredients marked as READY! Chef notified.'),
-          backgroundColor: AppColors.primaryDark,
+          content: Text('Could not mark everything ready. Please try again.'),
+          backgroundColor: AppColors.danger,
         ),
       );
+      return;
     }
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('All ingredients marked as READY! Chef notified.'),
+        backgroundColor: AppColors.primaryDark,
+      ),
+    );
   }
 
   void _showUnavailableOptions(PreparationItemModel item) {
@@ -176,17 +171,31 @@ class _PreparationChecklistScreenState extends State<PreparationChecklistScreen>
     );
   }
 
+  /// Optimistic, but rolled back with a message if the server says no. The
+  /// API takes `ingredientKey`; the old `ingredientId` field was rejected and
+  /// the error hidden, so ticks never saved.
   Future<void> _updateStatus(PreparationItemModel item, String status) async {
+    final previous = item.status;
     setState(() => item.status = status);
+    final messenger = ScaffoldMessenger.of(context);
+    String? error;
     try {
-      await _api.patch<Map<String, dynamic>>(
+      final res = await _api.patch<Map<String, dynamic>>(
         ApiEndpoints.chefBookingPreparation(widget.orderId),
         body: {
-          'ingredientId': item.ingredientId.isNotEmpty ? item.ingredientId : item.id,
+          'ingredientKey': item.id.isNotEmpty ? item.id : item.ingredientId,
           'status': status,
         },
       );
-    } catch (_) {}
+      if (!res.success) {
+        error = res.error?.message ?? res.message ?? 'Could not update this ingredient.';
+      }
+    } catch (_) {
+      error = 'Could not update this ingredient. Check your connection and try again.';
+    }
+    if (!mounted || error == null) return;
+    setState(() => item.status = previous);
+    messenger.showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.danger));
   }
 
   @override

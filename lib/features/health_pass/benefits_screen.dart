@@ -364,14 +364,16 @@ class _HealthPassBenefitsScreenState extends State<HealthPassBenefitsScreen> {
     // Videos
     for (final vid in _plan!.videos) {
       if (vid.url.trim().isNotEmpty) {
-        slides.add(_MediaSlideItem(isVideo: true, url: vid.url, title: vid.title));
+        // Stored titles are often the uploaded file's name ("WhatsApp Video
+        // 2026-…"), so the caption is always the plan's own name.
+        slides.add(_MediaSlideItem(isVideo: true, url: vid.url, title: _plan?.displayName));
       }
     }
 
     // Images
     for (final img in _plan!.images) {
       if (img.url.trim().isNotEmpty) {
-        slides.add(_MediaSlideItem(isVideo: false, url: img.url, title: img.title));
+        slides.add(_MediaSlideItem(isVideo: false, url: img.url, title: _plan?.displayName));
       }
     }
 

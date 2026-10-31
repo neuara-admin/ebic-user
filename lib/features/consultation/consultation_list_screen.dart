@@ -252,6 +252,17 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
     }
   }
 
+  /// The join window closes 60 minutes after the start (same rule as the
+  /// server); a live call is over once its slot has ended plus that grace.
+  bool _hasEnded(ConsultationModel c) {
+    final now = DateTime.now();
+    if (c.status == 'IN_PROGRESS') {
+      final end = c.endsAt ?? c.scheduledAt.add(const Duration(minutes: 45));
+      return now.isAfter(end.add(const Duration(hours: 1)));
+    }
+    return now.isAfter(c.scheduledAt.add(const Duration(hours: 1)));
+  }
+
   bool _canModify(ConsultationModel c) {
     return (c.status == 'SCHEDULED' || c.status == 'PENDING') &&
         c.scheduledAt.isAfter(DateTime.now());
@@ -399,9 +410,12 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Upcoming contains SCHEDULED and IN_PROGRESS
+    // Upcoming contains SCHEDULED and IN_PROGRESS whose time hasn't run out.
+    // The server closes these within minutes of the window ending; until it
+    // does, an ended slot must not keep showing as an active consultation.
     final upcoming = _consultations.where((c) {
-      return c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING';
+      return (c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING') &&
+          !_hasEnded(c);
     }).toList();
 
     // Past contains VIDEO_COMPLETED (call done, notes pending), COMPLETED, CANCELLED, NO_SHOW
@@ -409,7 +423,8 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
       return c.status == 'VIDEO_COMPLETED' ||
           c.status == 'COMPLETED' ||
           c.status == 'CANCELLED' ||
-          c.status == 'NO_SHOW';
+          c.status == 'NO_SHOW' ||
+          ((c.status == 'SCHEDULED' || c.status == 'IN_PROGRESS' || c.status == 'PENDING') && _hasEnded(c));
     }).toList();
 
     return Scaffold(

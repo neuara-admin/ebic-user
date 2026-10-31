@@ -534,16 +534,13 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
             }
           });
         } else {
-          _markPendingDone(tempId);
-          _generateDoctorResponse(bodyToSend, stagedName);
+          _markSendFailed(tempId, text, res.error?.message ?? res.message);
         }
       } else {
-        _markPendingDone(tempId);
-        _generateDoctorResponse(bodyToSend, stagedName);
+        _markSendFailed(tempId, text, null);
       }
     } catch (_) {
-      _markPendingDone(tempId);
-      _generateDoctorResponse(bodyToSend, stagedName);
+      _markSendFailed(tempId, text, null);
     } finally {
       if (mounted) {
         setState(() => _isSending = false);
@@ -552,57 +549,23 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
     }
   }
 
-  void _generateDoctorResponse(String userText, [String? attachmentName]) {
-    Future.delayed(const Duration(milliseconds: 900), () {
-      if (!mounted) return;
-      String response = "Thank you for reaching out! I've noted this in your clinical record. Let's make sure this aligns with your chef's daily kitchen preparation.";
-      final lower = userText.toLowerCase();
-
-      if (attachmentName != null && (attachmentName.toLowerCase().endsWith('.pdf') || lower.contains('report') || lower.contains('lab'))) {
-        response = "Thank you for uploading your clinical report ($attachmentName). I will review your lipid, glycemic, and metabolic biomarkers to tailor your personalized meal directives.";
-      } else if (attachmentName != null && (lower.contains('photo') || lower.contains('meal') || attachmentName.toLowerCase().endsWith('.jpg') || attachmentName.toLowerCase().endsWith('.png'))) {
-        response = "Thank you for sharing your meal plate photo! The portion balance looks well aligned with your caloric targets. I will adjust the chef's culinary notes accordingly.";
-      } else if (lower.contains('calorie') || lower.contains('target')) {
-        response = "I've reviewed your calorie goals. Based on your activity, we can adjust your daily intake target by ±150 kcal. I will sync this with your home chef!";
-      } else if (lower.contains('protein')) {
-        response = "Your recommended protein target is 1.2g to 1.6g per kg of body weight. I will instruct your chef to prioritize lean proteins like paneer, tofu, chicken breast, or lentils in your upcoming menu.";
-      } else if (lower.contains('glucose') || lower.contains('sugar') || lower.contains('blood')) {
-        response = "Keep monitoring your fasting readings. We will maintain a low glycemic index for your next chef visits to stabilize post-prandial spikes.";
-      } else if (lower.contains('recipe') || lower.contains('chef')) {
-        response = "I have initiated a culinary instruction sync for your home chef with reduced sodium and optimized cold-pressed oils.";
-      }
-
-      setState(() {
-        _messages.add(ChatMessageItem(
-          id: 'auto-${DateTime.now().millisecondsSinceEpoch}',
-          senderRole: 'DIETITIAN',
-          body: response,
-          createdAt: DateTime.now(),
-          isEncrypted: true,
-        ));
-      });
-      _scrollToBottom();
-    });
-  }
-
-  void _markPendingDone(String id) {
-    setState(() {
-      final idx = _messages.indexWhere((m) => m.id == id);
-      if (idx != -1) {
-        final old = _messages[idx];
-        _messages[idx] = ChatMessageItem(
-          id: old.id,
-          senderRole: old.senderRole,
-          body: old.body,
-          createdAt: old.createdAt,
-          attachmentUrl: old.attachmentUrl,
-          attachmentName: old.attachmentName,
-          attachmentSize: old.attachmentSize,
-          isEncrypted: true,
-          isPending: false,
-        );
-      }
-    });
+  /// The message did not reach the dietitian. It used to be marked as sent
+  /// and answered by a canned "dietitian" reply (including clinical advice)
+  /// generated on the phone; now it is taken back out, the text is restored to
+  /// the composer, and the customer is told it wasn't sent.
+  void _markSendFailed(String tempId, String text, String? reason) {
+    if (!mounted) return;
+    setState(() => _messages.removeWhere((m) => m.id == tempId));
+    if (text.isNotEmpty && _messageController.text.isEmpty) {
+      _messageController.text = text;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(reason ?? 'Message not sent. Check your connection and try again.'),
+        backgroundColor: AppColors.danger,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _showLockedToast() {
@@ -1424,38 +1387,8 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                color: isMe ? Colors.black.withOpacity(0.15) : (isDark ? AppColors.slate800 : const Color(0xFFF1F5F9)),
-                child: Row(
-                  children: [
-                    const Icon(Icons.photo_camera_rounded, size: 12, color: AppColors.primary),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        attName,
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: isMe ? Colors.white : (isDark ? Colors.white : AppColors.slate800),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (msg.attachmentSize != null) ...[
-                      const SizedBox(width: 4),
-                      Text(
-                        msg.attachmentSize!,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          color: isMe ? Colors.white70 : AppColors.slate500,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+              // No file-name strip under photos: names like "WhatsApp Image
+              // 2026-…" are noise; the photo itself is the content.
             ],
           ),
         ),

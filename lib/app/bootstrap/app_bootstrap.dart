@@ -12,7 +12,6 @@ import '../../core/lifecycle/app_lifecycle_manager.dart';
 import '../../core/notifications/device_registration_service.dart';
 import '../../core/realtime/realtime_notification_banner.dart';
 import '../../core/realtime/realtime_service.dart';
-import '../../core/theme/theme_controller.dart';
 import '../../firebase_options.dart';
 
 /// Deterministic Application Bootstrap sequence.
@@ -123,9 +122,6 @@ class AppBootstrap {
 
     // 7. Session restore (network-bound, Section 15) is performed by
     //    SplashScreen so it never blocks the first frame.
-
-    // 8. Restore theme preferences
-    await ThemeController().initialize();
 
     // 9. Live updates: the socket follows the session (connects once the
     //    splash screen restores it / the user logs in), and new

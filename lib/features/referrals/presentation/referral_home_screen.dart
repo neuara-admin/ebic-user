@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/ebic_card.dart';
@@ -68,7 +69,7 @@ class _ReferralHomeScreenState extends State<ReferralHomeScreen> {
     );
   }
 
-  void _shareInvite() {
+  Future<void> _shareInvite() async {
     if (_dashboard == null) return;
     final code = _dashboard!.referralCode;
     final url = _dashboard!.shareUrl;
@@ -82,7 +83,15 @@ class _ReferralHomeScreenState extends State<ReferralHomeScreen> {
         'Use referral code: $code\n'
         'Or tap: $url';
 
-    Clipboard.setData(ClipboardData(text: text));
+    // Native share sheet (WhatsApp, SMS, …); the clipboard is the fallback
+    // where no share target is available.
+    try {
+      await Share.share(text, subject: 'Join me on EBIC');
+      return;
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: text));
+    }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Column(
@@ -98,6 +107,65 @@ class _ReferralHomeScreenState extends State<ReferralHomeScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _showClaimCodeDialog() async {
+    final controller = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Enter a friend's code"),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(hintText: 'Referral code'),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (code == null || code.isEmpty || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final res = await _repo.claimReferral(code);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(res.success
+            ? (res.data?['message']?.toString() ?? 'Referral applied.')
+            : (res.message ?? 'That referral code could not be applied.')),
+        backgroundColor: res.success ? AppColors.primaryDark : AppColors.danger,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    if (res.success) _loadDashboard();
+  }
+
+  Widget _buildClaimCodeCard() {
+    return EbicCard(
+      onTap: _showClaimCodeDialog,
+      child: const Row(
+        children: [
+          Icon(Icons.redeem_rounded, color: AppColors.primary),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              "Were you invited? Enter a friend's referral code",
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: AppColors.slate500),
+        ],
       ),
     );
   }
@@ -140,6 +208,11 @@ class _ReferralHomeScreenState extends State<ReferralHomeScreen> {
                         // 2. Referral Code Card
                         _buildCodeCard(isDark),
                         const SizedBox(height: 16),
+
+                        if (_dashboard?.canClaimCode ?? false) ...[
+                          _buildClaimCodeCard(),
+                          const SizedBox(height: 16),
+                        ],
 
                         // 3. Reward Information Card
                         _buildRewardInfoCard(isDark),

@@ -233,12 +233,17 @@ class ReferralDashboardModel {
   final ReferralCampaignModel? activeCampaign;
   final List<ReferralItemModel> recentReferrals;
 
+  /// True while this customer can still enter a friend's code (not referred
+  /// yet and no paid booking).
+  final bool canClaimCode;
+
   const ReferralDashboardModel({
     required this.referralCode,
     required this.shareUrl,
     required this.stats,
     this.activeCampaign,
     this.recentReferrals = const [],
+    this.canClaimCode = false,
   });
 
   factory ReferralDashboardModel.fromJson(Map<String, dynamic> json) {
@@ -263,6 +268,7 @@ class ReferralDashboardModel {
       stats: statsObj,
       activeCampaign: camp,
       recentReferrals: parsedRecent,
+      canClaimCode: json['canClaimCode'] == true,
     );
   }
 }

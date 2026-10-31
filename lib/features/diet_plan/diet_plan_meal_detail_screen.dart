@@ -755,7 +755,7 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (_) =>
-                      DishDetailScreen(dish: dishItem.toDishModel()),
+                      DishDetailScreen(dish: dishItem.toDishModel(), bookable: false, fixedServings: dishItem.servings.ceil()),
                 ),
               );
             },
@@ -924,7 +924,7 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => DishDetailScreen(dish: dishItem.toDishModel()),
+                          builder: (_) => DishDetailScreen(dish: dishItem.toDishModel(), bookable: false, fixedServings: dishItem.servings.ceil()),
                         ),
                       );
                     },

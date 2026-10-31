@@ -27,8 +27,6 @@ class LocalPreferences {
   Future<bool> setLanguage(String code) => _prefs.setString(_keyLanguage, code);
 
   // Theme Mode ('light', 'dark', 'system')
-  String get themeMode => _prefs.getString(_keyThemeMode) ?? 'system';
-  Future<bool> setThemeMode(String mode) => _prefs.setString(_keyThemeMode, mode);
 
   // Onboarding
   bool get isOnboardingCompleted => _prefs.getBool(_keyOnboardingDone) ?? false;
