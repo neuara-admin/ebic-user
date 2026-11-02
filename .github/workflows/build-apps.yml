@@ -63,8 +63,17 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Enforce CocoaPods Toolchain (Disable SPM)
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Install Dependencies
         run: flutter pub get
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+          cd ..
 
       - name: Build iOS App
         run: |
@@ -83,4 +92,3 @@ jobs:
           name: ebic-user-ios-app
           path: build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app.zip
           if-no-files-found: error
-
