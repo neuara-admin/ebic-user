@@ -19,6 +19,18 @@ jobs:
     name: Build Android Release APK
     runs-on: ubuntu-latest
     steps:
+      - name: Free Disk Space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/share/powershell
+          sudo docker system prune -af --volumes || true
+          echo "Disk space after cleanup:"
+          df -h
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -41,7 +53,7 @@ jobs:
         run: |
           ENV_NAME="${{ inputs.environment || 'production' }}"
           echo "Building for environment: $ENV_NAME"
-          flutter build apk --release --dart-define=APP_ENV=$ENV_NAME
+          flutter build apk --release --target-platform=android-arm64 --dart-define=APP_ENV=$ENV_NAME
 
       - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
@@ -70,9 +82,7 @@ jobs:
         run: flutter pub get
 
       - name: Patch Agora RTC Engine iOS sources
-        run: |
-          python3 -c "import glob, os; [open(p, 'w', encoding='utf-8').write(open(p, 'r', encoding='utf-8').read().replace('typeof(self)', '__typeof__(self)')) for p in glob.glob(os.path.expanduser('~/.pub-cache/hosted/pub.dev/agora_rtc_engine-*/ios/agora_rtc_engine/Sources/agora_rtc_engine/AgoraSurfaceViewFactory.mm'))]" || true
-          find ~/.pub-cache/hosted/pub.dev/ -name "AgoraSurfaceViewFactory.mm" -exec sed -i '' 's/typeof(self)/__typeof__(self)/g' {} + || true
+        run: python3 .github/scripts/patch_agora.py
 
       - name: Install CocoaPods
         run: |
