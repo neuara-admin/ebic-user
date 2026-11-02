@@ -1,0 +1,86 @@
+name: Build User App (Android & iOS)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target Environment (production or development)'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - development
+
+jobs:
+  build-android:
+    name: Build Android Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Android Release APK
+        run: |
+          ENV_NAME="${{ inputs.environment || 'production' }}"
+          echo "Building for environment: $ENV_NAME"
+          flutter build apk --release --dart-define=APP_ENV=$ENV_NAME
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebic-user-android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  build-ios:
+    name: Build iOS Application (Unsigned IPA / App)
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build iOS App
+        run: |
+          ENV_NAME="${{ inputs.environment || 'production' }}"
+          echo "Building for environment: $ENV_NAME"
+          flutter build ipa --no-codesign --dart-define=APP_ENV=$ENV_NAME
+
+      - name: Package App Bundle
+        run: |
+          cd build/ios/archive/Runner.xcarchive/Products/Applications
+          zip -r Runner.app.zip Runner.app
+
+      - name: Upload iOS App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebic-user-ios-app
+          path: build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app.zip
+          if-no-files-found: error
+

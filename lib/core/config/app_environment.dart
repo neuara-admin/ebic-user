@@ -23,15 +23,15 @@ class AppEnvironment {
   }) {
     final baseUrl = apiBaseUrlOverride ??
         (type == EnvironmentType.production
-            ? 'https://api.ebic.com/v1'
+            ? 'https://api.ebic.in/v1'
             : type == EnvironmentType.staging
-                ? 'https://staging-api.ebic.com/v1'
+                ? 'https://staging-api.ebic.in/v1'
                 : 'http://localhost:3000/v1');
 
     final wsUrl = type == EnvironmentType.production
-        ? 'wss://api.ebic.com/realtime'
+        ? 'wss://api.ebic.in/realtime'
         : type == EnvironmentType.staging
-            ? 'wss://staging-api.ebic.com/realtime'
+            ? 'wss://staging-api.ebic.in/realtime'
             : 'ws://localhost:3000/realtime';
 
     current = AppEnvironment(

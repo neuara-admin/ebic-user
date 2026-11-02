@@ -5,6 +5,18 @@ class AppConfig {
   static const String appTagline = 'Personalized Nutrition & In-Home Chefs';
   static const String appVersion = '1.0.0';
 
+  /// Target environment: 'production', 'staging', or 'development'.
+  /// Defaults to 'production' in release builds, or 'development' in debug/profile builds.
+  /// Override with: `--dart-define=APP_ENV=production` or `--dart-define=APP_ENV=development`
+  static const String environment = String.fromEnvironment(
+    'APP_ENV',
+    defaultValue: kReleaseMode ? 'production' : 'development',
+  );
+
+  static bool get isProduction => environment.toLowerCase() == 'production';
+  static bool get isStaging => environment.toLowerCase() == 'staging';
+  static bool get isDevelopment => !isProduction && !isStaging;
+
   // Override at build/run time for a physical device on the same Wi-Fi,
   // e.g. flutter run --dart-define=API_BASE_URL=http://192.168.1.5:3000/v1
   static const String _apiBaseUrlOverride = String.fromEnvironment(
@@ -12,16 +24,21 @@ class AppConfig {
   );
 
   static const String prodApiBaseUrl = 'https://api.ebic.in/v1';
+  static const String prodWebSocketUrl = 'wss://api.ebic.in/realtime';
+
+  static const String stagingApiBaseUrl = 'https://staging-api.ebic.in/v1';
+  static const String stagingWebSocketUrl = 'wss://staging-api.ebic.in/realtime';
 
   // For Android Emulator: 10.0.2.2 points to host machine's localhost:3000
   // For Web / Windows / Desktop / iOS: localhost:3000
-  // In release mode without an override: https://api.ebic.in/v1
+  // In release mode or production environment: https://api.ebic.in/v1
   static String get defaultBaseUrl {
     if (_apiBaseUrlOverride.isNotEmpty) {
       final trimmed = _apiBaseUrlOverride.trim().replaceAll(RegExp(r'/+$'), '');
       return trimmed.endsWith('/v1') ? trimmed : '$trimmed/v1';
     }
-    if (kReleaseMode) return prodApiBaseUrl;
+    if (isProduction) return prodApiBaseUrl;
+    if (isStaging) return stagingApiBaseUrl;
     if (kIsWeb) return 'http://localhost:3000/v1';
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -32,6 +49,18 @@ class AppConfig {
   }
 
   static String apiBaseUrl = defaultBaseUrl;
+
+  static String get defaultWebSocketUrl {
+    if (isProduction) return prodWebSocketUrl;
+    if (isStaging) return stagingWebSocketUrl;
+    if (kIsWeb) return 'ws://localhost:3000/realtime';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'ws://10.0.2.2:3000/realtime';
+      default:
+        return 'ws://localhost:3000/realtime';
+    }
+  }
 
   /// Google Maps API Key for Geocoding, Places Autocomplete and Maps
   static const String googleMapsApiKey = String.fromEnvironment(
