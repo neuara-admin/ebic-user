@@ -40,9 +40,13 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
       config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
-      config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '$(inherited) -std=c++17 -stdlib=libc++'
+      config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '$(inherited) -std=gnu++17 -stdlib=libc++ -Dtypeof=__typeof__'
+      definitions = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+      definitions = [definitions] if definitions.is_a?(String)
+      definitions << 'typeof=__typeof__' unless definitions.include?('typeof=__typeof__')
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
     end
   end
 end

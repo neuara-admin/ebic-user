@@ -69,6 +69,11 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
+      - name: Patch Agora RTC Engine iOS sources
+        run: |
+          python3 -c "import glob, os; [open(p, 'w', encoding='utf-8').write(open(p, 'r', encoding='utf-8').read().replace('typeof(self)', '__typeof__(self)')) for p in glob.glob(os.path.expanduser('~/.pub-cache/hosted/pub.dev/agora_rtc_engine-*/ios/agora_rtc_engine/Sources/agora_rtc_engine/AgoraSurfaceViewFactory.mm'))]" || true
+          find ~/.pub-cache/hosted/pub.dev/ -name "AgoraSurfaceViewFactory.mm" -exec sed -i '' 's/typeof(self)/__typeof__(self)/g' {} + || true
+
       - name: Install CocoaPods
         run: |
           cd ios
