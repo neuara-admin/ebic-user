@@ -30,8 +30,8 @@ class AppConfig {
   static const String stagingWebSocketUrl = 'wss://staging-api.ebic.in/realtime';
 
   /// Universal base URL configured for all regions currently
-  static const String universalApiBaseUrl = 'http://10.0.2.2:3000/v1';
-  static const String universalWebSocketUrl = 'ws://10.0.2.2:3000/realtime';
+  static const String universalApiBaseUrl = 'http://100.61.151.169/v1';
+  static const String universalWebSocketUrl = 'ws://100.61.151.169/realtime';
 
   // Base URL resolution: uses API_BASE_URL override if passed, otherwise universalApiBaseUrl
   static String get defaultBaseUrl {

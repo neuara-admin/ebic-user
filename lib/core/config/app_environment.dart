@@ -21,9 +21,9 @@ class AppEnvironment {
     EnvironmentType type = EnvironmentType.development,
     String? apiBaseUrlOverride,
   }) {
-    final baseUrl = apiBaseUrlOverride ?? 'http://10.0.2.2:3000/v1';
+    final baseUrl = apiBaseUrlOverride ?? 'http://100.61.151.169/v1';
 
-    final wsUrl = 'ws://10.0.2.2:3000/realtime';
+    final wsUrl = 'ws://100.61.151.169/realtime';
 
     current = AppEnvironment(
       type: type,
