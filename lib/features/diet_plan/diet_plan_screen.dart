@@ -17,6 +17,7 @@ import 'diet_plan_meal_detail_screen.dart';
 import 'diet_plan_nutrition_screen.dart';
 import 'diet_plan_service.dart';
 import 'models/diet_plan_models.dart';
+import '../../core/theme/app_theme.dart';
 
 class DietPlanScreen extends StatefulWidget {
   const DietPlanScreen({super.key});
@@ -334,7 +335,7 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
 
   // 1. Redesigned Luxury Covered Member Selector
   Widget _buildMemberSelector() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Container(
       color: isDark ? AppColors.slate900 : Colors.white,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),

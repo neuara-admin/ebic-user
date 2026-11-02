@@ -16,6 +16,7 @@ import '../../core/services/razorpay_service.dart';
 import '../../core/storage/token_storage.dart';
 import '../chef_booking/cancel_booking_dialog.dart';
 import 'rate_order_dialog.dart';
+import '../../core/theme/app_theme.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final String orderId;
@@ -224,7 +225,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.slate950 : const Color(0xFFF8FAFC),
+        backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(title: const Text('Chef Booking Details'), elevation: 0),
         body: const Center(
           child: CircularProgressIndicator(color: AppColors.primary),
@@ -234,7 +235,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     if (_errorMessage != null || _order == null) {
       return Scaffold(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.slate950 : const Color(0xFFF8FAFC),
+        backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(title: const Text('Chef Booking Details'), elevation: 0),
         body: Center(
           child: Padding(
@@ -271,7 +272,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     final order = _order!;
     final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final isActive = _isOrderActive;
 
     return Scaffold(
@@ -656,7 +657,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   void _showTimelineSheet(BuildContext context, OrderModel order) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final activeIndex = order.statusStepIndex;
 
     showModalBottomSheet(

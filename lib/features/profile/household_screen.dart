@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/bmi_health_widget.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 3 — Sections 25–28: Household & Family Members Screen
 class HouseholdScreen extends StatefulWidget {
@@ -121,7 +122,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -313,7 +314,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
   }
 
   Widget _buildMemberCard(HouseholdMemberModel m, bool isSelected) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return EbicCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -31,17 +31,14 @@ class _EbicCardState extends State<EbicCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final defaultBg = isDark ? AppColors.slate900 : Colors.white;
+    const defaultBg = Colors.white;
     final defaultBorder = Border.all(
-      color: isDark
-          ? Colors.white.withOpacity(0.08)
-          : const Color(0xFF0F172A).withOpacity(0.06),
+      color: AppColors.hairlineBorder,
       width: 1.0,
     );
 
     return AnimatedScale(
-      scale: (_isPressed && widget.onTap != null) ? 0.982 : 1.0,
+      scale: (_isPressed && widget.onTap != null) ? 0.978 : 1.0,
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOutCubic,
       child: Container(
@@ -52,12 +49,12 @@ class _EbicCardState extends State<EbicCard> {
           border: widget.border ?? defaultBorder,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF0F172A).withOpacity(isDark ? 0.28 : 0.04),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.035),
               blurRadius: 20,
               offset: const Offset(0, 6),
             ),
             BoxShadow(
-              color: const Color(0xFF0F172A).withOpacity(isDark ? 0.10 : 0.02),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.015),
               blurRadius: 4,
               offset: const Offset(0, 1),
             ),

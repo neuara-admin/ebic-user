@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/referral_models.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class ReferralDetailSheet extends StatelessWidget {
   final ReferralItemModel referral;
@@ -19,8 +20,7 @@ class ReferralDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
     final cardBg = isDark ? AppColors.slate900 : Colors.white;
 
     final isQualified = referral.status == 'QUALIFIED' || referral.status == 'REWARD_PENDING' || referral.status == 'REWARDED';

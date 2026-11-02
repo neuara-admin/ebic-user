@@ -21,7 +21,6 @@ class EBICSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -39,7 +38,7 @@ class EBICSectionHeader extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppColors.slate900,
+                    color: AppColors.slate900,
                   ),
                 ),
                 if (subtitle != null) ...[
@@ -48,7 +47,7 @@ class EBICSectionHeader extends StatelessWidget {
                     subtitle!,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                      color: AppColors.slate500,
                     ),
                   ),
                 ],

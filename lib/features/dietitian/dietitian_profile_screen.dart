@@ -6,6 +6,7 @@ import '../../shared/models/dietitian_model.dart';
 import '../../shared/models/health_pass_model.dart';
 import '../health_pass/data/health_pass_repository.dart';
 import 'dietitian_chat_screen.dart';
+import '../../core/theme/app_theme.dart';
 
 class DietitianProfileScreen extends StatefulWidget {
   final DietitianModel dietitian;
@@ -241,7 +242,7 @@ class _DietitianProfileScreenState extends State<DietitianProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     final specList = (widget.dietitian.specialization ??
             'Clinical Nutrition, Metabolic Health, Weight Management')

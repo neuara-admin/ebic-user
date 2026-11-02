@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,11 +10,13 @@ import '../../core/auth/session_manager.dart';
 import '../../core/realtime/realtime_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../shared/models/order_model.dart';
 import '../../shared/models/health_pass_model.dart';
 import '../../shared/models/consultation_model.dart';
 import '../../shared/models/address_model.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../shared/widgets/bespoke_ui_kit.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
 import '../health_pass/data/health_pass_repository.dart';
@@ -622,7 +625,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (bottomSheetContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final isDark = context.isDark;
             final double? curWeight = double.tryParse(
               weightController.text.trim(),
             );
@@ -1140,14 +1143,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final isAuthed = SessionManager().isAuthenticated;
     final userName = user?['name'] ?? (isAuthed ? 'Friend' : 'Guest');
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? Colors.white : AppColors.slate900;
-    final textMuted = isDark ? AppColors.slate400 : AppColors.slate500;
+    final isDark = context.isDark;
+    const textPrimary = AppColors.slate900;
+    const textMuted = AppColors.slate500;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
+      backgroundColor: AppColors.porcelain,
       appBar: AppBar(
-        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
+        backgroundColor: AppColors.porcelain,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         foregroundColor: textPrimary,
@@ -1724,40 +1727,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              StatusBadge(
-                status: order.status,
-                color: isEnRoute ? Colors.white : null,
+              liveStatusPill(
+                order.customerStatusLabel,
+                isEnRoute ? Colors.white : AppColors.primary,
+                isPulsing: isEnRoute || isCooking,
               ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: isEnRoute
-                      ? Colors.white.withOpacity(0.2)
-                      : AppColors.primarySubtle,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isEnRoute
-                        ? Colors.white.withOpacity(0.4)
-                        : AppColors.primary.withOpacity(0.3),
-                  ),
-                ),
-                child: Icon(
-                  isEnRoute
-                      ? Icons.moped_rounded
-                      : (isArrived
-                            ? Icons.location_on_rounded
-                            : (isCooking
-                                  ? Icons.soup_kitchen_rounded
-                                  : Icons.person_rounded)),
-                  color: isEnRoute ? Colors.white : AppColors.primaryDark,
-                  size: 22,
-                ),
+              iconCapsule(
+                icon: isEnRoute
+                    ? Icons.moped_rounded
+                    : (isArrived
+                          ? Icons.location_on_rounded
+                          : (isCooking
+                                ? Icons.soup_kitchen_rounded
+                                : Icons.person_rounded)),
+                color: isEnRoute ? Colors.white : AppColors.primaryDark,
+                size: 44,
+                iconSize: 22,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2369,7 +2359,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Journey Stage Card when there is NO active chef order
 
   Widget _buildQuickActionsRow() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     final actions = [
       _QuickAction(
@@ -2474,23 +2464,11 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? action.iconColor.withOpacity(0.18)
-                  : action.iconBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: action.iconColor.withOpacity(0.20),
-                width: 0.8,
-              ),
-            ),
-            child: Icon(
-              action.icon,
-              size: 20,
-              color: action.iconColor,
-            ),
+          iconCapsule(
+            icon: action.icon,
+            color: action.iconColor,
+            size: 38,
+            iconSize: 19,
           ),
           const SizedBox(height: 7),
           SizedBox(
@@ -2616,7 +2594,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_hasTodayPrescribedMeals) {
       return const SizedBox.shrink();
     }
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     final todayPlanData =
         _todayMeal ?? (_homeData?['today_plan'] as Map<String, dynamic>?);
@@ -3042,7 +3020,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
   Widget _buildHealthSnapshotCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     // 1. Guest / Not Logged In State -> Dedicated Preview Card
     if (!SessionManager().isAuthenticated) {
@@ -3092,21 +3070,24 @@ class _HomeScreenState extends State<HomeScreen> {
         : 0.0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: AppColors.surfaceWarm,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFF0F172A).withValues(alpha: 0.06),
+          color: AppColors.hairlineBorder,
           width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: isDark ? 0.25 : 0.04),
-            blurRadius: 18,
-            offset: const Offset(0, 5),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.035),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.015),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -3358,32 +3339,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap();
               }
             : null,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
           decoration: BoxDecoration(
-            color: isDark
-                ? color.withValues(alpha: 0.08)
-                : color.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(14),
+            color: color.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: color.withValues(alpha: isDark ? 0.2 : 0.15),
-              width: 0.8,
+              color: color.withValues(alpha: 0.16),
+              width: 1.0,
             ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 26,
-                height: 26,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
-                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, size: 14, color: color),
+                child: Icon(icon, size: 15, color: color),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 7),
               RichText(
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -3392,20 +3371,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     TextSpan(
                       text: value,
-                      style: TextStyle(
-                        fontSize: 14,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
                         fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white : AppColors.slate900,
+                        color: AppColors.slate900,
+                        letterSpacing: -0.3,
                       ),
                     ),
                     if (unit.isNotEmpty) ...[
                       const TextSpan(text: ' '),
                       TextSpan(
                         text: unit,
-                        style: TextStyle(
+                        style: GoogleFonts.inter(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                          color: AppColors.slate500,
                         ),
                       ),
                     ],
@@ -3414,12 +3394,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                badge ?? label,
+                (badge ?? label).toUpperCase(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w600,
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
                   color: color,
                 ),
               ),
@@ -3434,21 +3415,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildGuestHealthSnapshotCard(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: AppColors.surfaceWarm,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFF0F172A).withValues(alpha: 0.06),
+          color: AppColors.hairlineBorder,
           width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: isDark ? 0.25 : 0.04),
-            blurRadius: 18,
-            offset: const Offset(0, 5),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.035),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.015),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -3696,7 +3680,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Theme.of(context).brightness == Brightness.dark ? Colors.white : AppColors.slate900,
+              color: AppColors.slate900,
             ),
           ),
           const SizedBox(height: 4),
@@ -4321,7 +4305,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Theme.of(context).brightness == Brightness.dark ? Colors.white : AppColors.slate900,
+                color: AppColors.slate900,
               ),
             ),
             const SizedBox(height: 8),
@@ -4330,7 +4314,7 @@ class _HomeScreenState extends State<HomeScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: Theme.of(context).brightness == Brightness.dark ? AppColors.slate400 : AppColors.slate600,
+                color: AppColors.slate600,
                 height: 1.4,
               ),
             ),

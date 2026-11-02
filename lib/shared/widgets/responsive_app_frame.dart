@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 ///
 /// - Caps the system font size at [maxTextScale] (Android allows up to 2x,
 ///   which breaks most layouts) while still honouring "large text" settings.
+/// - Enforces [Brightness.light] so device system dark mode never leaks
+///   unreadable dark patches or misaligned contrast into the UI.
 /// - On tablets / wide windows, shows the phone-first UI in a centred column
-///   no wider than [maxContentWidth] instead of stretching every card.
+///   no wider than [maxContentWidth] on a warm neutral gutter.
 class ResponsiveAppFrame extends StatelessWidget {
   static const double maxContentWidth = 600;
   static const double maxTextScale = 1.3;
@@ -19,22 +21,25 @@ class ResponsiveAppFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final textScaler = mq.textScaler.clamp(minScaleFactor: 0.9, maxScaleFactor: maxTextScale);
+    final lightMq = mq.copyWith(
+      textScaler: textScaler,
+      platformBrightness: Brightness.light,
+    );
     final content = child ?? const SizedBox.shrink();
 
     if (mq.size.width <= maxContentWidth) {
-      return MediaQuery(data: mq.copyWith(textScaler: textScaler), child: content);
+      return MediaQuery(data: lightMq, child: content);
     }
 
     // Wide screen: centre a phone-width column and tell it its real width.
     return ColoredBox(
-      color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF01040D) : const Color(0xFFE9EEF3),
+      color: const Color(0xFFEFEFEA),
       child: Center(
         child: SizedBox(
           width: maxContentWidth,
           child: MediaQuery(
-            data: mq.copyWith(
+            data: lightMq.copyWith(
               size: Size(maxContentWidth, mq.size.height),
-              textScaler: textScaler,
             ),
             child: ClipRect(child: content),
           ),

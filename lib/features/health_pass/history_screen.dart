@@ -7,6 +7,7 @@ import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/services/invoice_download_service.dart';
 import 'data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Section 48: Health Pass History Screen
 class HealthPassHistoryScreen extends StatefulWidget {
@@ -56,7 +57,7 @@ class _HealthPassHistoryScreenState extends State<HealthPassHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

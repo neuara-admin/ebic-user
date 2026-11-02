@@ -5,6 +5,7 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../core/theme/app_theme.dart';
 
 class WalletCreditsScreen extends StatefulWidget {
   const WalletCreditsScreen({super.key});
@@ -82,7 +83,7 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final filteredLedger = _selectedFilter == 'ALL'
         ? _ledger
         : _ledger.where((tx) => tx['type'] == _selectedFilter).toList();
@@ -352,7 +353,7 @@ class _WalletCreditsScreenState extends State<WalletCreditsScreen> {
   }
 
   Widget _buildFilterChip(String key, String label) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final isSelected = _selectedFilter == key;
     return InkWell(
       onTap: () => setState(() => _selectedFilter = key),

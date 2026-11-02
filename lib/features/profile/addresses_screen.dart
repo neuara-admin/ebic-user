@@ -5,6 +5,7 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/address_model.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 3 — Sections 29, 30 & 31: Saved Delivery Kitchen Addresses Screen
 class AddressesScreen extends StatefulWidget {
@@ -198,7 +199,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -293,7 +294,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
   }
 
   Widget _buildAddressCard(AddressModel addr) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final isRechecking = _recheckingAddressId == addr.id;
 
     return EbicCard(

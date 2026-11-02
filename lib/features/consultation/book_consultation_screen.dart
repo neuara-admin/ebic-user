@@ -11,6 +11,7 @@ import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../dietitian/dietitian_profile_screen.dart';
 import '../health_pass/data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 3 & 4 — Sections 17 & 35: Book Clinical Dietitian Video Consultation Screen
 /// Supports multi-member family selection, dynamic dietitian choice, real-time availability slots, and zero-cost Health Pass redemption.
@@ -408,8 +409,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     final isPendingKickoff = _activePass?.isConsultationPending == true && !_isFollowUp;
     final entitlement = _eligibility?['entitlement'] as Map<String, dynamic>?;

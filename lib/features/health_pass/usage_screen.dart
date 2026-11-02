@@ -3,6 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/models/health_pass_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Sections 43 & 44: Health Pass Entitlements & Immutable Usage Ledger
 class HealthPassUsageScreen extends StatefulWidget {
@@ -57,7 +58,7 @@ class _HealthPassUsageScreenState extends State<HealthPassUsageScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

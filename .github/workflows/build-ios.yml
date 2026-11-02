@@ -1,0 +1,38 @@
+name: Build iOS App (User App)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build iOS Application (No Codesign for Testing/Staging)
+        run: flutter build ipa --no-codesign
+
+      - name: Compress App Bundle
+        run: |
+          cd build/ios/archive/Runner.xcarchive/Products/Applications
+          zip -r Runner.app.zip Runner.app
+
+      - name: Upload iOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebic-user-ios-app
+          path: build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app.zip
+

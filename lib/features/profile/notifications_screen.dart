@@ -8,6 +8,7 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Notifications Screen (Module 19 & Section 20 Specification).
 /// Fully integrated with NestJS backend (/v1/notifications):
@@ -375,7 +376,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredList = _getFilteredList();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final textPrimary = isDark ? Colors.white : AppColors.slate900;
     final textSecondary = isDark ? AppColors.slate300 : AppColors.slate700;
     final textMuted = isDark ? AppColors.slate400 : AppColors.slate500;

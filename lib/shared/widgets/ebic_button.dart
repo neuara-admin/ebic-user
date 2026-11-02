@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 
 enum EbicButtonVariant { primary, outline, ghost, danger }
 
@@ -48,7 +49,7 @@ class _EbicButtonState extends State<EbicButton> {
     Color? bgColor;
     Gradient? gradient;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     switch (effectiveVariant) {
       case EbicButtonVariant.outline:

@@ -7,6 +7,7 @@ import '../../shared/widgets/dish_video_modal.dart';
 import '../catalogue/dish_detail_screen.dart';
 import 'diet_plan_service.dart';
 import 'models/diet_plan_models.dart';
+import '../../core/theme/app_theme.dart';
 
 class DietPlanMealDetailScreen extends StatefulWidget {
   final String planId;
@@ -265,7 +266,7 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
 
     final meal = _meal!;
     final occasionColor = _getOccasionColor(meal.occasion);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -726,7 +727,7 @@ class _DietPlanMealDetailScreenState extends State<DietPlanMealDetailScreen> {
 
   // Dish Card with Image, Video, Portions, and Ingredients
   Widget _buildDishItemCard(DietPlanDishItemModel dishItem) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final isVeg = dishItem.dietaryTags.any(
       (t) => t.toLowerCase() == 'vegetarian' || t.toLowerCase() == 'vegan',
     );

@@ -13,6 +13,7 @@ import '../../shared/models/health_pass_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../dietitian/dietitian_profile_screen.dart';
 import '../health_pass/data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 class ConsultationListScreen extends StatefulWidget {
   const ConsultationListScreen({super.key});
@@ -407,8 +408,7 @@ class _ConsultationListScreenState extends State<ConsultationListScreen> with Si
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     // Upcoming contains SCHEDULED and IN_PROGRESS whose time hasn't run out.
     // The server closes these within minutes of the window ending; until it
@@ -2017,7 +2017,7 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
     }).toList();
 
     final timeFormat = DateFormat('hh:mm a');
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Container(
       constraints: BoxConstraints(

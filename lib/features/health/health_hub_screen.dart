@@ -14,6 +14,7 @@ import '../dietitian/dietitian_profile_screen.dart';
 import '../../shared/models/dietitian_model.dart';
 import '../health_pass/data/health_pass_repository.dart';
 import 'presentation/widgets/provenance_badge.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Section 31 & 35: Health Hub Screen
 /// Designed as a cohesive health dashboard rather than a list of disconnected features.
@@ -494,7 +495,7 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final isDark = context.isDark;
             final double? enteredWeight =
                 double.tryParse(weightController.text.trim());
             final double? enteredHeight =
@@ -1247,7 +1248,7 @@ class _HealthHubScreenState extends State<HealthHubScreen> {
     final heartSource = sources['heartRate']?.toString();
     final calSource = sources['calories']?.toString();
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final cardBg = isDark ? AppColors.slate900 : Colors.white;
     final cardBorder = isDark ? AppColors.slate800 : AppColors.slate200;
     final textPrimary = isDark ? Colors.white : AppColors.slate900;

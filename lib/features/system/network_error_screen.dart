@@ -5,6 +5,7 @@ import '../../core/api/api_client.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Full-screen bespoke Network Error & Offline screen (Section 315 / 322).
 /// Displays when internet connectivity is lost or DNS fails to resolve.
@@ -90,7 +91,7 @@ class _NetworkErrorScreenState extends State<NetworkErrorScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : Colors.white,

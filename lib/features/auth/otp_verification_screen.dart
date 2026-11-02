@@ -8,6 +8,7 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 2 Sections 14–17 — OTP Verification Screen
 /// Purpose-bound verification with individual 6-digit input cells,
@@ -263,7 +264,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.background,
@@ -450,7 +451,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   Widget _buildPinCell(int index) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return SizedBox(
       width: double.infinity,

@@ -44,13 +44,10 @@ class _EBICDishCardState extends State<EBICDishCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? AppColors.slate900 : Colors.white;
+        const cardBg = Colors.white;
     final borderColor = widget.isSelected
         ? AppColors.primary
-        : (isDark
-            ? Colors.white.withOpacity(0.08)
-            : const Color(0xFF0F172A).withOpacity(0.06));
+        : AppColors.hairlineBorder;
 
     return AnimatedScale(
       scale: (_isPressed && widget.onTap != null) ? 0.982 : 1.0,
@@ -66,12 +63,12 @@ class _EBICDishCardState extends State<EBICDishCard> {
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF0F172A).withOpacity(isDark ? 0.28 : 0.04),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.035),
               blurRadius: 18,
               offset: const Offset(0, 5),
             ),
             BoxShadow(
-              color: const Color(0xFF0F172A).withOpacity(isDark ? 0.10 : 0.02),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.015),
               blurRadius: 4,
               offset: const Offset(0, 1),
             ),
@@ -106,9 +103,7 @@ class _EBICDishCardState extends State<EBICDishCard> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(13),
                         border: Border.all(
-                          color: isDark
-                              ? Colors.white.withOpacity(0.06)
-                              : const Color(0xFF0F172A).withOpacity(0.05),
+                          color: AppColors.hairlineBorder,
                           width: 1,
                         ),
                       ),
@@ -134,7 +129,7 @@ class _EBICDishCardState extends State<EBICDishCard> {
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
                             letterSpacing: -0.2,
-                            color: isDark ? Colors.white : AppColors.slate900,
+                            color: AppColors.slate900,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -145,7 +140,7 @@ class _EBICDishCardState extends State<EBICDishCard> {
                             widget.description!,
                             style: TextStyle(
                               fontSize: 12,
-                              color: isDark ? AppColors.slate400 : AppColors.slate500,
+                              color: AppColors.slate500,
                               height: 1.25,
                             ),
                             maxLines: 1,
@@ -159,7 +154,7 @@ class _EBICDishCardState extends State<EBICDishCard> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 2.5),
                                 decoration: BoxDecoration(
-                                  color: isDark ? AppColors.slate800 : AppColors.slate100,
+                                  color: AppColors.slate100,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Row(
@@ -172,7 +167,7 @@ class _EBICDishCardState extends State<EBICDishCard> {
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
-                                        color: isDark ? AppColors.slate300 : AppColors.slate700,
+                                        color: AppColors.slate700,
                                       ),
                                     ),
                                   ],
@@ -184,7 +179,7 @@ class _EBICDishCardState extends State<EBICDishCard> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 2.5),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFEF3C7).withOpacity(isDark ? 0.2 : 0.8),
+                                  color: const Color(0xFFFEF3C7).withValues(alpha: 0.8),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Row(
@@ -197,7 +192,7 @@ class _EBICDishCardState extends State<EBICDishCard> {
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
-                                        color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
+                                        color: const Color(0xFFB45309),
                                       ),
                                     ),
                                   ],

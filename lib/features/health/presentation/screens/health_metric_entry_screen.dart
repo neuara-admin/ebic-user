@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/datasources/health_remote_datasource.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class HealthMetricEntryScreen extends StatefulWidget {
   final String memberId;
@@ -123,7 +124,7 @@ class _HealthMetricEntryScreenState extends State<HealthMetricEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final cardBg = isDark ? AppColors.slate900 : Colors.white;
     final cardBorder = isDark ? AppColors.slate800 : AppColors.slate200;
     final inputBg = isDark ? AppColors.slate800 : AppColors.slate50;

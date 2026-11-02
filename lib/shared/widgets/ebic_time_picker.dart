@@ -43,7 +43,6 @@ class EBICTimePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeFormatted = selectedTime != null ? selectedTime!.format(context) : hint;
 
     return Column(
@@ -56,7 +55,7 @@ class EBICTimePicker extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: isDark ? AppColors.slate200 : AppColors.slate800,
+              color: AppColors.slate800,
             ),
           ),
           const SizedBox(height: DesignTokens.spaceXS),
@@ -68,10 +67,10 @@ class EBICTimePicker extends StatelessWidget {
             height: DesignTokens.inputHeight,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.slate800 : Colors.white,
+              color: Colors.white,
               borderRadius: DesignTokens.borderRadiusMD,
               border: Border.all(
-                color: isDark ? AppColors.slate700 : AppColors.slate200,
+                color: AppColors.hairlineBorder,
               ),
             ),
             child: Row(
@@ -84,7 +83,7 @@ class EBICTimePicker extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 15,
                       color: selectedTime != null
-                          ? (isDark ? Colors.white : AppColors.slate900)
+                          ? AppColors.slate900
                           : AppColors.slate400,
                     ),
                   ),

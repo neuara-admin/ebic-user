@@ -6,6 +6,7 @@ import '../../data/models/health_metric_entry_model.dart';
 import '../widgets/provenance_badge.dart';
 import 'health_metric_entry_screen.dart';
 import 'health_metric_history_screen.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class HealthMetricsScreen extends StatefulWidget {
   final String memberId;
@@ -62,7 +63,7 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final cardBg = isDark ? AppColors.slate900 : Colors.white;
     final cardBorder = isDark ? AppColors.slate800 : AppColors.slate200;
     final textPrimary = isDark ? Colors.white : AppColors.slate900;

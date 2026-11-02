@@ -12,6 +12,7 @@ import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../core/storage/token_storage.dart';
 import '../catalogue/cart_service.dart';
+import '../../core/theme/app_theme.dart';
 
 class PaymentCheckoutScreen extends StatefulWidget {
   final Map<String, dynamic> checkoutData;
@@ -993,7 +994,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
     bool enabled = true,
   }) {
     final isSelected = _selectedMethod == key;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Opacity(
       opacity: enabled ? 1 : 0.55,

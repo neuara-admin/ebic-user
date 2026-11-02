@@ -14,6 +14,7 @@ import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/member_switcher_widget.dart';
 import 'widgets/avatar_picker_sheet.dart';
 import 'widgets/email_otp_sheet.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Customer Profile & Account Dashboard Screen
 /// Features Bento UI architecture, family switcher, clinical vitals summary,
@@ -105,7 +106,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     final isAuthed = _auth.isAuthenticated;
     final user = _auth.user;

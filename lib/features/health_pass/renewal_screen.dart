@@ -9,6 +9,7 @@ import '../../shared/models/health_pass_model.dart';
 import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import 'data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Sections 46 & 47: Health Pass Renewal Screen
 class HealthPassRenewalScreen extends StatefulWidget {
@@ -194,7 +195,7 @@ class _HealthPassRenewalScreenState extends State<HealthPassRenewalScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

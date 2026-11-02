@@ -21,7 +21,7 @@ class AppTheme {
         error: AppColors.danger,
         onError: Colors.white,
       ),
-      scaffoldBackgroundColor: AppColors.slate50,
+      scaffoldBackgroundColor: AppColors.porcelain,
       textTheme: baseTextTheme.copyWith(
         displayLarge: GoogleFonts.plusJakartaSans(
           fontSize: 32,
@@ -62,9 +62,10 @@ class AppTheme {
         ),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.porcelain,
         foregroundColor: AppColors.slate900,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
         titleTextStyle: GoogleFonts.plusJakartaSans(
           fontSize: 18,
@@ -77,8 +78,8 @@ class AppTheme {
         color: Colors.white,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.slate200, width: 1),
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppColors.hairlineBorder, width: 1),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -101,16 +102,16 @@ class AppTheme {
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.slate200, width: 1),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.hairlineBorder, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.slate200, width: 1),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.hairlineBorder, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -160,13 +161,14 @@ class AppTheme {
 /// Context extension for quick design tokens. The app is light-only (dark mode
 /// was removed: parts of the UI were unreadable in it), so isDark is always false.
 extension AppThemeContext on BuildContext {
-  bool get isDark => Theme.of(this).brightness == Brightness.dark;
-  Color get textPrimary => isDark ? Colors.white : AppColors.slate900;
-  Color get textSecondary => isDark ? AppColors.slate300 : AppColors.slate700;
-  Color get textMuted => isDark ? AppColors.slate400 : AppColors.slate500;
-  Color get cardBg => isDark ? AppColors.slate900 : Colors.white;
-  Color get inputBg => isDark ? AppColors.slate900 : Colors.white;
-  Color get canvasBg => isDark ? AppColors.slate950 : AppColors.slate50;
-  Color get surfaceBorder => isDark ? const Color(0xFF1E293B) : AppColors.slate200;
-  Color get iconColor => isDark ? Colors.white : AppColors.slate900;
+  /// Dark mode is permanently disabled — the app is locked to the bespoke warm light system.
+  bool get isDark => false;
+  Color get textPrimary => AppColors.slate900;
+  Color get textSecondary => AppColors.slate700;
+  Color get textMuted => AppColors.slate500;
+  Color get cardBg => Colors.white;
+  Color get inputBg => Colors.white;
+  Color get canvasBg => AppColors.porcelain;
+  Color get surfaceBorder => AppColors.hairlineBorder;
+  Color get iconColor => AppColors.slate900;
 }

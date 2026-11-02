@@ -4,6 +4,7 @@ import '../../../shared/widgets/ebic_button.dart';
 import '../data/referral_models.dart';
 import '../data/referral_repository.dart';
 import 'widgets/referral_detail_sheet.dart';
+import '../../../core/theme/app_theme.dart';
 
 class ReferralHistoryScreen extends StatefulWidget {
   const ReferralHistoryScreen({super.key});
@@ -61,7 +62,7 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

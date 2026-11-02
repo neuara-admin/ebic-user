@@ -8,6 +8,7 @@ import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_dish_image.dart';
 import '../../shared/widgets/dish_video_modal.dart';
 import 'cart_service.dart';
+import '../../core/theme/app_theme.dart';
 
 class DishDetailScreen extends StatefulWidget {
   final DishModel dish;
@@ -90,7 +91,7 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final dish = widget.dish;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final totalCookTime =
         dish.baseCookTimeMin + (_servings - 1) * dish.perServingIncMin;
 

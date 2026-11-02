@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Centralized Dialog for EBIC User App.
 /// Part of the core component suite (Section 6.2).
@@ -40,7 +41,7 @@ class EBICDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: DesignTokens.borderRadiusLG),

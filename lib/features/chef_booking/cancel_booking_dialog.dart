@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 18 & Specification Sections 251–257: Customer Order Cancellation
 /// Connects to backend cancellation governance, checks real-time refund/entitlement eligibility,
@@ -215,7 +216,7 @@ class _CancelBookingDialogState extends State<CancelBookingDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final sheetBg = isDark ? AppColors.slate900 : Colors.white;
     final cardBg = isDark ? AppColors.slate800 : const Color(0xFFF8FAFC);
     final cardBorder = isDark ? AppColors.slate700 : const Color(0xFFE2E8F0);

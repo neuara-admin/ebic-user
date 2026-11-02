@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_theme.dart';
 
 enum HealthPassStage {
   noPass,
@@ -209,7 +210,7 @@ class _HealthJourneyStepperState extends State<HealthJourneyStepper> {
       return const SizedBox.shrink();
     }
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final stepData = _getStepData(_displayedStep);
     final isInspectingOther = _inspectedStep != null && _inspectedStep != _activeStepIndex;
 

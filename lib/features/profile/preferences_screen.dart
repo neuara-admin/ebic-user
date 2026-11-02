@@ -4,6 +4,7 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/storage/local_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../core/theme/app_theme.dart';
 
 
 /// Module 3 — Section 32 (Sections 60–63): Customer Preferences Screen
@@ -91,7 +92,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Form field date picker button for EBIC User App.
 /// Part of the core component suite (Section 6.2).
@@ -51,7 +52,7 @@ class EBICDatePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final dateFormatted = selectedDate != null ? DateFormat('EEE, dd MMM yyyy').format(selectedDate!) : hint;
 
     return Column(

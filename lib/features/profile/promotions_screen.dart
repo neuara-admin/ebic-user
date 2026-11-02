@@ -6,6 +6,7 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../core/theme/app_theme.dart';
 
 class PromotionsScreen extends StatefulWidget {
   const PromotionsScreen({super.key});
@@ -169,7 +170,7 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,

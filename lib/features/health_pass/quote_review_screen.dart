@@ -11,6 +11,7 @@ import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Sections 38 & 39: Health Pass Quote Review & Purchase Confirmation
 class HealthPassQuoteReviewScreen extends StatefulWidget {
@@ -348,11 +349,10 @@ class _HealthPassQuoteReviewScreenState extends State<HealthPassQuoteReviewScree
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Review & Confirm'),
       ),
@@ -931,8 +931,7 @@ class _HealthPassQuoteReviewScreenState extends State<HealthPassQuoteReviewScree
   }
 
   void _showOffersBottomSheet() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     showModalBottomSheet(
       context: context,
@@ -1147,8 +1146,7 @@ class _HealthPassQuoteReviewScreenState extends State<HealthPassQuoteReviewScree
     if (_finalTotal <= 0 && _appliedCoupon == null) {
       return const SizedBox.shrink();
     }
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return EbicCard(
       padding: const EdgeInsets.all(16),

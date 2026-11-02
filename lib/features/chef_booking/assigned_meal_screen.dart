@@ -10,6 +10,7 @@ import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_dish_image.dart';
 import '../../shared/widgets/loading_view.dart';
 import '../catalogue/dish_detail_screen.dart';
+import '../../core/theme/app_theme.dart';
 
 class AssignedMealScreen extends StatefulWidget {
   const AssignedMealScreen({super.key});
@@ -651,7 +652,7 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
   }
 
   void _showNoAssignedPlanDialog() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -1415,7 +1416,7 @@ class _AssignedMealScreenState extends State<AssignedMealScreen> {
   }
 
   Widget _buildAssignedDishesList() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     if (_isLoadingPlans) {
       return Container(

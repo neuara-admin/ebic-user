@@ -13,6 +13,7 @@ import '../../shared/widgets/loading_view.dart';
 import 'cart_service.dart';
 import 'dish_detail_screen.dart';
 import '../../shared/widgets/ebic_dish_image.dart';
+import '../../core/theme/app_theme.dart';
 
 class CatalogueScreen extends StatefulWidget {
   const CatalogueScreen({super.key});
@@ -401,7 +402,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final isDark = context.isDark;
             return Container(
               height: MediaQuery.of(context).size.height * 0.78,
               decoration: BoxDecoration(
@@ -795,7 +796,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     bool isSelected,
     VoidCallback onTap,
   ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -835,7 +836,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -1349,14 +1350,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             child: Container(
               height: 42,
               decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? AppColors.slate900
-                    : AppColors.slate100,
+                color: AppColors.slate100,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? AppColors.slate700
-                      : AppColors.primary.withOpacity(0.35),
+                  color: AppColors.primary.withOpacity(0.35),
                 ),
               ),
               child: TextField(
@@ -1364,9 +1361,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 autofocus: _isSearchExpanded && _searchQuery.isEmpty,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : AppColors.slate900,
+                  color: AppColors.slate900,
                   fontWeight: FontWeight.w500,
                 ),
                 onChanged: _onSearchChanged,
@@ -1374,9 +1369,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   hintText: 'Search dishes, cuisines, ingredients...',
                   hintStyle: TextStyle(
                     fontSize: 12.5,
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? AppColors.slate400
-                        : AppColors.slate500,
+                    color: AppColors.slate500,
                   ),
                   prefixIcon: const Icon(
                     Icons.search_rounded,
@@ -1519,7 +1512,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   }
 
   Widget _buildDishCard(DishModel dish) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final activeMemberId = _selectedMember?.id ?? 'self';
     final activeMemberName = _selectedMember?.name ?? 'Self';
     final count = _cart.getServingsForMember(activeMemberId, dish.id);
@@ -1859,9 +1852,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       decoration: BoxDecoration(
         color: AppColors.slate900,
         borderRadius: BorderRadius.circular(18),
-        border: Theme.of(context).brightness == Brightness.dark
-            ? Border.all(color: AppColors.slate700)
-            : null,
+        border: null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.28),

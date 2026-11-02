@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Modal bottom sheet utility and container for EBIC User App.
 /// Part of the core component suite (Section 6.2).
@@ -42,7 +43,7 @@ class EBICBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Container(
       constraints: BoxConstraints(

@@ -4,6 +4,7 @@ import '../../core/api/api_client.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Full-screen Server Issue and Maintenance screen (Section 316 / 317).
 /// Handles 500 (Internal Server Error) and 503 (Scheduled Maintenance).
@@ -79,7 +80,7 @@ class _ServerIssueScreenState extends State<ServerIssueScreen> {
         ? 'We are upgrading our culinary & nutrition infrastructure to serve you better. We will be back online shortly.'
         : 'We encountered an unexpected server glitch. No data was lost. Our engineering team has been automatically alerted.';
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : Colors.white,

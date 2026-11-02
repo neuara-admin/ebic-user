@@ -8,6 +8,7 @@ import '../../../shared/widgets/ebic_button.dart';
 import '../data/referral_models.dart';
 import '../data/referral_repository.dart';
 import 'widgets/referral_detail_sheet.dart';
+import '../../../core/theme/app_theme.dart';
 
 class ReferralHomeScreen extends StatefulWidget {
   const ReferralHomeScreen({super.key});
@@ -173,7 +174,7 @@ class _ReferralHomeScreenState extends State<ReferralHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

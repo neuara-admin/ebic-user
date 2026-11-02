@@ -7,6 +7,7 @@ import '../../shared/models/health_pass_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Section 35: Health Pass Plan Comparison Screen
 /// Generates benefit comparison matrix authoritatively from backend configuration.
@@ -57,7 +58,7 @@ class _HealthPassComparisonScreenState extends State<HealthPassComparisonScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

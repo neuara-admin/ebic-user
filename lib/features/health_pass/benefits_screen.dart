@@ -8,6 +8,7 @@ import '../../shared/models/health_pass_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Section 42: Health Pass Benefits & Media Screen
 /// Authoritatively renders plan benefits, photos, and video guidance dynamically from the backend.
@@ -181,7 +182,7 @@ class _HealthPassBenefitsScreenState extends State<HealthPassBenefitsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
     final planName = widget.arguments['planName']?.toString() ?? _plan?.displayName ?? 'Health Pass';
 
     final mediaSlides = _getMediaSlides();

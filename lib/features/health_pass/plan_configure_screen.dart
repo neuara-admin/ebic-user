@@ -11,6 +11,7 @@ import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Sections 36 & 37: Health Pass Duration & Member Selection
 class HealthPassConfigureScreen extends StatefulWidget {
@@ -220,7 +221,7 @@ class _HealthPassConfigureScreenState extends State<HealthPassConfigureScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

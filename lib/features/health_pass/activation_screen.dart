@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Section 41: Health Pass Payment Result & Activation Screen
 /// Authoritatively handles both PAYMENT SUCCESS and PAYMENT FAILURE states.
@@ -17,7 +18,7 @@ class HealthPassActivationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     final isSuccess = arguments['isSuccess'] as bool? ?? true;
     final planName = arguments['planName']?.toString() ?? 'EBIC Care Health Pass';

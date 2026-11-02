@@ -5,6 +5,7 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 2 Section 16 — Customer Login Screen
 /// Pure phone + OTP authentication flow with rate-limiting protection.
@@ -116,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.background,

@@ -9,6 +9,7 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/health_pass_model.dart';
 import '../health_pass/data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Section 24–30: Book a Home Chef
 /// Streamlined, high-converting chef booking selector screen.
@@ -194,7 +195,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
   }
 
   void _showPassRequiredModal() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -303,7 +304,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
   }
 
   void _showHowItWorksModal() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -426,8 +427,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     if (_isCheckingPass) {
       return Scaffold(
@@ -1029,7 +1029,7 @@ class _BookingTypeScreenState extends State<BookingTypeScreen> {
   }
 
   void _showDietPlanNotAssignedSheet() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final isPendingConsultation = _isConsultationPending;
     final doctor = _dietitianName ?? 'Clinical Dietitian';
     final cleanDoctor = doctor.startsWith('Dr.') ? doctor : 'Dr. $doctor';

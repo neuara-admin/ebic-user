@@ -5,6 +5,7 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 2 Section 15 — Registration Screen
 /// Implements full customer registration with real-time client validation,
@@ -169,7 +170,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.background,
@@ -392,7 +393,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildFieldLabel(String label) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
@@ -411,7 +412,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required IconData prefixIcon,
     String? prefixText,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return InputDecoration(
       hintText: hint,
       hintStyle: TextStyle(color: isDark ? AppColors.slate500 : AppColors.slate400, fontSize: 14),

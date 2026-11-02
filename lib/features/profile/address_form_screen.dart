@@ -8,6 +8,7 @@ import '../../shared/models/address_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'widgets/kitchen_map_picker_sheet.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 3 — Sections 29, 30, 31: Add & Edit Delivery Kitchen Address Screen
 class AddressFormScreen extends StatefulWidget {
@@ -375,7 +376,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(

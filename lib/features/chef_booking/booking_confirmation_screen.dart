@@ -10,6 +10,7 @@ import '../../shared/models/quote_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../catalogue/cart_service.dart';
+import '../../core/theme/app_theme.dart';
 
 class BookingConfirmationScreen extends StatefulWidget {
   final Map<String, dynamic> confirmationData;
@@ -125,7 +126,7 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
     final isCompleted = statusUpper == 'COMPLETED';
     final isInactive = isCancelled || isCompleted;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return WillPopScope(
       onWillPop: () async {

@@ -9,6 +9,7 @@ import '../../shared/models/household_member_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/ebic_card.dart';
 import 'data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 4 — Section 40: Health Pass Payment Flow & States
 class HealthPassPaymentScreen extends StatefulWidget {
@@ -178,7 +179,7 @@ class _HealthPassPaymentScreenState extends State<HealthPassPaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

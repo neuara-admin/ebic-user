@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Interactive filter / tag chip for EBIC User App.
 /// Part of the core component suite (Section 6.2).
@@ -23,7 +24,7 @@ class EBICChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveColor = activeColor ?? AppColors.primary;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return InkWell(
       borderRadius: DesignTokens.borderRadiusPill,

@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
+import '../../core/theme/app_theme.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -293,7 +294,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
             });
           }
 
-          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final isDark = context.isDark;
 
           return Material(
             color: Colors.transparent,
@@ -548,7 +549,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final filteredFaqs = _articles.where((a) {
       final matchesSearch = _faqSearch.isEmpty ||
           (a['title'] ?? '').toString().toLowerCase().contains(_faqSearch.toLowerCase()) ||

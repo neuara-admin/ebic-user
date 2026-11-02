@@ -56,7 +56,13 @@ class AppColors {
   static const Color danger = Color(0xFFDC2626); // Red 600 — 4.83:1 on white
   static const Color dangerLight = Color(0xFFFEE2E2);
   static const Color info = Color(0xFF3B82F6);
-  static const Color background = Color(0xFFF8FAFC);
+  static const Color background = Color(0xFFFBFBF7);
+
+  // Bespoke Human-Touch Canvas & Surface Tokens
+  static const Color porcelain = Color(0xFFFBFBF7); // Warm organic culinary canvas
+  static const Color warmCream = Color(0xFFFAF9F5);
+  static const Color hairlineBorder = Color(0xFFEBEBE6); // Subtle warm hairline border
+  static const Color surfaceWarm = Color(0xFFFFFFFF);
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(

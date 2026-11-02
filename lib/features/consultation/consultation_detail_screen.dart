@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/models/consultation_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import 'consultation_list_screen.dart';
+import '../../core/theme/app_theme.dart';
 
 class ConsultationDetailScreen extends StatefulWidget {
   final ConsultationModel? initialConsultation;
@@ -229,8 +230,7 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
     final c = _consultation;
 
     return Scaffold(

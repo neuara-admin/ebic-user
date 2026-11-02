@@ -3,6 +3,7 @@ import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../core/theme/app_theme.dart';
 
 class BookingFailureScreen extends StatelessWidget {
   final Map<String, dynamic> failureData;
@@ -11,7 +12,7 @@ class BookingFailureScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final orderId = failureData['orderId']?.toString();
     final errorMessage = failureData['errorMessage']?.toString() ??
         'The payment transaction could not be completed or was cancelled.';

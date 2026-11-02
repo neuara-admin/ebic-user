@@ -6,6 +6,7 @@ import '../../shared/models/preparation_model.dart';
 import '../../shared/widgets/ebic_card.dart';
 import '../../shared/widgets/empty_state_view.dart';
 import '../../shared/widgets/error_view.dart';
+import '../../core/theme/app_theme.dart';
 
 class PreparationChecklistScreen extends StatefulWidget {
   final String orderId;
@@ -200,7 +201,7 @@ class _PreparationChecklistScreenState extends State<PreparationChecklistScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final allItems = _checklist?.items ?? [];
     final readyCount = allItems.where((i) => i.isReady).length;
     final totalCount = allItems.length;

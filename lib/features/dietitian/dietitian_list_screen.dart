@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/models/dietitian_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import 'dietitian_profile_screen.dart';
+import '../../core/theme/app_theme.dart';
 
 class DietitianListScreen extends StatefulWidget {
   const DietitianListScreen({super.key});
@@ -118,7 +119,7 @@ class _DietitianListScreenState extends State<DietitianListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : const Color(0xFFF8FAFC),

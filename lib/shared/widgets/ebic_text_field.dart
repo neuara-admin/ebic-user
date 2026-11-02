@@ -63,7 +63,6 @@ class _EBICTextFieldState extends State<EBICTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     Widget? suffixWidget = widget.suffix;
     if (widget.isPassword) {
@@ -99,7 +98,7 @@ class _EBICTextFieldState extends State<EBICTextField> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: isDark ? AppColors.slate200 : AppColors.slate800,
+                color: AppColors.slate800,
               ),
             ),
             const SizedBox(height: DesignTokens.spaceXS),
@@ -121,7 +120,7 @@ class _EBICTextFieldState extends State<EBICTextField> {
             onFieldSubmitted: widget.onSubmitted,
             style: TextStyle(
               fontSize: 15,
-              color: isDark ? Colors.white : AppColors.slate900,
+              color: AppColors.slate900,
             ),
             decoration: InputDecoration(
               hintText: widget.hintText,
@@ -129,18 +128,18 @@ class _EBICTextFieldState extends State<EBICTextField> {
               prefixIcon: widget.prefix,
               suffixIcon: suffixWidget,
               filled: true,
-              fillColor: isDark ? AppColors.slate800 : Colors.white,
+              fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: DesignTokens.borderRadiusMD,
                 borderSide: BorderSide(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                  color: AppColors.hairlineBorder,
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: DesignTokens.borderRadiusMD,
                 borderSide: BorderSide(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                  color: AppColors.hairlineBorder,
                 ),
               ),
               focusedBorder: OutlineInputBorder(

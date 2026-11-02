@@ -15,6 +15,7 @@ import 'cancel_booking_dialog.dart';
 import 'tracking/tracking_geo.dart';
 import 'tracking/tracking_markers.dart';
 import 'tracking/tracking_stream.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Live chef dispatch tracking — full-screen Google Map with the chef's real
 /// GPS position animating along the road route to the customer's home, and a
@@ -733,7 +734,7 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final media = MediaQuery.of(context);
     final screenH = media.size.height;
     final sheetMax = _sheetMaxFor(context);
@@ -1756,7 +1757,7 @@ class _ChefTrackingScreenState extends State<ChefTrackingScreen> with TickerProv
   }
 
   void _showCompleteStatusSheet(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final isCancelled = _isCancelled;
     final activeIndex = _activeIndex;
 

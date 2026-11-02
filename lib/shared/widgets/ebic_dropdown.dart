@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Standard dropdown selection field for EBIC User App.
 /// Part of the core component suite (Section 6.2).
@@ -26,7 +27,7 @@ class EBICDropdown<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

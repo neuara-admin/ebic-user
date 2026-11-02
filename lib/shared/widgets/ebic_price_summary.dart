@@ -36,15 +36,14 @@ class EBICPriceSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: Colors.white,
         borderRadius: DesignTokens.borderRadiusMD,
         border: Border.all(
-          color: isDark ? AppColors.slate800 : AppColors.slate200,
+          color: AppColors.hairlineBorder,
         ),
       ),
       child: Column(
@@ -63,7 +62,7 @@ class EBICPriceSummary extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppColors.slate900,
+                    color: AppColors.slate900,
                   ),
                 ),
               ),
@@ -71,10 +70,10 @@ class EBICPriceSummary extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.emerald900.withOpacity(0.35) : AppColors.emerald50,
+                  color: AppColors.emerald50,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: isDark ? AppColors.emerald700.withOpacity(0.5) : AppColors.emerald600.withOpacity(0.3),
+                    color: AppColors.emerald600.withValues(alpha: 0.25),
                   ),
                 ),
                 child: Text(
@@ -82,7 +81,7 @@ class EBICPriceSummary extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? AppColors.emerald400 : AppColors.emerald700,
+                    color: AppColors.emerald700,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -90,14 +89,14 @@ class EBICPriceSummary extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          _buildRow('Item Subtotal', _formatAmount(subtotal), isDark),
+          _buildRow('Item Subtotal', _formatAmount(subtotal)),
 
           if (customLines != null) ...[
             for (final line in customLines!)
               _buildRow(
                 line.title,
                 line.isDeduction ? '- ${_formatAmount(line.amount)}' : _formatAmount(line.amount),
-                isDark,
+                
                 color: line.isDeduction ? AppColors.emerald700 : null,
               ),
           ],
@@ -106,7 +105,7 @@ class EBICPriceSummary extends StatelessWidget {
             _buildRow(
               discountLabel ?? 'Promotions & Discounts',
               '- ${_formatAmount(discount!)}',
-              isDark,
+              
               color: AppColors.emerald700,
             ),
 
@@ -114,7 +113,7 @@ class EBICPriceSummary extends StatelessWidget {
             _buildRow(
               taxLabel ?? 'Taxes & GST',
               _formatAmount(tax!),
-              isDark,
+              
             ),
 
           const SizedBox(height: 12),
@@ -125,7 +124,7 @@ class EBICPriceSummary extends StatelessWidget {
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 1.5),
                   height: 1.5,
-                  color: isDark ? AppColors.slate700 : AppColors.slate300,
+                  color: AppColors.hairlineBorder,
                 ),
               ),
             ),
@@ -144,7 +143,7 @@ class EBICPriceSummary extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : AppColors.slate900,
+                        color: AppColors.slate900,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -173,7 +172,7 @@ class EBICPriceSummary extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(String label, String value, bool isDark, {Color? color}) {
+  Widget _buildRow(String label, String value, {Color? color}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -184,7 +183,7 @@ class EBICPriceSummary extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 13,
-                color: isDark ? AppColors.slate400 : AppColors.slate600,
+                color: AppColors.slate600,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -195,7 +194,7 @@ class EBICPriceSummary extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: color ?? (isDark ? Colors.white : AppColors.slate900),
+              color: color ?? AppColors.slate900,
             ),
           ),
         ],

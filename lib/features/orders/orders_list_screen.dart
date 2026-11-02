@@ -9,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/models/order_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../../shared/widgets/status_badge.dart';
+import '../../core/theme/app_theme.dart';
 
 enum ChefBookingFilter {
   all,
@@ -135,7 +136,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final textPrimary = isDark ? Colors.white : AppColors.slate900;
     final textSecondary = isDark ? AppColors.slate300 : AppColors.slate700;
     final textMuted = isDark ? AppColors.slate400 : AppColors.slate500;

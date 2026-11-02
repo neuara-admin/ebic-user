@@ -10,6 +10,7 @@ import '../../shared/models/health_pass_model.dart';
 import '../../shared/models/consultation_model.dart';
 import '../../shared/widgets/ebic_button.dart';
 import '../health_pass/data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Dedicated Consultation Review & Confirmation Screen
 /// Compact, uncluttered summary of specialist, schedule, attending family members,
@@ -135,8 +136,7 @@ class _ConsultationReviewScreenState extends State<ConsultationReviewScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final theme = Theme.of(ctx);
-        final isDark = theme.brightness == Brightness.dark;
+        final isDark = context.isDark;
 
         return SafeArea(
           child: Container(
@@ -312,8 +312,7 @@ class _ConsultationReviewScreenState extends State<ConsultationReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     final dateFormat = DateFormat('EEEE, dd MMMM yyyy');
     final timeFormat = DateFormat('hh:mm a');

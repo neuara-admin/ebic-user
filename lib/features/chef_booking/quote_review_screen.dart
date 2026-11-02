@@ -19,6 +19,7 @@ import '../../shared/widgets/ebic_avatar.dart';
 import '../catalogue/cart_service.dart';
 import '../catalogue/dish_detail_screen.dart';
 import 'choose_chef_screen.dart';
+import '../../core/theme/app_theme.dart';
 
 class QuoteReviewScreen extends StatefulWidget {
   final Map<String, dynamic> bookingConfig;
@@ -1823,7 +1824,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     if (_isLoading && _quote == null) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -4593,9 +4594,7 @@ class _QuoteReviewScreenState extends State<QuoteReviewScreen> {
       decoration: BoxDecoration(
         color: AppColors.slate900,
         borderRadius: BorderRadius.circular(18),
-        border: Theme.of(context).brightness == Brightness.dark
-            ? Border.all(color: AppColors.slate700)
-            : null,
+        border: null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.28),

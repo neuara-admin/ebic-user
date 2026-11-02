@@ -13,6 +13,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/models/dietitian_model.dart';
 import '../../shared/models/health_pass_model.dart';
 import '../health_pass/data/health_pass_repository.dart';
+import '../../core/theme/app_theme.dart';
 
 class ChatMessageItem {
   final String id;
@@ -612,7 +613,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final isDark = context.isDark;
         return Container(
           decoration: BoxDecoration(
             color: isDark ? AppColors.slate900 : Colors.white,
@@ -768,7 +769,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final isDark = context.isDark;
         final pass = _currentPass;
 
         return Container(
@@ -1031,7 +1032,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final drFirstName = widget.dietitian.name
         .replaceFirst(RegExp(r'^Dr\.?\s*', caseSensitive: false), '')
         .split(' ')
@@ -1578,7 +1579,7 @@ class _DietitianChatScreenState extends State<DietitianChatScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final isDark = context.isDark;
         return Container(
           decoration: BoxDecoration(
             color: isDark ? AppColors.slate900 : Colors.white,

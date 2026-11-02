@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Standard culinary image widget for dishes across EBIC with robust URL resolution,
 /// network error handling, smooth shimmer/loading states, and FSSAI-style dietary badges.
@@ -28,7 +29,7 @@ class EBICDishImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final resolvedUrl = AppConfig.resolveMediaUrl(imageUrl);
     final hasValidUrl = resolvedUrl != null && resolvedUrl.trim().isNotEmpty;
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/ebic_button.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 20 Section 320 — Not Found Screen (404 / Broken Deep Link)
 class NotFoundScreen extends StatelessWidget {
@@ -14,7 +15,7 @@ class NotFoundScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : Colors.white,

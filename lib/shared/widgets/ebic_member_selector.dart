@@ -35,7 +35,6 @@ class EBICMemberSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SizedBox(
       height: 72,
@@ -56,10 +55,10 @@ class EBICMemberSelector extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isSelected
                     ? AppColors.primary.withOpacity(0.1)
-                    : (isDark ? AppColors.slate800 : Colors.white),
+                    : Colors.white,
                 borderRadius: DesignTokens.borderRadiusMD,
                 border: Border.all(
-                  color: isSelected ? AppColors.primary : (isDark ? AppColors.slate700 : AppColors.slate200),
+                  color: isSelected ? AppColors.primary : AppColors.hairlineBorder,
                   width: isSelected ? 1.5 : 1,
                 ),
               ),
@@ -93,7 +92,7 @@ class EBICMemberSelector extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                          color: isSelected ? AppColors.primary : (isDark ? Colors.white : AppColors.slate900),
+                          color: isSelected ? AppColors.primary : AppColors.slate900,
                         ),
                       ),
                       Text(

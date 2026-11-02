@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class ProvenanceBadge extends StatelessWidget {
   final String? source;
@@ -13,7 +14,7 @@ class ProvenanceBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     Color bg;
     Color fg;
     IconData icon;

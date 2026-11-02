@@ -6,6 +6,7 @@ import '../health/health_hub_screen.dart';
 import '../orders/orders_list_screen.dart';
 import '../health_pass/health_pass_screen.dart';
 import '../profile/profile_screen.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Module 20 & Specification Section 1 & 29: 5-Destination Primary Bottom Navigation
 /// [ Home (🏠) | Health (❤️) | Bookings (📋) | Health Pass (💳) | Profile (👤) ]
@@ -43,7 +44,7 @@ class _MainNavShellState extends State<MainNavShell> {
       const ProfileScreen(),
     ];
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final navBg = isDark ? const Color(0xFF0F172A) : Colors.white;
 
     final navItems = [

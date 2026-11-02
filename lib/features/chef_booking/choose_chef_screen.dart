@@ -5,6 +5,7 @@ import '../../core/api/api_endpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/available_chef_model.dart';
 import '../../shared/widgets/ebic_avatar.dart';
+import '../../core/theme/app_theme.dart';
 
 /// What the customer chose: a specific chef, or [chef] == null for
 /// "let EBIC assign the best available chef".
@@ -107,7 +108,7 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
       appBar: AppBar(
@@ -234,7 +235,7 @@ class _ChooseChefScreenState extends State<ChooseChefScreen> {
   }
 
   Widget _buildConfirmBar() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final available = _result?.availableChefs ?? const <AvailableChefModel>[];
     final chef = _selectedChef;
     final bool canConfirm = chef != null ? chef.available : available.isNotEmpty;
@@ -313,7 +314,7 @@ class _HubStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final open = result.hubOpen;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -380,7 +381,7 @@ class _AutoAssignTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final hint = recommended == null
         ? 'No certified chefs are currently free in your area right now.'
         : 'Right now that’s ${recommended!.name}'
@@ -455,7 +456,7 @@ class _ChefCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final dimmed = !chef.available;
     final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -605,7 +606,7 @@ class _MetaLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final parts = <InlineSpan>[];
     if (chef.rating != null) {
       parts.add(const WidgetSpan(
@@ -643,7 +644,7 @@ class _TravelLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final eta = chef.etaMinutes;
     final km = chef.distanceKm;
     if (eta == null && km == null) {
@@ -687,7 +688,7 @@ class _ChefProfileSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
       decoration: BoxDecoration(
@@ -893,7 +894,7 @@ class _ReviewTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -940,7 +941,7 @@ class _Stat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -984,7 +985,7 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1009,7 +1010,7 @@ class _NoneAvailableCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1100,7 +1101,7 @@ class _MessageState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -1141,7 +1142,7 @@ class _SelectableShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
