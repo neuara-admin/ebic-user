@@ -29,37 +29,23 @@ class AppConfig {
   static const String stagingApiBaseUrl = 'https://staging-api.ebic.in/v1';
   static const String stagingWebSocketUrl = 'wss://staging-api.ebic.in/realtime';
 
-  // For Android Emulator: 10.0.2.2 points to host machine's localhost:3000
-  // For Web / Windows / Desktop / iOS: localhost:3000
-  // In release mode or production environment: https://api.ebic.in/v1
+  /// Universal base URL configured for all regions currently
+  static const String universalApiBaseUrl = 'http://10.0.2.2:3000/v1';
+  static const String universalWebSocketUrl = 'ws://10.0.2.2:3000/realtime';
+
+  // Base URL resolution: uses API_BASE_URL override if passed, otherwise universalApiBaseUrl
   static String get defaultBaseUrl {
     if (_apiBaseUrlOverride.isNotEmpty) {
       final trimmed = _apiBaseUrlOverride.trim().replaceAll(RegExp(r'/+$'), '');
       return trimmed.endsWith('/v1') ? trimmed : '$trimmed/v1';
     }
-    if (isProduction) return prodApiBaseUrl;
-    if (isStaging) return stagingApiBaseUrl;
-    if (kIsWeb) return 'http://localhost:3000/v1';
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'http://10.0.2.2:3000/v1';
-      default:
-        return 'http://localhost:3000/v1';
-    }
+    return universalApiBaseUrl;
   }
 
   static String apiBaseUrl = defaultBaseUrl;
 
   static String get defaultWebSocketUrl {
-    if (isProduction) return prodWebSocketUrl;
-    if (isStaging) return stagingWebSocketUrl;
-    if (kIsWeb) return 'ws://localhost:3000/realtime';
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'ws://10.0.2.2:3000/realtime';
-      default:
-        return 'ws://localhost:3000/realtime';
-    }
+    return universalWebSocketUrl;
   }
 
   /// Google Maps API Key for Geocoding, Places Autocomplete and Maps
