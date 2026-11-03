@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -171,7 +170,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       final effectiveSignature = (checkoutRes.signature != null &&
               checkoutRes.signature!.isNotEmpty)
           ? checkoutRes.signature!
-          : (kDebugMode && razorpayKey.startsWith('rzp_test_')
+          : ((razorpayKey.startsWith('rzp_test_') || razorpayOrderId.startsWith('sim_'))
               ? 'sim_test_signature_$gatewayPaymentId'
               : '');
 

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
@@ -493,7 +492,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
         final effectiveSignature = (checkoutRes.signature != null &&
                 checkoutRes.signature!.isNotEmpty)
             ? checkoutRes.signature!
-            : (kDebugMode && razorpayKey.startsWith('rzp_test_')
+            : ((razorpayKey.startsWith('rzp_test_') || razorpayOrderId.startsWith('sim_'))
                 ? 'sim_test_signature_$gatewayPaymentId'
                 : '');
         final effectiveOrderId = checkoutRes.orderId ?? razorpayOrderId;
